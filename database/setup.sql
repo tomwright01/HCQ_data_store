@@ -1,0 +1,7 @@
+CREATE DATABASE HCQ;
+
+Use HCQ;
+
+CREATE TABLE subjects(
+    subject_id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name varchar(50) NOT NULL);

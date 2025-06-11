@@ -1,7 +1,9 @@
 services:
     db:
-        image: mariadb
+        image: HCQ/mariadb
+        build: ./database
         restart: always
+        container_name: mariadb
         environment:
             MARIADB_ROOT_PASSWORD: notgood
     
