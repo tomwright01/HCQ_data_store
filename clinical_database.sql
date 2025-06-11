@@ -5,10 +5,7 @@ Use HCQ;
 CREATE TABLE subjects(
     subject_id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
     name varchar(50) NOT NULL);
-CREATE DATABASE IF NOT EXISTS HOSPITAL;
-
-USE HOSPITAL;
-
+/*
 CREATE DATABASE patients (
   patient_id INT AUTO_INCREMENT PRIMARY KEY
   name VARCHAR(100) NOT NULL, 
@@ -18,8 +15,9 @@ CREATE DATABASE patients (
   admission_date DATABASE
   notes TEXT
 );
+*/
 
-/*
+
 CREATE TABLE IF NOT EXISTS medications (
     medication_id INT AUTO_INCREMENT PRIMARY KEY,
     medication_name VARCHAR(100) NOT NULL,
@@ -27,7 +25,7 @@ CREATE TABLE IF NOT EXISTS medications (
     frequency VARCHAR(50)
 );
 
-
+/*
 CREATE TABLE IF NOT EXISTS prescriptions (
     prescription_id INT AUTO_INCREMENT PRIMARY KEY,
     patient_id INT,
