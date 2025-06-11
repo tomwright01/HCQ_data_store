@@ -1,4 +1,4 @@
 FROM mariadb:latest
 
 
-COPY setup.sql /docker-entrypoint-initdb.d/setup.sql
+COPY clinical_database.sql /docker-entrypoint-initdb.d/clinical_database.sql
