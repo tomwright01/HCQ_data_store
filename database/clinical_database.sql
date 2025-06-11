@@ -19,8 +19,9 @@ CREATE TABLE patients (
   admission_date DATE,
   notes TEXT
 );
+*/
 
-/*
+
 CREATE TABLE IF NOT EXISTS medications (
     medication_id INT AUTO_INCREMENT PRIMARY KEY,
     medication_name VARCHAR(100) NOT NULL,
@@ -28,7 +29,7 @@ CREATE TABLE IF NOT EXISTS medications (
     frequency VARCHAR(50)
 );
 
-
+/*
 CREATE TABLE IF NOT EXISTS prescriptions (
     prescription_id INT AUTO_INCREMENT PRIMARY KEY,
     patient_id INT,
