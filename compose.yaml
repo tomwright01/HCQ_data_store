@@ -1,0 +1,12 @@
+services:
+    db:
+        image: mariadb
+        restart: always
+        environment:
+            MARIADB_ROOT_PASSWORD: notgood
+    
+    adminer:
+        image: adminer
+        restart: always
+        ports:
+            - 8080:8080
