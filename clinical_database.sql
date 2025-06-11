@@ -18,3 +18,23 @@ CREATE DATABASE patients (
   admission_date DATABASE
   notes TEXT
 );
+
+/*
+CREATE TABLE IF NOT EXISTS medications (
+    medication_id INT AUTO_INCREMENT PRIMARY KEY,
+    medication_name VARCHAR(100) NOT NULL,
+    dosage VARCHAR(50),
+    frequency VARCHAR(50)
+);
+
+
+CREATE TABLE IF NOT EXISTS prescriptions (
+    prescription_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT,
+    medication_id INT,
+    quantity INT, 
+    duration INT,  -- Duration in days
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    FOREIGN KEY (medication_id) REFERENCES medications(medication_id) ON DELETE CASCADE
+);
+*/
