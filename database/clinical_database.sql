@@ -54,6 +54,27 @@ FROM Patients;
 SELECT * FROM Patients;
 
 
+-- Use the existing database
+USE PatientData;
+
+-- Create the Visits table
+CREATE TABLE IF NOT EXISTS Visits (
+    visit_id INT AUTO_INCREMENT PRIMARY KEY,    -- Unique visit identifier
+    patient_id INT,                             -- Foreign key to reference Patients table
+    visit_date DATE NOT NULL,                   -- Date of the visit
+    visit_notes TEXT,                           -- Optional field for additional notes
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Timestamp of when the visit was logged
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id) -- Foreign key constraint
+);
+
+-- Example insert statement for visits
+INSERT INTO Visits (patient_id, visit_date, visit_notes)
+VALUES 
+(1, '2023-06-01', 'Routine check-up, no concerns noted'),
+(2, '2023-06-10', 'Follow-up for RA, increased symptoms'),
+(3, '2023-07-01', 'New patient, first consultation'),
+(4, '2023-07-15', 'Sjorgens diagnosis confirmed, prescribed treatment');
+
 
 
 /*-- Create database
