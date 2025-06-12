@@ -1,4 +1,50 @@
--- Initialize database
+-- Create database
+CREATE DATABASE IF NOT EXISTS patient_management;
+USE patient_management;
+
+-- Tables
+CREATE TABLE diseases (
+    disease_id TINYINT PRIMARY KEY,
+    disease_name VARCHAR(50) NOT NULL,
+    CONSTRAINT valid_disease CHECK (disease_id BETWEEN 1 AND 4)
+);
+
+CREATE TABLE locations (
+    location_id TINYINT PRIMARY KEY AUTO_INCREMENT,
+    location_name VARCHAR(50) NOT NULL UNIQUE
+);
+
+CREATE TABLE patients (
+    patient_id VARCHAR(20) PRIMARY KEY,
+    location_id TINYINT,
+    disease_id TINYINT,
+    birth_year SMALLINT,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (location_id) REFERENCES locations(location_id),
+    FOREIGN KEY (disease_id) REFERENCES diseases(disease_id)
+);
+
+-- Reference Data
+INSERT INTO diseases (disease_id, disease_name) VALUES
+(1, 'Lupus'), (2, 'Rheumatoid Arthritis'), (3, 'RTMD'), (4, 'Sjorgens');
+
+INSERT INTO locations (location_name) VALUES
+('Halifax'), ('Kensington'), ('Montreal');
+
+-- Physician View
+CREATE OR REPLACE VIEW physician_dashboard AS
+SELECT 
+    p.patient_id,
+    IFNULL(l.location_name, '⚠️ MISSING') AS location,
+    IFNULL(d.disease_name, '⚠️ MISSING') AS disease,
+    IFNULL(p.birth_year, '⚠️ MISSING') AS birth_year,
+    last_updated
+FROM patients p
+LEFT JOIN locations l ON p.location_id = l.location_id
+LEFT JOIN diseases d ON p.disease_id = d.disease_id;
+
+/*
+    -- Initialize database
 CREATE DATABASE IF NOT EXISTS patient_management;
 USE patient_management;
 
