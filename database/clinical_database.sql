@@ -21,7 +21,7 @@ VALUES
 -- Step 4: Create the Patients table with additional fields
 CREATE TABLE IF NOT EXISTS Patients (
     patient_id INT AUTO_INCREMENT PRIMARY KEY,  -- unique patient identifier
-    location ENUM('Halifax', 'Kensington', 'Montreal') DEFAULT NULL,  -- optional location field
+    location ENUM('Halifax', 'Kensington', 'Montreal', 'London') DEFAULT NULL,  -- optional location field
     disease_id INT,  -- references the Diseases table
     year_of_birth INT CHECK (year_of_birth BETWEEN 1900 AND 2023),  -- optional year of birth field
     gender ENUM('m', 'f') DEFAULT NULL,  -- gender field (m for male, f for female)
