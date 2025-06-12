@@ -57,9 +57,6 @@ SELECT * FROM Patients;
 -- Use the existing database
 USE PatientData;
 
--- Use the existing database
-USE PatientData;
-
 -- Create the Visits table
 CREATE TABLE IF NOT EXISTS Visits (
     visit_id INT AUTO_INCREMENT PRIMARY KEY,    -- Unique visit identifier
