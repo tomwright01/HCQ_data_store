@@ -57,6 +57,9 @@ SELECT * FROM Patients;
 -- Use the existing database
 USE PatientData;
 
+-- Use the existing database
+USE PatientData;
+
 -- Create the Visits table
 CREATE TABLE IF NOT EXISTS Visits (
     visit_id INT AUTO_INCREMENT PRIMARY KEY,    -- Unique visit identifier
@@ -67,13 +70,28 @@ CREATE TABLE IF NOT EXISTS Visits (
     FOREIGN KEY (patient_id) REFERENCES Patients(patient_id) -- Foreign key constraint
 );
 
--- Example insert statement for visits
+-- Insert sample visit data
 INSERT INTO Visits (patient_id, visit_date, visit_notes)
 VALUES 
 (1, '2023-06-01', 'Routine check-up, no concerns noted'),
 (2, '2023-06-10', 'Follow-up for RA, increased symptoms'),
 (3, '2023-07-01', 'New patient, first consultation'),
 (4, '2023-07-15', 'Sjorgens diagnosis confirmed, prescribed treatment');
+
+-- Query to view all visits for a specific patient (for example, patient with patient_id = 1)
+SELECT v.visit_id, v.visit_date, v.visit_notes, v.date_added
+FROM Visits v
+JOIN Patients p ON v.patient_id = p.patient_id
+WHERE p.patient_id = 1;
+
+-- Query to find visits with missing data
+SELECT v.visit_id, v.patient_id, v.visit_date, v.visit_notes,
+    CASE
+        WHEN visit_date IS NULL THEN 'Visit date missing'
+        WHEN visit_notes IS NULL THEN 'Visit notes missing'
+        ELSE 'All visit data present'
+    END AS visit_status
+FROM Visits v;
 
 
 
