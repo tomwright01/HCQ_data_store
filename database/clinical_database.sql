@@ -1,4 +1,62 @@
--- Create database
+-- Step 1: Create the database
+CREATE DATABASE IF NOT EXISTS PatientData;
+
+-- Step 2: Use the created database
+USE PatientData;
+
+-- Step 3: Create a table for disease categories
+CREATE TABLE IF NOT EXISTS Diseases (
+    disease_id INT PRIMARY KEY,
+    disease_name ENUM('Lupus', 'Rheumatoid Arthritis', 'RTMD', 'Sjorgens') NOT NULL
+);
+
+-- Insert predefined diseases into the Diseases table
+INSERT INTO Diseases (disease_id, disease_name) VALUES
+(1, 'Lupus'),
+(2, 'Rheumatoid Arthritis'),
+(3, 'RTMD'),
+(4, 'Sjorgens');
+
+-- Step 4: Create the Patients table
+CREATE TABLE IF NOT EXISTS Patients (
+    patient_id INT AUTO_INCREMENT PRIMARY KEY, -- unique patient identifier
+    location ENUM('Halifax', 'Kensington', 'Montreal') DEFAULT NULL, -- optional location field
+    disease_id INT, -- references the Diseases table
+    year_of_birth INT CHECK (year_of_birth BETWEEN 1900 AND 2023), -- optional year of birth field
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (disease_id) REFERENCES Diseases(disease_id) -- reference disease from the Diseases table
+);
+
+-- Example of inserting a patient with all data
+INSERT INTO Patients (location, disease_id, year_of_birth)
+VALUES ('Halifax', 1, 1985);
+
+-- Example of inserting a patient with missing data (e.g., missing location)
+INSERT INTO Patients (disease_id, year_of_birth)
+VALUES (2, 1990);
+
+
+-- Query to find missing data for patients
+SELECT 
+    patient_id,
+    location,
+    disease_id,
+    year_of_birth,
+    CASE
+        WHEN location IS NULL THEN 'Location missing'
+        WHEN disease_id IS NULL THEN 'Disease missing'
+        WHEN year_of_birth IS NULL THEN 'Year of birth missing'
+        ELSE 'All data present'
+    END AS data_status
+FROM Patients;
+
+-- View all patient records
+SELECT * FROM Patients;
+
+
+
+
+/*-- Create database
 CREATE DATABASE IF NOT EXISTS patient_management;
 USE patient_management;
 
