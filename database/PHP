@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Patient Entry</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <h1>New Patient Entry</h1>
+    <form action="add_patient.php" method="post">
+        <label>Patient ID: <input type="text" name="patient_id" required></label>
+        <label>Location:
+            <select name="location_id" required>
+                <option value="">-- Select --</option>
+                <?php
+                $db = new mysqli('mariadb', 'physician', 'clinic123', 'patient_management');
+                $locations = $db->query("SELECT * FROM locations");
+                while ($loc = $locations->fetch_assoc()) {
+                    echo "<option value='{$loc['location_id']}'>{$loc['location_name']}</option>";
+                }
+                ?>
+            </select>
+        </label>
+        <label>Disease:
+            <select name="disease_id" required>
+                <option value="">-- Select --</option>
+                <option value="1">Lupus</option>
+                <option value="2">Rheumatoid Arthritis</option>
+                <option value="3">RTMD</option>
+                <option value="4">Sjorgens</option>
+            </select>
+        </label>
+        <label>Birth Year: <input type="number" name="birth_year"></label>
+        <button type="submit">Save</button>
+    </form>
+</body>
+</html>
