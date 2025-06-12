@@ -1,4 +1,73 @@
--- Docker MariaDB Patient Tracking System
+-- Initialize database
+CREATE DATABASE IF NOT EXISTS patient_management;
+USE patient_management;
+
+-- Disease reference table (using your specified codes)
+CREATE TABLE diseases (
+    disease_id TINYINT PRIMARY KEY,
+    disease_name VARCHAR(50) NOT NULL,
+    CONSTRAINT valid_disease CHECK (disease_id BETWEEN 1 AND 4)
+);
+
+-- Location reference table
+CREATE TABLE locations (
+    location_id TINYINT PRIMARY KEY AUTO_INCREMENT,
+    location_name VARCHAR(50) NOT NULL UNIQUE
+);
+
+-- Main patient table
+CREATE TABLE patients (
+    patient_id VARCHAR(20) PRIMARY KEY, -- Using custom ID format like "CLINIC-1001"
+    location_id TINYINT,
+    disease_id TYINT,
+    birth_year SMALLINT,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    physician_notes TEXT,
+    FOREIGN KEY (location_id) REFERENCES locations(location_id),
+    FOREIGN KEY (disease_id) REFERENCES diseases(disease_id)
+);
+
+-- Insert disease codes (exactly as you specified)
+INSERT INTO diseases (disease_id, disease_name) VALUES
+(1, 'Lupus'),
+(2, 'Rheumatoid Arthritis'),
+(3, 'RTMD'),
+(4, 'Sjorgens');
+
+-- Insert locations
+INSERT INTO locations (location_name) VALUES
+('Halifax'),
+('Kensington'),
+('Montreal');
+
+-- Physician view with missing data alerts
+CREATE OR REPLACE VIEW physician_dashboard AS
+SELECT 
+    p.patient_id,
+    IFNULL(l.location_name, '⚠️ MISSING LOCATION') AS location,
+    IFNULL(d.disease_name, 
+           CASE 
+               WHEN p.disease_id IS NULL THEN '⚠️ MISSING DISEASE' 
+               ELSE CONCAT('⚠️ INVALID CODE (', p.disease_id, ')')
+           END) AS disease,
+    IFNULL(p.birth_year, '⚠️ MISSING BIRTH YEAR') AS birth_year,
+    p.last_updated,
+    p.physician_notes,
+    CASE 
+        WHEN p.location_id IS NULL OR p.disease_id IS NULL OR p.birth_year IS NULL 
+        THEN 'INCOMPLETE RECORD' 
+        ELSE 'COMPLETE' 
+    END AS record_status
+FROM 
+    patients p
+LEFT JOIN 
+    locations l ON p.location_id = l.location_id
+LEFT JOIN 
+    diseases d ON p.disease_id = d.disease_id
+ORDER BY 
+    record_status, p.last_updated DESC;
+
+/*-- Docker MariaDB Patient Tracking System
 -- Focuses on: ID, Location, Disease (1-4), and Missing Data Flagging
 
 SET NAMES utf8mb4;
@@ -103,8 +172,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 
 
-
-/*-- Create and configure the complete patient database
+-- Create and configure the complete patient database
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
