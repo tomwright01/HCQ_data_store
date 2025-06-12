@@ -1,36 +1,33 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Patient Entry</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Data Entry</title>
 </head>
 <body>
-    <h1>New Patient Entry</h1>
-    <form action="add_patient.php" method="post">
-        <label>Patient ID: <input type="text" name="patient_id" required></label>
-        <label>Location:
-            <select name="location_id" required>
-                <option value="">-- Select --</option>
-                <?php
-                $db = new mysqli('mariadb', 'physician', 'clinic123', 'patient_management');
-                $locations = $db->query("SELECT * FROM locations");
-                while ($loc = $locations->fetch_assoc()) {
-                    echo "<option value='{$loc['location_id']}'>{$loc['location_name']}</option>";
-                }
-                ?>
-            </select>
-        </label>
-        <label>Disease:
-            <select name="disease_id" required>
-                <option value="">-- Select --</option>
-                <option value="1">Lupus</option>
-                <option value="2">Rheumatoid Arthritis</option>
-                <option value="3">RTMD</option>
-                <option value="4">Sjorgens</option>
-            </select>
-        </label>
-        <label>Birth Year: <input type="number" name="birth_year"></label>
-        <button type="submit">Save</button>
+    <h1>Enter Patient Information</h1>
+    <form action="submit_patient.php" method="POST">
+        <label for="location">Location:</label>
+        <select name="location" required>
+            <option value="Halifax">Halifax</option>
+            <option value="Kensington">Kensington</option>
+            <option value="Montreal">Montreal</option>
+        </select><br><br>
+
+        <label for="disease_id">Disease:</label>
+        <select name="disease_id" required>
+            <option value="1">Lupus</option>
+            <option value="2">Rheumatoid Arthritis</option>
+            <option value="3">RTMD</option>
+            <option value="4">Sjorgens</option>
+        </select><br><br>
+
+        <label for="year_of_birth">Year of Birth:</label>
+        <input type="number" name="year_of_birth" min="1900" max="2023" required><br><br>
+
+        <input type="submit" value="Submit">
     </form>
 </body>
 </html>
+
