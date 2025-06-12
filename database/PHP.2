@@ -1,0 +1,14 @@
+<?php
+$db = new mysqli('mariadb', 'physician', 'clinic123', 'patient_management');
+
+$patient_id = $_POST['patient_id'];
+$location_id = $_POST['location_id'];
+$disease_id = $_POST['disease_id'];
+$birth_year = !empty($_POST['birth_year']) ? $_POST['birth_year'] : NULL;
+
+$stmt = $db->prepare("INSERT INTO patients (patient_id, location_id, disease_id, birth_year) VALUES (?, ?, ?, ?)");
+$stmt->bind_param("siii", $patient_id, $location_id, $disease_id, $birth_year);
+$stmt->execute();
+
+header("Location: index.php?success=1");
+?>
