@@ -1,4 +1,4 @@
--- Step 1: Create the database
+/*-- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
 
 -- Step 2: Use the created database
@@ -140,11 +140,10 @@ SELECT
     END AS faf_data_status
 FROM Visits
 WHERE faf_test_id IS NOT NULL;  -- Only show visits with some FAF data
+*/
 
 
-
-
-/*-- Step 1: Create the database
+-- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
 
 -- Step 2: Use the created database
