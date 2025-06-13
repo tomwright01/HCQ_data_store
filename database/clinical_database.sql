@@ -1,4 +1,4 @@
-/*-- Patient Management System with FAF Imaging
+-- Patient Management System with FAF Imaging
 -- Database Schema for MariaDB/MySQL
 
 -- 1. Database Setup
