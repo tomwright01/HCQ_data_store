@@ -1,4 +1,64 @@
--- Step 1: Create the database
+-- Create database
+CREATE DATABASE IF NOT EXISTS PatientData;
+USE PatientData;
+
+-- Diseases table
+CREATE TABLE IF NOT EXISTS Diseases (
+    disease_id INT PRIMARY KEY,
+    disease_name ENUM('Lupus', 'Rheumatoid Arthritis', 'RTMD', 'Sjorgens') NOT NULL
+);
+
+INSERT INTO Diseases (disease_id, disease_name) VALUES
+(1, 'Lupus'), (2, 'Rheumatoid Arthritis'), (3, 'RTMD'), (4, 'Sjorgens');
+
+-- Patients table
+CREATE TABLE IF NOT EXISTS Patients (
+    patient_id INT AUTO_INCREMENT PRIMARY KEY,
+    location ENUM('Halifax', 'Kensington', 'Montreal') DEFAULT NULL,
+    disease_id INT,
+    year_of_birth INT CHECK (year_of_birth BETWEEN 1900 AND YEAR(CURRENT_DATE)),
+    gender ENUM('m', 'f', 'other') DEFAULT NULL,
+    referring_doctor VARCHAR(255) DEFAULT NULL,
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (disease_id) REFERENCES Diseases(disease_id)
+);
+
+-- Visits table with all exam data
+CREATE TABLE IF NOT EXISTS Visits (
+    visit_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    visit_date DATE NOT NULL,
+    rx_OD FLOAT DEFAULT NULL,
+    rx_OS FLOAT DEFAULT NULL,
+    merci_rating_left_eye INT DEFAULT NULL,
+    merci_rating_right_eye INT DEFAULT NULL,
+    procedures_done TEXT DEFAULT NULL,
+    dosage FLOAT DEFAULT NULL,
+    duration INT DEFAULT NULL COMMENT 'Months',
+    cumulative_dosage FLOAT DEFAULT NULL,
+    date_of_discontinuation DATE DEFAULT NULL,
+    faf_test_id VARCHAR(50) DEFAULT NULL,
+    faf_eye ENUM('OD', 'OS', 'OU') DEFAULT NULL,
+    faf_image_number VARCHAR(50) DEFAULT NULL,
+    faf_reference VARCHAR(255) GENERATED ALWAYS AS (
+        CASE WHEN faf_test_id IS NOT NULL AND faf_eye IS NOT NULL AND faf_image_number IS NOT NULL 
+        THEN CONCAT('FAF/', faf_test_id, '-', faf_eye, '-', faf_image_number, '.png') 
+        ELSE NULL END
+    ) STORED,
+    visit_notes TEXT DEFAULT NULL,
+    extra_notes TEXT DEFAULT NULL,
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
+
+-- Sample data
+INSERT INTO Patients (location, disease_id, year_of_birth, gender, referring_doctor) VALUES
+('Halifax', 1, 1985, 'f', 'Dr. Smith'),
+('Montreal', 2, 1975, 'm', 'Dr. Johnson');
+
+INSERT INTO Visits (patient_id, visit_date, rx_OD, rx_OS, merci_rating_left_eye, merci_rating_right_eye, faf_test_id, faf_eye, faf_image_number) VALUES
+(1, '2023-06-01', 1.5, 1.5, 10, 12, 'FAF123', 'OD', 'IMG555'),
+(2, '2023-06-10', 1.0, 1.0, 15, 14, 'FAF124', 'OS', 'IMG556');/*-- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
 
 -- Step 2: Use the created database
