@@ -10,6 +10,125 @@ CREATE TABLE IF NOT EXISTS Diseases (
     disease_name ENUM('Lupus', 'Rheumatoid Arthritis', 'RTMD', 'Sjorgens') NOT NULL
 );
 
+-- Insert predefined diseases
+INSERT INTO Diseases (disease_id, disease_name) 
+VALUES
+(1, 'Lupus'),
+(2, 'Rheumatoid Arthritis'),
+(3, 'RTMD'),
+(4, 'Sjorgens');
+
+-- Step 4: Create the Patients table with additional fields, including FAF reference
+CREATE TABLE IF NOT EXISTS Patients (
+    patient_id INT AUTO_INCREMENT PRIMARY KEY,  -- unique patient identifier
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    location ENUM('Halifax', 'Kensington', 'Montreal'),
+    disease_id INT,  -- references the Diseases table
+    year_of_birth INT CHECK (year_of_birth BETWEEN 1900 AND YEAR(CURRENT_DATE)),
+    gender ENUM('m', 'f', 'other'),
+    referring_doctor VARCHAR(255),
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (disease_id) REFERENCES Diseases(disease_id)
+);
+
+-- Example of inserting a patient with all data
+INSERT INTO Patients (first_name, last_name, location, disease_id, year_of_birth, gender, referring_doctor)
+VALUES 
+('Sarah', 'Johnson', 'Halifax', 1, 1985, 'f', 'Dr. Smith'),
+('Michael', 'Brown', 'Montreal', 2, 1978, 'm', 'Dr. Patel');
+
+-- Step 5: Create the Visits table with additional FAF reference field
+CREATE TABLE IF NOT EXISTS Visits (
+    visit_id INT AUTO_INCREMENT PRIMARY KEY,  -- Unique visit identifier
+    patient_id INT,  -- Foreign key to reference Patients table
+    visit_date DATE NOT NULL,  -- Date of the visit
+    visit_notes TEXT,  -- Optional field for additional notes
+    faf_test_id INT DEFAULT NULL,  -- FAF test ID for the visit
+    faf_eye ENUM('OD', 'OS') DEFAULT NULL,  -- FAF eye (OD or OS) for the visit
+    image_number INT DEFAULT NULL,  -- Image number for the FAF
+    faf_reference VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('FAF/', faf_test_id, '-', faf_eye, '-', image_number, '.png')
+    ) STORED,  -- Generated column for FAF reference
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  -- Timestamp of when the visit was logged
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)  -- Foreign key constraint
+);
+
+-- Insert sample visit data for patients with FAF-related information
+INSERT INTO Visits (patient_id, visit_date, visit_notes, faf_test_id, faf_eye, image_number)
+VALUES 
+(1, '2023-06-01', 'Routine check-up, no concerns noted', 123, 'OD', 555),
+(2, '2023-06-10', 'Follow-up for RA, increased symptoms', 124, 'OS', 556),
+(3, '2023-07-01', 'New patient, first consultation', 125, 'OD', 557),
+(4, '2023-07-15', 'Sjorgens diagnosis confirmed, prescribed treatment', 126, 'OS', 558);
+
+-- Step 6: Query to retrieve complete visit information with all relevant patient data for a specific visit_id
+SELECT
+    v.visit_id,
+    v.visit_date,
+    v.visit_notes,
+    v.faf_reference,  -- FAF reference generated based on test_id, eye, image_number
+    p.patient_id,
+    CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+    p.location,
+    d.disease_name,
+    p.year_of_birth,
+    p.gender,
+    p.referring_doctor,
+    v.rx_OD,
+    v.rx_OS,
+    v.merci_rating_left_eye,
+    v.merci_rating_right_eye,
+    v.procedures_done,
+    v.treatment_dosage,
+    v.treatment_duration_months,
+    v.cumulative_dosage,
+    v.treatment_discontinued,
+    v.discontinuation_date,
+    v.faf_session_id,
+    v.faf_eye,
+    v.faf_image_series,
+    v.faf_quality_rating,
+    v.faf_notes,
+    v.visit_notes,
+    v.follow_up_required,
+    v.follow_up_date
+FROM Visits v
+JOIN Patients p ON v.patient_id = p.patient_id
+JOIN Diseases d ON p.disease_id = d.disease_id
+WHERE v.visit_id = 1;  -- Replace 1 with the desired visit_id
+
+-- Query to find visits with incomplete FAF data
+SELECT 
+    visit_id,
+    patient_id,
+    visit_date,
+    faf_session_id,
+    faf_eye,
+    faf_image_series,
+    CASE
+        WHEN faf_session_id IS NULL THEN 'Missing FAF session ID'
+        WHEN faf_eye IS NULL THEN 'Missing eye specification'
+        WHEN faf_image_series IS NULL THEN 'Missing image series'
+        WHEN faf_quality_rating IS NULL THEN 'Missing quality rating'
+        ELSE 'FAF data complete'
+    END AS faf_data_status
+FROM Visits
+WHERE faf_session_id IS NOT NULL;  -- Only show visits with some FAF data
+
+
+/*-- Step 1: Create the database
+CREATE DATABASE IF NOT EXISTS PatientData;
+
+-- Step 2: Use the created database
+USE PatientData;
+
+-- Step 3: Create a table for disease categories
+CREATE TABLE IF NOT EXISTS Diseases (
+    disease_id INT PRIMARY KEY,
+    disease_name ENUM('Lupus', 'Rheumatoid Arthritis', 'RTMD', 'Sjorgens') NOT NULL
+);
+
 -- Insert predefined diseases into the Diseases table
 INSERT INTO Diseases (disease_id, disease_name) 
 VALUES
