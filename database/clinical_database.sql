@@ -1,4 +1,159 @@
--- Create database
+-- Step 1: Create the database
+CREATE DATABASE IF NOT EXISTS PatientData;
+USE PatientData;
+
+-- Step 2: Create disease categories table
+CREATE TABLE IF NOT EXISTS Diseases (
+    disease_id INT PRIMARY KEY,
+    disease_name ENUM('Lupus', 'Rheumatoid Arthritis', 'RTMD', 'Sjorgens') NOT NULL
+);
+
+-- Insert predefined diseases
+INSERT INTO Diseases (disease_id, disease_name) VALUES
+(1, 'Lupus'),
+(2, 'Rheumatoid Arthritis'),
+(3, 'RTMD'),
+(4, 'Sjorgens');
+
+-- Step 3: Create Patients table (core patient info only)
+CREATE TABLE IF NOT EXISTS Patients (
+    patient_id INT AUTO_INCREMENT PRIMARY KEY,
+    first_name VARCHAR(50),
+    last_name VARCHAR(50),
+    location ENUM('Halifax', 'Kensington', 'Montreal'),
+    disease_id INT,
+    year_of_birth INT CHECK (year_of_birth BETWEEN 1900 AND YEAR(CURRENT_DATE)),
+    gender ENUM('m', 'f', 'other'),
+    referring_doctor VARCHAR(255),
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (disease_id) REFERENCES Diseases(disease_id)
+);
+
+-- Step 4: Enhanced Visits table with all exam data
+CREATE TABLE IF NOT EXISTS Visits (
+    visit_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    visit_date DATE NOT NULL,
+    
+    -- Ocular examination data
+    rx_OD FLOAT COMMENT 'Right eye prescription',
+    rx_OS FLOAT COMMENT 'Left eye prescription',
+    merci_rating_left_eye INT,
+    merci_rating_right_eye INT,
+    
+    -- Treatment data
+    procedures_done TEXT,
+    treatment_dosage FLOAT,
+    treatment_duration_months INT,
+    cumulative_dosage FLOAT,
+    treatment_discontinued BOOLEAN DEFAULT FALSE,
+    discontinuation_date DATE,
+    
+    -- FAF imaging data
+    faf_session_id VARCHAR(20) COMMENT 'FAF imaging session ID',
+    faf_eye ENUM('OD', 'OS', 'OU') COMMENT 'Eye examined',
+    faf_image_series VARCHAR(20) COMMENT 'Image series number',
+    faf_quality_rating ENUM('Excellent', 'Good', 'Fair', 'Poor'),
+    faf_notes TEXT,
+    
+    -- Generated FAF reference path
+    faf_reference_path VARCHAR(255) GENERATED ALWAYS AS (
+        CASE 
+            WHEN faf_session_id IS NOT NULL AND faf_eye IS NOT NULL AND faf_image_series IS NOT NULL 
+            THEN CONCAT('FAF/', faf_session_id, '/', faf_eye, '/Series_', faf_image_series, '/')
+            ELSE NULL
+        END
+    ) STORED,
+    
+    -- General visit information
+    visit_notes TEXT,
+    follow_up_required BOOLEAN DEFAULT FALSE,
+    follow_up_date DATE,
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
+
+-- Create indexes for performance
+CREATE INDEX idx_visits_patient ON Visits(patient_id);
+CREATE INDEX idx_visits_date ON Visits(visit_date);
+CREATE INDEX idx_faf_session ON Visits(faf_session_id);
+CREATE INDEX idx_faf_reference ON Visits(faf_reference_path);
+
+-- Sample patient data
+INSERT INTO Patients (first_name, last_name, location, disease_id, year_of_birth, gender, referring_doctor) VALUES
+('Sarah', 'Johnson', 'Halifax', 1, 1985, 'f', 'Dr. Smith'),
+('Michael', 'Brown', 'Montreal', 2, 1978, 'm', 'Dr. Patel');
+
+-- Sample visit data with FAF information
+INSERT INTO Visits (
+    patient_id, visit_date, 
+    rx_OD, rx_OS, merci_rating_left_eye, merci_rating_right_eye,
+    faf_session_id, faf_eye, faf_image_series, faf_quality_rating
+) VALUES
+(1, '2023-06-15', 1.25, 1.50, 12, 14, 'FAF2023-001', 'OD', '001A', 'Good'),
+(1, '2023-09-10', 1.25, 1.50, 11, 13, 'FAF2023-002', 'OS', '002B', 'Excellent'),
+(2, '2023-07-20', 2.00, 2.25, 8, 9, 'FAF2023-003', 'OU', '003C', 'Fair');
+
+-- Query to retrieve complete visit information with FAF details
+SELECT 
+    v.visit_id,
+    CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+    v.visit_date,
+    d.disease_name,
+    p.location,
+    
+    -- Ocular data
+    v.rx_OD,
+    v.rx_OS,
+    v.merci_rating_left_eye,
+    v.merci_rating_right_eye,
+    
+    -- FAF data
+    v.faf_session_id,
+    v.faf_eye,
+    v.faf_image_series,
+    v.faf_quality_rating,
+    v.faf_reference_path,
+    v.faf_notes,
+    
+    -- Treatment data
+    v.procedures_done,
+    v.treatment_dosage,
+    v.treatment_duration_months,
+    v.cumulative_dosage,
+    v.treatment_discontinued,
+    v.discontinuation_date,
+    
+    -- Visit metadata
+    v.visit_notes,
+    v.follow_up_required,
+    v.follow_up_date
+    
+FROM Visits v
+JOIN Patients p ON v.patient_id = p.patient_id
+JOIN Diseases d ON p.disease_id = d.disease_id
+WHERE v.visit_id = 1;  -- Replace with desired visit_id
+
+-- Query to find visits with incomplete FAF data
+SELECT 
+    visit_id,
+    patient_id,
+    visit_date,
+    faf_session_id,
+    faf_eye,
+    faf_image_series,
+    CASE
+        WHEN faf_session_id IS NULL THEN 'Missing FAF session ID'
+        WHEN faf_eye IS NULL THEN 'Missing eye specification'
+        WHEN faf_image_series IS NULL THEN 'Missing image series'
+        WHEN faf_quality_rating IS NULL THEN 'Missing quality rating'
+        ELSE 'FAF data complete'
+    END AS faf_data_status
+FROM Visits
+WHERE faf_session_id IS NOT NULL;  -- Only show visits with some FAF data
+
+/*-- Create database
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
