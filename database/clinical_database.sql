@@ -15,7 +15,7 @@ INSERT INTO Diseases (disease_id, disease_name)
 VALUES
 (1, 'Lupus'),
 (2, 'Rheumatoid Arthritis'),
-(3, 'RTMD'),
+(3, 'MCTD'),
 (4, 'Sjorgens');
 
 -- Step 4: Create the Patients table with additional fields, including FAF reference
