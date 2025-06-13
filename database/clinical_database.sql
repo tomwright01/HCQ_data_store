@@ -1,4 +1,4 @@
--- Step 1: Create the database
+/*-- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
 
 -- Step 2: Use the created database
@@ -189,7 +189,7 @@ SELECT
 FROM Visits
 WHERE faf_test_id IS NOT NULL OR oct_test_id IS NOT NULL OR vf_test_id IS NOT NULL;
 
-/*
+*/
 
 -- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
