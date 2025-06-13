@@ -143,6 +143,7 @@ WHERE faf_test_id IS NOT NULL;  -- Only show visits with some FAF data
 
 
 
+
 /*-- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
 
