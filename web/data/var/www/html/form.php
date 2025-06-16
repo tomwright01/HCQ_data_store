@@ -1,16 +1,5 @@
 <?php
-$servername = "mariadb";
-$username = "root";
-$password = "notgood";
-$dbname = "PatientData"; // Name of your database
-
-// Create database connection
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-// Check connection
-if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
-}
+// This file contains the form that submits to submit.php
 
 ?>
 
@@ -131,7 +120,3 @@ if ($conn->connect_error) {
     <input type="submit" value="Submit">
 </form>
 
-<?php
-// Close connection
-$conn->close();
-?>
