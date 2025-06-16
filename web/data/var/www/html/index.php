@@ -32,6 +32,14 @@ while ($row_gender = $result_gender->fetch_assoc()) {
     $gender_data[$row_gender['gender']] = $row_gender['count'];
 }
 
+// Query to get the count of patients by location
+$sql_location = "SELECT location, COUNT(*) AS count FROM Patients GROUP BY location";
+$result_location = $conn->query($sql_location);
+$location_data = [];
+while ($row_location = $result_location->fetch_assoc()) {
+    $location_data[$row_location['location']] = $row_location['count'];
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -49,6 +57,16 @@ while ($row_gender = $result_gender->fetch_assoc()) {
     <p>Average age of patients: <?php echo round($average_age, 2); ?> years</p>
     <p>Number of males: <?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?></p>
     <p>Number of females: <?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?></p>
+
+    <h3>Total Patients by Location</h3>
+    <ul>
+        <?php
+        // Display the count of patients by location (e.g., Halifax, Kensington, Montreal)
+        foreach ($location_data as $location => $count) {
+            echo "<li>$location: $count patients</li>";
+        }
+        ?>
+    </ul>
     
     <h2>Add New Patient and Visit</h2>
     <p>Click below to add a new patient and visit:</p>
