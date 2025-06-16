@@ -18,11 +18,27 @@ $result = $conn->query($sql);
 $row = $result->fetch_assoc();
 $total_patients = $row['total_patients'];
 
-// Query to get average age of patients
-$sql_age = "SELECT AVG(YEAR(CURRENT_DATE) - year_of_birth) AS average_age FROM Patients";
+// Query to get the ages of all patients
+$sql_age = "SELECT YEAR(CURRENT_DATE) - year_of_birth AS age FROM Patients";
 $result_age = $conn->query($sql_age);
-$row_age = $result_age->fetch_assoc();
-$average_age = $row_age['average_age'];
+
+$ages = [];
+while ($row_age = $result_age->fetch_assoc()) {
+    $ages[] = $row_age['age'];
+}
+
+// Sort the ages in ascending order
+sort($ages);
+
+// Calculate the percentiles
+$median = calculatePercentile($ages, 50);
+$percentile_25 = calculatePercentile($ages, 25);
+$percentile_75 = calculatePercentile($ages, 75);
+
+function calculatePercentile($arr, $percentile) {
+    $index = (int)floor($percentile / 100 * count($arr));
+    return $arr[$index];
+}
 
 // Query to get the count of males and females
 $sql_gender = "SELECT gender, COUNT(*) AS count FROM Patients GROUP BY gender";
@@ -54,7 +70,9 @@ while ($row_location = $result_location->fetch_assoc()) {
     
     <h2>Patient Summary</h2>
     <p>Total number of patients: <?php echo $total_patients; ?></p>
-    <p>Average age of patients: <?php echo round($average_age, 2); ?> years</p>
+    <p>Median age of patients: <?php echo $median; ?> years</p>
+    <p>25th percentile age of patients: <?php echo $percentile_25; ?> years</p>
+    <p>75th percentile age of patients: <?php echo $percentile_75; ?> years</p>
     <p>Number of males: <?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?></p>
     <p>Number of females: <?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?></p>
 
@@ -79,6 +97,7 @@ while ($row_location = $result_location->fetch_assoc()) {
 // Close connection
 $conn->close();
 ?>
+
 
 
 
