@@ -18,7 +18,7 @@ VALUES
 (3, 'RTMD'),
 (4, 'Sjorgens');
 
--- Step 4: Create the Patients table (MERCI scores removed)
+-- Step 4: Create the Patients table
 CREATE TABLE IF NOT EXISTS Patients (
     patient_id INT AUTO_INCREMENT PRIMARY KEY,
     location ENUM('Halifax', 'Kensington', 'Montreal') DEFAULT NULL,
@@ -47,62 +47,54 @@ CREATE TABLE IF NOT EXISTS Visits (
 
     -- FAF data for both eyes (OD & OS)
     faf_test_id_OD INT DEFAULT NULL,
-    faf_eye_OD ENUM('OD') DEFAULT 'OD',
     faf_image_number_OD INT DEFAULT NULL,
     faf_reference_OD VARCHAR(255) GENERATED ALWAYS AS (
-        CONCAT('FAF/', faf_test_id_OD, '-', faf_eye_OD, '-', faf_image_number_OD, '.png')
+        CONCAT('FAF/', faf_test_id_OD, '-OD-', faf_image_number_OD, '.png')
     ) STORED,
 
     faf_test_id_OS INT DEFAULT NULL,
-    faf_eye_OS ENUM('OS') DEFAULT 'OS',
     faf_image_number_OS INT DEFAULT NULL,
     faf_reference_OS VARCHAR(255) GENERATED ALWAYS AS (
-        CONCAT('FAF/', faf_test_id_OS, '-', faf_eye_OS, '-', faf_image_number_OS, '.png')
+        CONCAT('FAF/', faf_test_id_OS, '-OS-', faf_image_number_OS, '.png')
     ) STORED,
 
     -- OCT data for both eyes (OD & OS)
     oct_test_id_OD INT DEFAULT NULL,
-    oct_eye_OD ENUM('OD') DEFAULT 'OD',
     oct_image_number_OD INT DEFAULT NULL,
     oct_reference_OD VARCHAR(255) GENERATED ALWAYS AS (
-        CONCAT('OCT/', oct_test_id_OD, '-', oct_eye_OD, '-', oct_image_number_OD, '.png')
+        CONCAT('OCT/', oct_test_id_OD, '-OD-', oct_image_number_OD, '.png')
     ) STORED,
 
     oct_test_id_OS INT DEFAULT NULL,
-    oct_eye_OS ENUM('OS') DEFAULT 'OS',
     oct_image_number_OS INT DEFAULT NULL,
     oct_reference_OS VARCHAR(255) GENERATED ALWAYS AS (
-        CONCAT('OCT/', oct_test_id_OS, '-', oct_eye_OS, '-', oct_image_number_OS, '.png')
+        CONCAT('OCT/', oct_test_id_OS, '-OS-', oct_image_number_OS, '.png')
     ) STORED,
 
     -- Visual Field (VF) data for both eyes (OD & OS)
     vf_test_id_OD INT DEFAULT NULL,
-    vf_eye_OD ENUM('OD') DEFAULT 'OD',
     vf_image_number_OD INT DEFAULT NULL,
     vf_reference_OD VARCHAR(255) GENERATED ALWAYS AS (
-        CONCAT('VF/', vf_test_id_OD, '-', vf_eye_OD, '-', vf_image_number_OD, '.png')
+        CONCAT('VF/', vf_test_id_OD, '-OD-', vf_image_number_OD, '.png')
     ) STORED,
 
     vf_test_id_OS INT DEFAULT NULL,
-    vf_eye_OS ENUM('OS') DEFAULT 'OS',
     vf_image_number_OS INT DEFAULT NULL,
     vf_reference_OS VARCHAR(255) GENERATED ALWAYS AS (
-        CONCAT('VF/', vf_test_id_OS, '-', vf_eye_OS, '-', vf_image_number_OS, '.png')
+        CONCAT('VF/', vf_test_id_OS, '-OS-', vf_image_number_OS, '.png')
     ) STORED,
 
     -- MFERG data for both eyes (OD & OS)
     mferg_test_id_OD INT DEFAULT NULL,
-    mferg_eye_OD ENUM('OD') DEFAULT 'OD',
     mferg_image_number_OD INT DEFAULT NULL,
     mferg_reference_OD VARCHAR(255) GENERATED ALWAYS AS (
-        CONCAT('MFERG/', mferg_test_id_OD, '-', mferg_eye_OD, '-', mferg_image_number_OD, '.png')
+        CONCAT('MFERG/', mferg_test_id_OD, '-OD-', mferg_image_number_OD, '.png')
     ) STORED,
 
     mferg_test_id_OS INT DEFAULT NULL,
-    mferg_eye_OS ENUM('OS') DEFAULT 'OS',
     mferg_image_number_OS INT DEFAULT NULL,
     mferg_reference_OS VARCHAR(255) GENERATED ALWAYS AS (
-        CONCAT('MFERG/', mferg_test_id_OS, '-', mferg_eye_OS, '-', mferg_image_number_OS, '.png')
+        CONCAT('MFERG/', mferg_test_id_OS, '-OS-', mferg_image_number_OS, '.png')
     ) STORED,
 
     -- MERCI ratings for both eyes
@@ -169,6 +161,7 @@ SELECT v.visit_id, v.patient_id, v.visit_date, v.visit_notes,
         ELSE 'All visit data present'
     END AS visit_status
 FROM Visits v;
+
 /*
 -- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
