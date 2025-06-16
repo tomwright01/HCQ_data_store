@@ -38,6 +38,178 @@ CREATE TABLE IF NOT EXISTS Patients (
     FOREIGN KEY (disease_id) REFERENCES Diseases(disease_id)
 );
 
+-- Step 5: Create the Visits table (with separate columns for both eyes)
+CREATE TABLE IF NOT EXISTS Visits (
+    visit_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT,
+    visit_date DATE NOT NULL,
+    visit_notes TEXT,
+
+    -- FAF data for both eyes (OD & OS)
+    faf_test_id_OD INT DEFAULT NULL,
+    faf_eye_OD ENUM('OD') DEFAULT 'OD',
+    faf_image_number_OD INT DEFAULT NULL,
+    faf_reference_OD VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('FAF/', faf_test_id_OD, '-', faf_eye_OD, '-', faf_image_number_OD, '.png')
+    ) STORED,
+
+    faf_test_id_OS INT DEFAULT NULL,
+    faf_eye_OS ENUM('OS') DEFAULT 'OS',
+    faf_image_number_OS INT DEFAULT NULL,
+    faf_reference_OS VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('FAF/', faf_test_id_OS, '-', faf_eye_OS, '-', faf_image_number_OS, '.png')
+    ) STORED,
+
+    -- OCT data for both eyes (OD & OS)
+    oct_test_id_OD INT DEFAULT NULL,
+    oct_eye_OD ENUM('OD') DEFAULT 'OD',
+    oct_image_number_OD INT DEFAULT NULL,
+    oct_reference_OD VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('OCT/', oct_test_id_OD, '-', oct_eye_OD, '-', oct_image_number_OD, '.png')
+    ) STORED,
+
+    oct_test_id_OS INT DEFAULT NULL,
+    oct_eye_OS ENUM('OS') DEFAULT 'OS',
+    oct_image_number_OS INT DEFAULT NULL,
+    oct_reference_OS VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('OCT/', oct_test_id_OS, '-', oct_eye_OS, '-', oct_image_number_OS, '.png')
+    ) STORED,
+
+    -- Visual Field (VF) data for both eyes (OD & OS)
+    vf_test_id_OD INT DEFAULT NULL,
+    vf_eye_OD ENUM('OD') DEFAULT 'OD',
+    vf_image_number_OD INT DEFAULT NULL,
+    vf_reference_OD VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('VF/', vf_test_id_OD, '-', vf_eye_OD, '-', vf_image_number_OD, '.png')
+    ) STORED,
+
+    vf_test_id_OS INT DEFAULT NULL,
+    vf_eye_OS ENUM('OS') DEFAULT 'OS',
+    vf_image_number_OS INT DEFAULT NULL,
+    vf_reference_OS VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('VF/', vf_test_id_OS, '-', vf_eye_OS, '-', vf_image_number_OS, '.png')
+    ) STORED,
+
+    -- MFERG data for both eyes (OD & OS)
+    mferg_test_id_OD INT DEFAULT NULL,
+    mferg_eye_OD ENUM('OD') DEFAULT 'OD',
+    mferg_image_number_OD INT DEFAULT NULL,
+    mferg_reference_OD VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('MFERG/', mferg_test_id_OD, '-', mferg_eye_OD, '-', mferg_image_number_OD, '.png')
+    ) STORED,
+
+    mferg_test_id_OS INT DEFAULT NULL,
+    mferg_eye_OS ENUM('OS') DEFAULT 'OS',
+    mferg_image_number_OS INT DEFAULT NULL,
+    mferg_reference_OS VARCHAR(255) GENERATED ALWAYS AS (
+        CONCAT('MFERG/', mferg_test_id_OS, '-', mferg_eye_OS, '-', mferg_image_number_OS, '.png')
+    ) STORED,
+
+    -- MERCI ratings for both eyes
+    merci_rating_left_eye INT DEFAULT NULL,
+    merci_rating_right_eye INT DEFAULT NULL,
+
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
+
+-- Insert sample visits (with FAF, OCT, VF, MFERG for both eyes)
+INSERT INTO Visits (patient_id, visit_date, visit_notes, 
+    faf_test_id_OD, faf_image_number_OD, faf_test_id_OS, faf_image_number_OS, 
+    oct_test_id_OD, oct_image_number_OD, oct_test_id_OS, oct_image_number_OS, 
+    vf_test_id_OD, vf_image_number_OD, vf_test_id_OS, vf_image_number_OS,
+    mferg_test_id_OD, mferg_image_number_OD, mferg_test_id_OS, mferg_image_number_OS,
+    merci_rating_left_eye, merci_rating_right_eye)
+VALUES 
+(1, '2023-06-01', 'Routine check-up, no concerns noted', 
+    123, 555, 124, 556, 
+    201, 801, 202, 802, 
+    301, 901, 302, 902, 
+    401, 1001, 402, 1002, 
+    10, 12),
+(2, '2023-06-10', 'Follow-up for RA, increased symptoms', 
+    125, 557, 126, 558, 
+    203, 803, 204, 804, 
+    303, 902, 304, 903, 
+    403, 1003, 404, 1004, 
+    15, 14);
+
+-- Query: View visit with patient and all eye data (both OD and OS)
+SELECT
+    v.visit_id,
+    v.visit_date,
+    v.visit_notes,
+    v.faf_reference_OD,
+    v.faf_reference_OS,
+    v.oct_reference_OD,
+    v.oct_reference_OS,
+    v.vf_reference_OD,
+    v.vf_reference_OS,
+    v.mferg_reference_OD,
+    v.mferg_reference_OS,
+    v.merci_rating_left_eye,
+    v.merci_rating_right_eye,
+    p.patient_id,
+    p.location,
+    p.disease_id,
+    p.year_of_birth,
+    p.gender,
+    p.referring_doctor
+FROM Visits v
+JOIN Patients p ON v.patient_id = p.patient_id
+WHERE v.visit_id = 1;
+
+-- Query: Check missing visit data for both OD and OS
+SELECT v.visit_id, v.patient_id, v.visit_date, v.visit_notes,
+    CASE
+        WHEN faf_reference_OD IS NULL OR faf_reference_OS IS NULL THEN 'FAF data missing for one or both eyes'
+        WHEN oct_reference_OD IS NULL OR oct_reference_OS IS NULL THEN 'OCT data missing for one or both eyes'
+        WHEN vf_reference_OD IS NULL OR vf_reference_OS IS NULL THEN 'VF data missing for one or both eyes'
+        WHEN mferg_reference_OD IS NULL OR mferg_reference_OS IS NULL THEN 'MFERG data missing for one or both eyes'
+        ELSE 'All visit data present'
+    END AS visit_status
+FROM Visits v;
+/*
+-- Step 1: Create the database
+CREATE DATABASE IF NOT EXISTS PatientData;
+
+-- Step 2: Use the created database
+USE PatientData;
+
+-- Step 3: Create a table for disease categories
+CREATE TABLE IF NOT EXISTS Diseases (
+    disease_id INT PRIMARY KEY,
+    disease_name ENUM('Lupus', 'Rheumatoid Arthritis', 'RTMD', 'Sjorgens') NOT NULL
+);
+
+-- Insert predefined diseases
+INSERT INTO Diseases (disease_id, disease_name) 
+VALUES
+(1, 'Lupus'),
+(2, 'Rheumatoid Arthritis'),
+(3, 'RTMD'),
+(4, 'Sjorgens');
+
+-- Step 4: Create the Patients table (MERCI scores removed)
+CREATE TABLE IF NOT EXISTS Patients (
+    patient_id INT AUTO_INCREMENT PRIMARY KEY,
+    location ENUM('Halifax', 'Kensington', 'Montreal') DEFAULT NULL,
+    disease_id INT,
+    year_of_birth INT CHECK (year_of_birth BETWEEN 1900 AND 2023),
+    gender ENUM('m', 'f') DEFAULT NULL,
+    referring_doctor VARCHAR(255) DEFAULT NULL,
+    rx_OD FLOAT DEFAULT NULL,
+    rx_OS FLOAT DEFAULT NULL,
+    procedures_done TEXT DEFAULT NULL,
+    dosage FLOAT DEFAULT NULL,
+    duration INT DEFAULT NULL,
+    cumulative_dosage FLOAT DEFAULT NULL,
+    date_of_discontinuation DATE DEFAULT NULL,
+    extra_notes TEXT DEFAULT NULL,
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (disease_id) REFERENCES Diseases(disease_id)
+);
+
 -- Step 5: Create the Visits table (with MERCI, FAF, OCT, VF, and MFERG)
 CREATE TABLE IF NOT EXISTS Visits (
     visit_id INT AUTO_INCREMENT PRIMARY KEY,
