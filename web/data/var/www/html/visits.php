@@ -1,9 +1,3 @@
-<?php
-$servername = "mariadb";
-$username = "root";
-$password = "notgood";
-$dbname = "PatientData"; // Name of your database
-
 // Create database connection
 $conn = new mysqli($servername, $username, $password, $dbname);
 
@@ -15,7 +9,7 @@ if ($conn->connect_error) {
 // Get the Patient ID from the URL
 $patient_id = isset($_GET['patient_id']) ? $_GET['patient_id'] : 0;
 
-// Query to fetch patient information along with visits
+// Use a prepared statement to avoid SQL injection
 $sql = "SELECT v.visit_id, v.visit_date, v.visit_notes, 
         v.faf_reference_OD, v.faf_reference_OS, 
         v.oct_reference_OD, v.oct_reference_OS, 
@@ -25,9 +19,19 @@ $sql = "SELECT v.visit_id, v.visit_date, v.visit_notes,
         p.patient_id, p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor
         FROM Visits v
         LEFT JOIN Patients p ON v.patient_id = p.patient_id
-        WHERE v.patient_id = $patient_id";
+        WHERE v.patient_id = ?";
 
-$result = $conn->query($sql);
+// Prepare the SQL statement
+$stmt = $conn->prepare($sql);
+
+// Bind parameters to the SQL query
+$stmt->bind_param("i", $patient_id);
+
+// Execute the statement
+$stmt->execute();
+
+// Get the result
+$result = $stmt->get_result();
 
 // Check if there are results
 if ($result->num_rows > 0) {
@@ -201,3 +205,4 @@ function closeModal() {
   cursor: pointer;
 }
 </style>
+
