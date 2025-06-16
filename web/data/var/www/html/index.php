@@ -85,7 +85,11 @@ while ($row_location = $result_location->fetch_assoc()) {
         }
         ?>
     </ul>
-    
+
+    <h2>View Patient and Visit Data</h2>
+    <p>Click below to view the full list of patients and their visits:</p>
+    <a href="patients_visits.php">View Patients and Visits</a>
+
     <h2>Add New Patient and Visit</h2>
     <p>Click below to add a new patient and visit:</p>
     <a href="form.php">Go to the form</a>
