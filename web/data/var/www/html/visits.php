@@ -15,14 +15,14 @@ if ($conn->connect_error) {
 // Get the Patient ID from the URL
 $patient_id = isset($_GET['patient_id']) ? $_GET['patient_id'] : 0;
 
-// Query to fetch visit data for the selected patient
+// Query to fetch patient information along with visits
 $sql = "SELECT v.visit_id, v.visit_date, v.visit_notes, 
         v.faf_reference_OD, v.faf_reference_OS, 
         v.oct_reference_OD, v.oct_reference_OS, 
         v.vf_reference_OD, v.vf_reference_OS, 
         v.mferg_reference_OD, v.mferg_reference_OS, 
         v.merci_rating_left_eye, v.merci_rating_right_eye, 
-        p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor
+        p.patient_id, p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor
         FROM Visits v
         LEFT JOIN Patients p ON v.patient_id = p.patient_id
         WHERE v.patient_id = $patient_id";
@@ -31,8 +31,35 @@ $result = $conn->query($sql);
 
 // Check if there are results
 if ($result->num_rows > 0) {
-  // Output data of each row
+  // Output patient and visit data
   echo "<h1>Visits for Patient ID: $patient_id</h1>";
+
+  // Patient Info
+  echo "<h2>Patient Information</h2>";
+  echo "<table border='1' cellpadding='10'>
+          <tr>
+            <th>Patient ID</th>
+            <th>Location</th>
+            <th>Disease ID</th>
+            <th>Year of Birth</th>
+            <th>Gender</th>
+            <th>Referring Doctor</th>
+          </tr>";
+
+  // Fetch and display patient info
+  $patient_data = $result->fetch_assoc();
+  echo "<tr>
+            <td>" . $patient_data["patient_id"] . "</td>
+            <td>" . $patient_data["location"] . "</td>
+            <td>" . $patient_data["disease_id"] . "</td>
+            <td>" . $patient_data["year_of_birth"] . "</td>
+            <td>" . $patient_data["gender"] . "</td>
+            <td>" . $patient_data["referring_doctor"] . "</td>
+          </tr>";
+  echo "</table>";
+
+  // Visits Info
+  echo "<h2>Visit Information</h2>";
   echo "<table border='1' cellpadding='10'>
           <tr>
             <th>Visit ID</th>
@@ -48,63 +75,54 @@ if ($result->num_rows > 0) {
             <th>MFERG Reference (OS)</th>
             <th>MERCI Left Eye</th>
             <th>MERCI Right Eye</th>
-            <th>Location</th>
-            <th>Disease ID</th>
-            <th>Year of Birth</th>
-            <th>Gender</th>
-            <th>Referring Doctor</th>
           </tr>";
 
-  while($row = $result->fetch_assoc()) {
+  // Loop through each visit and display data
+  do {
     echo "<tr>
-            <td>" . $row["visit_id"] . "</td>
-            <td>" . $row["visit_date"] . "</td>
-            <td>" . $row["visit_notes"] . "</td>
-            <td><a href='#' onclick='openModal(\"" . $row["faf_reference_OD"] . "\", " . $row["merci_rating_left_eye"] . ")'>
-                  <img src='" . $row["faf_reference_OD"] . "' width='100' height='100' />
+            <td>" . $patient_data["visit_id"] . "</td>
+            <td>" . $patient_data["visit_date"] . "</td>
+            <td>" . $patient_data["visit_notes"] . "</td>
+            <td><a href='#' onclick='openModal(\"" . $patient_data["faf_reference_OD"] . "\", " . $patient_data["merci_rating_left_eye"] . ")'>
+                  <img src='" . $patient_data["faf_reference_OD"] . "' width='100' height='100' />
                 </a>
             </td>
-            <td><a href='#' onclick='openModal(\"" . $row["faf_reference_OS"] . "\", " . $row["merci_rating_right_eye"] . ")'>
-                  <img src='" . $row["faf_reference_OS"] . "' width='100' height='100' />
+            <td><a href='#' onclick='openModal(\"" . $patient_data["faf_reference_OS"] . "\", " . $patient_data["merci_rating_right_eye"] . ")'>
+                  <img src='" . $patient_data["faf_reference_OS"] . "' width='100' height='100' />
                 </a>
             </td>
-            <td><a href='#' onclick='openModal(\"" . $row["oct_reference_OD"] . "\", " . $row["merci_rating_left_eye"] . ")'>
-                  <img src='" . $row["oct_reference_OD"] . "' width='100' height='100' />
+            <td><a href='#' onclick='openModal(\"" . $patient_data["oct_reference_OD"] . "\", " . $patient_data["merci_rating_left_eye"] . ")'>
+                  <img src='" . $patient_data["oct_reference_OD"] . "' width='100' height='100' />
                 </a>
             </td>
-            <td><a href='#' onclick='openModal(\"" . $row["oct_reference_OS"] . "\", " . $row["merci_rating_right_eye"] . ")'>
-                  <img src='" . $row["oct_reference_OS"] . "' width='100' height='100' />
+            <td><a href='#' onclick='openModal(\"" . $patient_data["oct_reference_OS"] . "\", " . $patient_data["merci_rating_right_eye"] . ")'>
+                  <img src='" . $patient_data["oct_reference_OS"] . "' width='100' height='100' />
                 </a>
             </td>
-            <td><a href='#' onclick='openModal(\"" . $row["vf_reference_OD"] . "\", " . $row["merci_rating_left_eye"] . ")'>
-                  <img src='" . $row["vf_reference_OD"] . "' width='100' height='100' />
+            <td><a href='#' onclick='openModal(\"" . $patient_data["vf_reference_OD"] . "\", " . $patient_data["merci_rating_left_eye"] . ")'>
+                  <img src='" . $patient_data["vf_reference_OD"] . "' width='100' height='100' />
                 </a>
             </td>
-            <td><a href='#' onclick='openModal(\"" . $row["vf_reference_OS"] . "\", " . $row["merci_rating_right_eye"] . ")'>
-                  <img src='" . $row["vf_reference_OS"] . "' width='100' height='100' />
+            <td><a href='#' onclick='openModal(\"" . $patient_data["vf_reference_OS"] . "\", " . $patient_data["merci_rating_right_eye"] . ")'>
+                  <img src='" . $patient_data["vf_reference_OS"] . "' width='100' height='100' />
                 </a>
             </td>
-            <td><a href='#' onclick='openModal(\"" . $row["mferg_reference_OD"] . "\", " . $row["merci_rating_left_eye"] . ")'>
-                  <img src='" . $row["mferg_reference_OD"] . "' width='100' height='100' />
+            <td><a href='#' onclick='openModal(\"" . $patient_data["mferg_reference_OD"] . "\", " . $patient_data["merci_rating_left_eye"] . ")'>
+                  <img src='" . $patient_data["mferg_reference_OD"] . "' width='100' height='100' />
                 </a>
             </td>
-            <td><a href='#' onclick='openModal(\"" . $row["mferg_reference_OS"] . "\", " . $row["merci_rating_right_eye"] . ")'>
-                  <img src='" . $row["mferg_reference_OS"] . "' width='100' height='100' />
+            <td><a href='#' onclick='openModal(\"" . $patient_data["mferg_reference_OS"] . "\", " . $patient_data["merci_rating_right_eye"] . ")'>
+                  <img src='" . $patient_data["mferg_reference_OS"] . "' width='100' height='100' />
                 </a>
             </td>
-            <td>" . $row["merci_rating_left_eye"] . "</td>
-            <td>" . $row["merci_rating_right_eye"] . "</td>
-            <td>" . $row["location"] . "</td>
-            <td>" . $row["disease_id"] . "</td>
-            <td>" . $row["year_of_birth"] . "</td>
-            <td>" . $row["gender"] . "</td>
-            <td>" . $row["referring_doctor"] . "</td>
+            <td>" . $patient_data["merci_rating_left_eye"] . "</td>
+            <td>" . $patient_data["merci_rating_right_eye"] . "</td>
           </tr>";
-  }
+  } while ($patient_data = $result->fetch_assoc());
 
   echo "</table>";
 } else {
-  echo "No visits found for this patient.";
+  echo "<p>No visits found for this patient.</p>";
 }
 
 // Close connection
@@ -183,5 +201,3 @@ function closeModal() {
   cursor: pointer;
 }
 </style>
-
-
