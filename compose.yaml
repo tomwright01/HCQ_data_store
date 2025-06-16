@@ -12,3 +12,11 @@ services:
         restart: always
         ports:
             - 8080:8080
+
+    web:
+        image: HCQ/web
+        build: ./web
+        restart: always
+        container_name: web
+        ports: 
+            - "8888:8080"
