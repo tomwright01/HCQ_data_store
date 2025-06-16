@@ -1,10 +1,22 @@
 <?php
-// This file contains the form that submits to submit.php
+$servername = "mariadb";
+$username = "root";
+$password = "notgood";
+$dbname = "PatientData"; // Name of your database
+
+// Create database connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+// Check connection
+if ($conn->connect_error) {
+  die("Connection failed: " . $conn->connect_error);
+}
 
 ?>
 
 <h2>Enter Patient and Visit Information</h2>
 <form action="submit.php" method="post">
+    <!-- Patient Information -->
     <h3>Patient Information</h3>
     <label for="location">Location:</label>
     <input type="text" name="location" required><br><br>
@@ -46,6 +58,7 @@
     <label for="extra_notes">Extra Notes:</label>
     <textarea name="extra_notes"></textarea><br><br>
 
+    <!-- Visit Information -->
     <h3>Visit Information</h3>
     <label for="visit_date">Visit Date:</label>
     <input type="date" name="visit_date" required><br><br>
@@ -120,3 +133,7 @@
     <input type="submit" value="Submit">
 </form>
 
+<?php
+// Close connection
+$conn->close();
+?>
