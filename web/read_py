@@ -1,0 +1,66 @@
+#!/bin/python
+import os
+import mysql.connector
+from mysql.connector import Error
+
+start_dir = 'SAMPLE/FAF'
+
+# MySQL Database connection setup
+def connect_to_db():
+    try:
+        connection = mysql.connector.connect(
+            host='localhost',  # Database host (change as needed)
+            database='PatientData',  # Your database name
+            user='root',  # Your MySQL username
+            password='notgood'  # Your MySQL password
+        )
+        if connection.is_connected():
+            return connection
+    except Error as e:
+        print(f"Error while connecting to MySQL: {e}")
+        return None
+
+# Function to execute SQL queries
+def execute_sql(query, connection):
+    try:
+        cursor = connection.cursor()
+        cursor.execute(query)
+        connection.commit()
+        cursor.close()
+    except Error as e:
+        print(f"Error executing query: {e}")
+
+def create_sql(filename, connection):
+    parts = filename.split('_')
+    subjectID = parts[0]
+    Eye = parts[1]
+    TestDate = parts[2].replace(".png", "")  # Remove .png extension if included in date
+
+    # Insert Patient Info
+    SQL_ptn = f"INSERT INTO Patients (patient_id) VALUES ({subjectID})"
+    execute_sql(SQL_ptn, connection)
+
+    # Insert Visit Info based on Eye
+    if Eye == 'OD':  # Right Eye
+        SQL_Visit = f"INSERT INTO Visits (patient_id, visit_date, faf_reference_OD) VALUES ({subjectID}, '{TestDate}', '{filename}')"
+    else:  # Left Eye
+        SQL_Visit = f"INSERT INTO Visits (patient_id, visit_date, faf_reference_OS) VALUES ({subjectID}, '{TestDate}', '{filename}')"
+
+    execute_sql(SQL_Visit, connection)
+    print(f"Inserted data for {subjectID}, {Eye}, {TestDate}")
+
+if __name__ == "__main__":
+    # Connect to the database
+    connection = connect_to_db()
+    
+    if connection:
+        # Iterate through the files in the directory
+        for root, subFolder, files in os.walk(start_dir):
+            for item in files:
+                if item.endswith(".png"):
+                    create_sql(item, connection)
+        
+        # Close the database connection
+        connection.close()
+    else:
+        print("Failed to connect to the database.")
