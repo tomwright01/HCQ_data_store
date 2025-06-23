@@ -2,14 +2,14 @@
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
-$dbname = "PatientData"; // Name of your database
+$dbname = "PatientData";
 
 // Create database connection
 $conn = new mysqli($servername, $username, $password, $dbname);
 
 // Check connection
 if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
+    die("Connection failed: " . $conn->connect_error);
 }
 
 // Query to fetch all patients
@@ -21,6 +21,7 @@ $sql_visits = "SELECT v.visit_id, v.visit_date, v.visit_notes, p.patient_id, p.l
                FROM Visits v
                JOIN Patients p ON v.patient_id = p.patient_id";
 $result_visits = $conn->query($sql_visits);
+
 ?>
 
 <!DOCTYPE html>
@@ -43,6 +44,7 @@ $result_visits = $conn->query($sql_visits);
                 <th>Year of Birth</th>
                 <th>Gender</th>
                 <th>Referring Doctor</th>
+                <th>View Visits</th>
             </tr>
         </thead>
         <tbody>
@@ -56,10 +58,11 @@ $result_visits = $conn->query($sql_visits);
                             <td>" . $row["year_of_birth"] . "</td>
                             <td>" . $row["gender"] . "</td>
                             <td>" . $row["referring_doctor"] . "</td>
+                            <td><a href='view_visits.php?patient_id=" . $row["patient_id"] . "'>View Visits</a></td>
                           </tr>";
                 }
             } else {
-                echo "<tr><td colspan='6'>No patients found</td></tr>";
+                echo "<tr><td colspan='7'>No patients found</td></tr>";
             }
             ?>
         </tbody>
@@ -110,3 +113,4 @@ $result_visits = $conn->query($sql_visits);
 // Close connection
 $conn->close();
 ?>
+
