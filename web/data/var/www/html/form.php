@@ -104,27 +104,5 @@
         <!-- MFERG Data -->
         <h4>MFERG Data</h4>
         <label for="mferg_test_id_OD">MFERG Test ID (OD):</label>
-        <input type="number" name="mferg_test_id_OD"><br><br>
-
-        <label for="mferg_image_number_OD">MFERG Image Number (OD):</label>
-        <input type="number" name="mferg_image_number_OD"><br><br>
-
-        <label for="mferg_test_id_OS">MFERG Test ID (OS):</label>
-        <input type="number" name="mferg_test_id_OS"><br><br>
-
-        <label for="mferg_image_number_OS">MFERG Image Number (OS):</label>
-        <input type="number" name="mferg_image_number_OS"><br><br>
-
-        <!-- MERCI Ratings -->
-        <h4>MERCI Ratings</h4>
-        <label for="merci_rating_left_eye">MERCI Rating (Left Eye):</label>
-        <input type="number" name="merci_rating_left_eye"><br><br>
-
-        <label for="merci_rating_right_eye">MERCI Rating (Right Eye):</label>
-        <input type="number" name="merci_rating_right_eye"><br><br>
-
-        <input type="submit" value="Submit">
-    </form>
-</body>
-</html>
+        <input type="number" name="mferg_test_id_OD
 
