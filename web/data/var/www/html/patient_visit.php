@@ -2,7 +2,7 @@
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
-$dbname = "PatientData";
+$dbname = "PatientData"; // Name of your database
 
 // Create database connection
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -12,105 +12,60 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Query to fetch all patients
-$sql_patients = "SELECT patient_id, location, disease_id, year_of_birth, gender, referring_doctor FROM Patients";
-$result_patients = $conn->query($sql_patients);
+// Get the Patient ID from the URL
+$patient_id = isset($_GET['patient_id']) ? $_GET['patient_id'] : 0;
 
-// Query to fetch all visits
-$sql_visits = "SELECT v.visit_id, v.visit_date, v.visit_notes, p.patient_id, p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor
-               FROM Visits v
-               JOIN Patients p ON v.patient_id = p.patient_id";
-$result_visits = $conn->query($sql_visits);
+// Query to fetch patient and visit details for the selected patient
+$sql = "SELECT v.visit_id, v.visit_date, v.visit_notes, 
+        v.faf_reference_OD, v.faf_reference_OS, 
+        v.oct_reference_OD, v.oct_reference_OS, 
+        v.vf_reference_OD, v.vf_reference_OS, 
+        v.mferg_reference_OD, v.mferg_reference_OS, 
+        v.merci_rating_left_eye, v.merci_rating_right_eye, 
+        p.patient_id, p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor
+        FROM Visits v
+        LEFT JOIN Patients p ON v.patient_id = p.patient_id
+        WHERE v.patient_id = ?";
 
-?>
+// Prepare the SQL statement
+$stmt = $conn->prepare($sql);
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Patients and Visits Overview</title>
-</head>
-<body>
-    <h1>Patients and Visits Overview</h1>
+// Bind parameters to the SQL query
+$stmt->bind_param("i", $patient_id);
 
-    <h2>Patients Table</h2>
-    <table border="1" cellpadding="10">
-        <thead>
-            <tr>
-                <th>Patient ID</th>
-                <th>Location</th>
-                <th>Disease ID</th>
-                <th>Year of Birth</th>
-                <th>Gender</th>
-                <th>Referring Doctor</th>
-                <th>View Visits</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php
-            if ($result_patients->num_rows > 0) {
-                while ($row = $result_patients->fetch_assoc()) {
-                    echo "<tr>
-                            <td>" . $row["patient_id"] . "</td>
-                            <td>" . $row["location"] . "</td>
-                            <td>" . $row["disease_id"] . "</td>
-                            <td>" . $row["year_of_birth"] . "</td>
-                            <td>" . $row["gender"] . "</td>
-                            <td>" . $row["referring_doctor"] . "</td>
-                            <td><a href='view_visits.php?patient_id=" . $row["patient_id"] . "'>View Visits</a></td>
-                          </tr>";
-                }
-            } else {
-                echo "<tr><td colspan='7'>No patients found</td></tr>";
-            }
-            ?>
-        </tbody>
-    </table>
+// Execute the statement
+$stmt->execute();
 
-    <h2>Visits Table</h2>
-    <table border="1" cellpadding="10">
-        <thead>
-            <tr>
-                <th>Visit ID</th>
-                <th>Visit Date</th>
-                <th>Visit Notes</th>
-                <th>Patient ID</th>
-                <th>Location</th>
-                <th>Disease ID</th>
-                <th>Year of Birth</th>
-                <th>Gender</th>
-                <th>Referring Doctor</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php
-            if ($result_visits->num_rows > 0) {
-                while ($row = $result_visits->fetch_assoc()) {
-                    echo "<tr>
-                            <td>" . $row["visit_id"] . "</td>
-                            <td>" . $row["visit_date"] . "</td>
-                            <td>" . $row["visit_notes"] . "</td>
-                            <td>" . $row["patient_id"] . "</td>
-                            <td>" . $row["location"] . "</td>
-                            <td>" . $row["disease_id"] . "</td>
-                            <td>" . $row["year_of_birth"] . "</td>
-                            <td>" . $row["gender"] . "</td>
-                            <td>" . $row["referring_doctor"] . "</td>
-                          </tr>";
-                }
-            } else {
-                echo "<tr><td colspan='9'>No visits found</td></tr>";
-            }
-            ?>
-        </tbody>
-    </table>
+// Get the result
+$result = $stmt->get_result();
 
-</body>
-</html>
+if ($result->num_rows > 0) {
+    echo "<h1>Visits for Patient ID: $patient_id</h1>";
 
-<?php
+    while ($row = $result->fetch_assoc()) {
+        echo "<h2>Visit ID: " . $row["visit_id"] . "</h2>";
+        echo "Visit Date: " . $row["visit_date"] . "<br>";
+        echo "Visit Notes: " . $row["visit_notes"] . "<br>";
+
+        // Display FAF, OCT, VF, and MFERG image references
+        echo "FAF OD: <a href='" . $row["faf_reference_OD"] . "' target='_blank'>View Image</a><br>";
+        echo "FAF OS: <a href='" . $row["faf_reference_OS"] . "' target='_blank'>View Image</a><br>";
+        echo "OCT OD: <a href='" . $row["oct_reference_OD"] . "' target='_blank'>View Image</a><br>";
+        echo "OCT OS: <a href='" . $row["oct_reference_OS"] . "' target='_blank'>View Image</a><br>";
+        echo "VF OD: <a href='" . $row["vf_reference_OD"] . "' target='_blank'>View Image</a><br>";
+        echo "VF OS: <a href='" . $row["vf_reference_OS"] . "' target='_blank'>View Image</a><br>";
+        echo "MFERG OD: <a href='" . $row["mferg_reference_OD"] . "' target='_blank'>View Image</a><br>";
+        echo "MFERG OS: <a href='" . $row["mferg_reference_OS"] . "' target='_blank'>View Image</a><br>";
+
+        echo "MERCI Left Eye: " . $row["merci_rating_left_eye"] . "<br>";
+        echo "MERCI Right Eye: " . $row["merci_rating_right_eye"] . "<br>";
+    }
+} else {
+    echo "<p>No visits found for this patient.</p>";
+}
+
 // Close connection
 $conn->close();
 ?>
+
 
