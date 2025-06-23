@@ -9,53 +9,20 @@ $conn = new mysqli($servername, $username, $password, $dbname);
 
 // Check connection
 if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
+    die("Connection failed: " . $conn->connect_error);
 }
 
-// Query to get total number of patients
-$sql = "SELECT COUNT(*) AS total_patients FROM Patients";
-$result = $conn->query($sql);
-$row = $result->fetch_assoc();
-$total_patients = $row['total_patients'];
+// Query to fetch all patients
+$sql_patients = "SELECT patient_id, location, disease_id, year_of_birth, gender, referring_doctor FROM Patients";
+$result_patients = $conn->query($sql_patients);
 
-// Query to get the ages of all patients
-$sql_age = "SELECT YEAR(CURRENT_DATE) - year_of_birth AS age FROM Patients";
-$result_age = $conn->query($sql_age);
+// Query to fetch the total number of patients
+$sql_patient_count = "SELECT COUNT(*) AS total_patients FROM Patients";
+$result_patient_count = $conn->query($sql_patient_count);
+$total_patients = $result_patient_count->fetch_assoc()['total_patients'];
 
-$ages = [];
-while ($row_age = $result_age->fetch_assoc()) {
-    $ages[] = $row_age['age'];
-}
-
-// Sort the ages in ascending order
-sort($ages);
-
-// Calculate the percentiles
-$median = calculatePercentile($ages, 50);
-$percentile_25 = calculatePercentile($ages, 25);
-$percentile_75 = calculatePercentile($ages, 75);
-
-function calculatePercentile($arr, $percentile) {
-    $index = (int)floor($percentile / 100 * count($arr));
-    return $arr[$index];
-}
-
-// Query to get the count of males and females
-$sql_gender = "SELECT gender, COUNT(*) AS count FROM Patients GROUP BY gender";
-$result_gender = $conn->query($sql_gender);
-$gender_data = [];
-while ($row_gender = $result_gender->fetch_assoc()) {
-    $gender_data[$row_gender['gender']] = $row_gender['count'];
-}
-
-// Query to get the count of patients by location
-$sql_location = "SELECT location, COUNT(*) AS count FROM Patients GROUP BY location";
-$result_location = $conn->query($sql_location);
-$location_data = [];
-while ($row_location = $result_location->fetch_assoc()) {
-    $location_data[$row_location['location']] = $row_location['count'];
-}
-
+// Close connection
+$conn->close();
 ?>
 
 <!DOCTYPE html>
@@ -70,37 +37,52 @@ while ($row_location = $result_location->fetch_assoc()) {
     
     <h2>Patient Summary</h2>
     <p>Total number of patients: <?php echo $total_patients; ?></p>
-    <p>Median age of patients: <?php echo $median; ?> years</p>
-    <p>25th percentile age of patients: <?php echo $percentile_25; ?> years</p>
-    <p>75th percentile age of patients: <?php echo $percentile_75; ?> years</p>
-    <p>Number of males: <?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?></p>
-    <p>Number of females: <?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?></p>
-
-    <h3>Total Patients by Location</h3>
-    <ul>
-        <?php
-        // Display the count of patients by location (e.g., Halifax, Kensington, Montreal)
-        foreach ($location_data as $location => $count) {
-            echo "<li>$location: $count patients</li>";
-        }
-        ?>
-    </ul>
-
+    
     <h2>View Patient and Visit Data</h2>
     <p>Click below to view the full list of patients and their visits:</p>
-    <a href="patients_visits.php">View Patients and Visits</a>
+    <a href="patient_visit.php">View Patients and Visits</a>
 
     <h2>Add New Patient and Visit</h2>
     <p>Click below to add a new patient and visit:</p>
     <a href="form.php">Go to the form</a>
 
+    <h2>Patients Table</h2>
+    <table border="1" cellpadding="10">
+        <thead>
+            <tr>
+                <th>Patient ID</th>
+                <th>Location</th>
+                <th>Disease ID</th>
+                <th>Year of Birth</th>
+                <th>Gender</th>
+                <th>Referring Doctor</th>
+                <th>View Visits</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php
+            if ($result_patients->num_rows > 0) {
+                while ($row = $result_patients->fetch_assoc()) {
+                    echo "<tr>
+                            <td>" . $row["patient_id"] . "</td>
+                            <td>" . $row["location"] . "</td>
+                            <td>" . $row["disease_id"] . "</td>
+                            <td>" . $row["year_of_birth"] . "</td>
+                            <td>" . $row["gender"] . "</td>
+                            <td>" . $row["referring_doctor"] . "</td>
+                            <td><a href='patient_visit.php?patient_id=" . $row["patient_id"] . "'>View Visits</a></td>
+                          </tr>";
+                }
+            } else {
+                echo "<tr><td colspan='7'>No patients found</td></tr>";
+            }
+            ?>
+        </tbody>
+    </table>
+
 </body>
 </html>
 
-<?php
-// Close connection
-$conn->close();
-?>
 
 
 
