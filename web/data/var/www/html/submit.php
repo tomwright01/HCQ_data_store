@@ -9,25 +9,25 @@ $conn = new mysqli($servername, $username, $password, $dbname);
 
 // Check connection
 if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
+    die("Connection failed: " . $conn->connect_error);
 }
 
 // Check if the form is submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Patient data
-    $location = $_POST['location'];
-    $disease_id = $_POST['disease_id'];
-    $year_of_birth = $_POST['year_of_birth'];
-    $gender = $_POST['gender'];
-    $referring_doctor = $_POST['referring_doctor'];
-    $rx_OD = $_POST['rx_OD'];
-    $rx_OS = $_POST['rx_OS'];
-    $procedures_done = $_POST['procedures_done'];
-    $dosage = $_POST['dosage'];
-    $duration = $_POST['duration'];
-    $cumulative_dosage = $_POST['cumulative_dosage'];
+    // Sanitize and assign form data to variables
+    $location = mysqli_real_escape_string($conn, $_POST['location']);
+    $disease_id = (int) $_POST['disease_id'];
+    $year_of_birth = (int) $_POST['year_of_birth'];
+    $gender = mysqli_real_escape_string($conn, $_POST['gender']);
+    $referring_doctor = mysqli_real_escape_string($conn, $_POST['referring_doctor']);
+    $rx_OD = (float) $_POST['rx_OD'];
+    $rx_OS = (float) $_POST['rx_OS'];
+    $procedures_done = mysqli_real_escape_string($conn, $_POST['procedures_done']);
+    $dosage = (float) $_POST['dosage'];
+    $duration = (int) $_POST['duration'];
+    $cumulative_dosage = (float) $_POST['cumulative_dosage'];
     $date_of_discontinuation = $_POST['date_of_discontinuation'];
-    $extra_notes = $_POST['extra_notes'];
+    $extra_notes = mysqli_real_escape_string($conn, $_POST['extra_notes']);
 
     // Insert patient data into the Patients table
     $insertPatient = "INSERT INTO Patients (location, disease_id, year_of_birth, gender, referring_doctor, rx_OD, rx_OS, procedures_done, dosage, duration, cumulative_dosage, date_of_discontinuation, extra_notes)
@@ -35,8 +35,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     if ($conn->query($insertPatient) === TRUE) {
         $patient_id = $conn->insert_id; // Get the patient ID for the visits table
-        echo "Patient inserted successfully! ID: $patient_id"; // Debugging line
-        
+
         // Visit data
         $visit_date = $_POST['visit_date'];
         $visit_notes = $_POST['visit_notes'];
@@ -83,53 +82,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 
-?>
-
-<!-- Confirmation Message or Form Redirection -->
-<?php
 // Close connection
 $conn->close();
 ?>
 
-
-
-
-
-/*<?php
-$servername = "mariadb";
-$username = "root";
-$password = "notgood";
-$dbname = "PatientData"; // Name of your database
-
-// Create database connection
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-// Check connection
-if ($conn->connect_error) {
-  die("Connection failed: " . $conn->connect_error);
-}
-
-// Check if the form is submitted
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Patient data
-    $location = $_POST['location'];
-    $disease_id = $_POST['disease_id'];
-    $year_of_birth = $_POST['year_of_birth'];
-    $gender = $_POST['gender'];
-    $referring_doctor = $_POST['referring_doctor'];
-    $rx_OD = $_POST['rx_OD'];
-    $rx_OS = $_POST['rx_OS'];
-    $procedures_done = $_POST['procedures_done'];
-    $dosage = $_POST['dosage'];
-    $duration = $_POST['duration'];
-    $cumulative_dosage = $_POST['cumulative_dosage'];
-    $date_of_discontinuation = $_POST['date_of_discontinuation'];
-    $extra_notes = $_POST['extra_notes'];
-
-    // Insert patient data into the Patients table
-    $insertPatient = "INSERT INTO Patients (location, disease_id, year_of_birth, gender, referring_doctor, rx_OD, rx_OS, procedures_done, dosage, duration, cumulative_dosage, date_of_discontinuation, extra_notes)
-                      VALUES ('$location', '$disease_id', '$year_of_birth', '$gender', '$referring_doctor', '$rx_OD', '$rx_OS', '$procedures_done', '$dosage', '$duration', '$cumulative_dosage', '$date_of_discontinuation', '$extra_notes')";
-
-    if ($conn->query($insertPatient) === TRUE) {
-        $patient_id = $conn->insert_id; // Get the patient ID for the visits
-*/
