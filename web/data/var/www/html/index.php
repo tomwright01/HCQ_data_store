@@ -65,6 +65,15 @@ while ($row_location = $result_location->fetch_assoc()) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Patient Data Overview</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* Ensure the charts are responsive */
+        canvas {
+            max-width: 300px; /* You can adjust the width to your needs */
+            max-height: 200px; /* Set max height for consistent sizing */
+            width: 100%; /* Makes the chart responsive */
+            height: auto; /* Adjust height automatically */
+        }
+    </style>
 </head>
 <body>
     <h1>Welcome to the Patient Data Portal</h1>
