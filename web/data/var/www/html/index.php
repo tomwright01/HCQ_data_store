@@ -63,21 +63,68 @@ while ($row_location = $result_location->fetch_assoc()) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Patient Data Overview</title>
+    <title>Kensington Health Data Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* Ensure the charts are responsive */
+        /* Title styling */
+        h1 {
+            text-align: center;
+            font-size: 50px;
+            color: #4CAF50; /* Green color */
+            font-family: 'Arial', sans-serif;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        h2 {
+            text-align: center;
+            font-size: 36px;
+            font-family: 'Arial', sans-serif;
+            margin-top: 30px;
+            color: #333; /* Darker color for subheadings */
+        }
+
+        h3, h4 {
+            text-align: center;
+            font-size: 28px;
+            font-family: 'Arial', sans-serif;
+        }
+
+        /* Graph styling */
         canvas {
-            max-width: 300px; /* You can adjust the width to your needs */
-            max-height: 200px; /* Set max height for consistent sizing */
-            width: 100%; /* Makes the chart responsive */
-            height: auto; /* Adjust height automatically */
+            max-width: 300px;
+            max-height: 200px;
+            width: 100%;
+            height: auto;
+            margin: 20px auto; /* Centering the charts */
+        }
+
+        /* Styling for links */
+        a {
+            display: block;
+            text-align: center;
+            font-size: 18px;
+            color: #4CAF50;
+            margin-top: 30px;
+            text-decoration: none;
+        }
+
+        a:hover {
+            color: #45a049; /* Slightly darker green on hover */
+        }
+
+        /* Optional footer styling */
+        footer {
+            text-align: center;
+            font-size: 16px;
+            color: #777;
+            margin-top: 50px;
         }
     </style>
 </head>
 <body>
-    <h1>Welcome to the Patient Data Portal</h1>
-    
+    <h1>Kensington Health Data Portal</h1>
+
     <h2>Patient Summary</h2>
     <p>Total number of patients: <?php echo $total_patients; ?></p>
     <p>Median age of patients: <?php echo $median; ?> years</p>
