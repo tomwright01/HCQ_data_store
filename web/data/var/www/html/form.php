@@ -14,13 +14,14 @@
         <label for="location">Location:</label>
         <input type="text" name="location" required><br><br>
 
-        <!-- Disease ID Dropdown -->
+        <!-- Disease ID Dropdown with "Other" Option -->
         <label for="disease_id">Disease ID:</label>
         <select name="disease_id" required>
             <option value="1">Lupus</option>
             <option value="2">Rheumatoid Arthritis (RA)</option>
             <option value="3">RTMD</option>
             <option value="4">Sjorgens</option>
+            <option value="5">Other</option> <!-- Added "Other" option -->
         </select><br><br>
 
         <label for="year_of_birth">Year of Birth:</label>
