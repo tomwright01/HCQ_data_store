@@ -14,20 +14,20 @@ if ($conn->connect_error) {
 
 // Check if the form is submitted
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Sanitize and assign form data to variables
-    $location = mysqli_real_escape_string($conn, $_POST['location']);
-    $disease_id = (int) $_POST['disease_id'];
-    $year_of_birth = (int) $_POST['year_of_birth'];
-    $gender = mysqli_real_escape_string($conn, $_POST['gender']);
-    $referring_doctor = mysqli_real_escape_string($conn, $_POST['referring_doctor']);
-    $rx_OD = (float) $_POST['rx_OD'];
-    $rx_OS = (float) $_POST['rx_OS'];
-    $procedures_done = mysqli_real_escape_string($conn, $_POST['procedures_done']);
-    $dosage = (float) $_POST['dosage'];
-    $duration = (int) $_POST['duration'];
-    $cumulative_dosage = (float) $_POST['cumulative_dosage'];
+    // Patient data
+    $location = $_POST['location'];
+    $disease_id = $_POST['disease_id'];
+    $year_of_birth = $_POST['year_of_birth'];
+    $gender = $_POST['gender'];
+    $referring_doctor = $_POST['referring_doctor'];
+    $rx_OD = $_POST['rx_OD'];
+    $rx_OS = $_POST['rx_OS'];
+    $procedures_done = $_POST['procedures_done'];
+    $dosage = $_POST['dosage'];
+    $duration = $_POST['duration'];
+    $cumulative_dosage = $_POST['cumulative_dosage'];
     $date_of_discontinuation = $_POST['date_of_discontinuation'];
-    $extra_notes = mysqli_real_escape_string($conn, $_POST['extra_notes']);
+    $extra_notes = $_POST['extra_notes'];
 
     // Insert patient data into the Patients table
     $insertPatient = "INSERT INTO Patients (location, disease_id, year_of_birth, gender, referring_doctor, rx_OD, rx_OS, procedures_done, dosage, duration, cumulative_dosage, date_of_discontinuation, extra_notes)
@@ -73,7 +73,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             '$merci_rating_left_eye', '$merci_rating_right_eye')";
 
         if ($conn->query($insertVisit) === TRUE) {
-            echo "New visit record created successfully.";
+            // Success: Data inserted, now prompt for next action
+            echo "<h3>Patient and Visit Record Successfully Added!</h3>";
+            echo "<p>Do you want to:</p>";
+            echo "<a href='index.php'>Return to Main Page</a><br>";
+            echo "<a href='form.php'>Add Another Entry</a>";
         } else {
             echo "Error: " . $insertVisit . "<br>" . $conn->error;
         }
