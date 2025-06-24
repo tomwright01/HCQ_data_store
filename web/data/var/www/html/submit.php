@@ -2,7 +2,7 @@
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
-$dbname = "PatientData"; // Name of your database
+$dbname = "clinical_database"; // Make sure to reference your correct database name
 
 // Create database connection
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -89,5 +89,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 // Close connection
 $conn->close();
 ?>
+
 
 
