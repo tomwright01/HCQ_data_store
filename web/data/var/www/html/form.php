@@ -14,15 +14,21 @@
         <label for="location">Location:</label>
         <input type="text" name="location" required><br><br>
 
-        <label for="disease_id">Disease ID (1 = Lupus, 2 = RA, etc.):</label>
-        <input type="number" name="disease_id" required><br><br>
+        <!-- Disease ID Dropdown -->
+        <label for="disease_id">Disease ID:</label>
+        <select name="disease_id" required>
+            <option value="1">Lupus</option>
+            <option value="2">Rheumatoid Arthritis (RA)</option>
+            <option value="3">RTMD</option>
+            <option value="4">Sjorgens</option>
+        </select><br><br>
 
         <label for="year_of_birth">Year of Birth:</label>
         <input type="number" name="year_of_birth" required><br><br>
 
         <label for="gender">Gender:</label>
-        <input type="radio" name="gender" value="m"> Male
-        <input type="radio" name="gender" value="f"> Female<br><br>
+        <input type="radio" name="gender" value="m" required> Male
+        <input type="radio" name="gender" value="f" required> Female<br><br>
 
         <label for="referring_doctor">Referring Doctor:</label>
         <input type="text" name="referring_doctor" required><br><br>
@@ -104,5 +110,28 @@
         <!-- MFERG Data -->
         <h4>MFERG Data</h4>
         <label for="mferg_test_id_OD">MFERG Test ID (OD):</label>
-        <input type="number" name="mferg_test_id_OD
+        <input type="number" name="mferg_test_id_OD"><br><br>
 
+        <label for="mferg_image_number_OD">MFERG Image Number (OD):</label>
+        <input type="number" name="mferg_image_number_OD"><br><br>
+
+        <label for="mferg_test_id_OS">MFERG Test ID (OS):</label>
+        <input type="number" name="mferg_test_id_OS"><br><br>
+
+        <label for="mferg_image_number_OS">MFERG Image Number (OS):</label>
+        <input type="number" name="mferg_image_number_OS"><br><br>
+
+        <!-- MERCI Ratings -->
+        <h4>MERCI Ratings</h4>
+        <label for="merci_rating_left_eye">MERCI Rating (Left Eye):</label>
+        <input type="number" name="merci_rating_left_eye"><br><br>
+
+        <label for="merci_rating_right_eye">MERCI Rating (Right Eye):</label>
+        <input type="number" name="merci_rating_right_eye"><br><br>
+
+        <!-- Submit Button -->
+        <input type="submit" value="Submit">
+    </form>
+
+</body>
+</html>
