@@ -176,7 +176,7 @@ while ($row_location = $result_location->fetch_assoc()) {
     </ul>
 
     <div class="section">
-        <h2>Graphs</h2>
+        <h2>Kensington Health Patient Metrics</h2>
         <div>
             <canvas id="genderChart"></canvas>
         </div>
@@ -313,6 +313,7 @@ while ($row_location = $result_location->fetch_assoc()) {
 // Close connection
 $conn->close();
 ?>
+
 
 
 
