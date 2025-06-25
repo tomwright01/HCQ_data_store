@@ -281,5 +281,23 @@ if ($conn->connect_error) {
                 <input type="number" name="merci_rating_left_eye">
 
                 <label for="merci_rating_right_eye">MERCI Rating (Right Eye):</label>
+                <input type="number" name="merci_rating_right_eye">
+            </div>
+
+            <button type="submit" class="submit-btn">Submit Data</button>
+        </form>
+    </div>
+
+    <footer>
+        <p>Go back to <a href="index.php">Home</a></p>
+    </footer>
+
+</body>
+</html>
+
+<?php
+$conn->close();
+?>
+
 
 
