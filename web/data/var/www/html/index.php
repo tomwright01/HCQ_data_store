@@ -60,20 +60,20 @@ while ($row_location = $result_location->fetch_assoc()) {
 $search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient_id'] : '';
 
 if ($search_patient_id) {
-    // Query to get the patient and visit data based on the patient_id
-    $sql_patient_data = "SELECT v.visit_id, v.visit_date, v.visit_notes, 
-                         v.faf_reference_OD, v.faf_reference_OS, 
-                         v.oct_reference_OD, v.oct_reference_OS, 
-                         v.vf_reference_OD, v.vf_reference_OS, 
-                         v.mferg_reference_OD, v.mferg_reference_OS, 
-                         v.merci_rating_left_eye, v.merci_rating_right_eye, 
-                         p.patient_id, p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor
-                         FROM Visits v
-                         LEFT JOIN Patients p ON v.patient_id = p.patient_id
+    // Query to get the patient data based on patient_id
+    $sql_patient_data = "SELECT p.patient_id, p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor, 
+                         p.rx_OD, p.rx_OS, p.procedures_done, p.dosage, p.duration, p.cumulative_dosage, 
+                         p.date_of_discontinuation, p.extra_notes, d.disease_name
+                         FROM Patients p
+                         LEFT JOIN Diseases d ON p.disease_id = d.disease_id
                          WHERE p.patient_id = $search_patient_id";
 
     $result_patient = $conn->query($sql_patient_data);
 }
+
+// Query to get visits related to the patient
+$sql_visits = "SELECT visit_id, visit_date, visit_notes FROM Visits WHERE patient_id = $search_patient_id";
+$result_visits = $conn->query($sql_visits);
 ?>
 
 <!DOCTYPE html>
@@ -175,53 +175,41 @@ if ($search_patient_id) {
         <!-- Search Patient Form -->
         <div class="search-form">
             <form method="POST" action="index.php">
-                <label for="patient_id">Enter Patient ID to Search for Visits:</label><br>
+                <label for="search_patient_id">Enter Patient ID to Search:</label><br>
                 <input type="number" name="search_patient_id" id="search_patient_id" required>
                 <button type="submit">Search</button>
             </form>
         </div>
 
         <?php
-        // Display patient and visit data if search was made
-        if ($search_patient_id && isset($result_patient)) {
-            if ($result_patient->num_rows > 0) {
-                echo "<h3>Visits for Patient ID: $search_patient_id</h3>";
-                echo "<table>
-                        <tr>
-                            <th>Visit ID</th>
-                            <th>Visit Date</th>
-                            <th>Visit Notes</th>
-                            <th>FAF Reference (OD)</th>
-                            <th>FAF Reference (OS)</th>
-                            <th>OCT Reference (OD)</th>
-                            <th>OCT Reference (OS)</th>
-                            <th>VF Reference (OD)</th>
-                            <th>VF Reference (OS)</th>
-                            <th>MFERG Reference (OD)</th>
-                            <th>MFERG Reference (OS)</th>
-                            <th>MERCI Left Eye</th>
-                            <th>MERCI Right Eye</th>
-                        </tr>";
-                while ($row = $result_patient->fetch_assoc()) {
+        // If the patient is found, display their information
+        if ($search_patient_id && $result_patient->num_rows > 0) {
+            $patient = $result_patient->fetch_assoc();
+            echo "<h3>Patient Information</h3>";
+            echo "<p>Patient ID: " . $patient['patient_id'] . "</p>";
+            echo "<p>Location: " . $patient['location'] . "</p>";
+            echo "<p>Disease: " . $patient['disease_name'] . "</p>";
+            echo "<p>Year of Birth: " . $patient['year_of_birth'] . "</p>";
+            echo "<p>Gender: " . $patient['gender'] . "</p>";
+            echo "<p>Referring Doctor: " . $patient['referring_doctor'] . "</p>";
+            echo "<p>RX OD: " . $patient['rx_OD'] . "</p>";
+            echo "<p>RX OS: " . $patient['rx_OS'] . "</p>";
+
+            // If visits exist, display them with links to view details
+            if ($result_visits->num_rows > 0) {
+                echo "<h3>Patient Visits</h3><table>";
+                echo "<tr><th>Visit ID</th><th>Visit Date</th><th>Visit Notes</th><th>Actions</th></tr>";
+                while ($visit = $result_visits->fetch_assoc()) {
                     echo "<tr>
-                            <td>" . $row["visit_id"] . "</td>
-                            <td>" . $row["visit_date"] . "</td>
-                            <td>" . $row["visit_notes"] . "</td>
-                            <td><a href='" . $row["faf_reference_OD"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["faf_reference_OS"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["oct_reference_OD"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["oct_reference_OS"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["vf_reference_OD"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["vf_reference_OS"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["mferg_reference_OD"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["mferg_reference_OS"] . "' target='_blank'>View</a></td>
-                            <td>" . $row["merci_rating_left_eye"] . "</td>
-                            <td>" . $row["merci_rating_right_eye"] . "</td>
-                          </tr>";
+                            <td>" . $visit['visit_id'] . "</td>
+                            <td>" . $visit['visit_date'] . "</td>
+                            <td>" . $visit['visit_notes'] . "</td>
+                            <td><a href='view_visit.php?visit_id=" . $visit['visit_id'] . "'>View Visit Details</a></td>
+                        </tr>";
                 }
                 echo "</table>";
             } else {
-                echo "<p>No visits found for Patient ID: $search_patient_id</p>";
+                echo "<p>No visits found for this patient.</p>";
             }
         }
         ?>
