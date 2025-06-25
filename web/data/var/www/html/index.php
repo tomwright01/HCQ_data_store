@@ -66,14 +66,20 @@ while ($row_location = $result_location->fetch_assoc()) {
     <title>Kensington Health Data Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        /* Title styling */
+        /* General Page Styling */
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f7f6; /* Light background for the page */
+            color: #333; /* Dark text color */
+        }
+
         h1 {
             text-align: center;
             font-size: 50px;
             color: #4CAF50; /* Green color */
-            font-family: 'Arial', sans-serif;
-            font-weight: bold;
-            margin-top: 20px;
+            margin-top: 30px;
         }
 
         h2 {
@@ -81,7 +87,7 @@ while ($row_location = $result_location->fetch_assoc()) {
             font-size: 36px;
             font-family: 'Arial', sans-serif;
             margin-top: 30px;
-            color: #333; /* Darker color for subheadings */
+            color: #333;
         }
 
         h3, h4 {
@@ -90,16 +96,23 @@ while ($row_location = $result_location->fetch_assoc()) {
             font-family: 'Arial', sans-serif;
         }
 
-        /* Graph styling */
+        /* Chart Styling */
         canvas {
-            max-width: 300px;
-            max-height: 200px;
+            max-width: 400px;
+            max-height: 300px;
             width: 100%;
             height: auto;
-            margin: 20px auto; /* Centering the charts */
+            margin: 30px auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
 
-        /* Styling for links */
+        /* Section Styling */
+        .section {
+            margin: 40px 20px;
+        }
+
+        /* Styling for Links */
         a {
             display: block;
             text-align: center;
@@ -110,62 +123,74 @@ while ($row_location = $result_location->fetch_assoc()) {
         }
 
         a:hover {
-            color: #45a049; /* Slightly darker green on hover */
+            color: #45a049;
         }
 
-        /* Optional footer styling */
+        /* Footer Styling */
         footer {
             text-align: center;
             font-size: 16px;
             color: #777;
             margin-top: 50px;
         }
+
+        .stats-summary p {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+
     </style>
 </head>
 <body>
     <h1>Kensington Health Data Portal</h1>
 
-    <h2>Patient Summary</h2>
-    <p>Total number of patients: <?php echo $total_patients; ?></p>
-    <p>Median age of patients: <?php echo $median; ?> years</p>
-    <p>25th percentile age of patients: <?php echo $percentile_25; ?> years</p>
-    <p>75th percentile age of patients: <?php echo $percentile_75; ?> years</p>
-    <p>Number of males: <?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?></p>
-    <p>Number of females: <?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?></p>
+    <div class="section stats-summary">
+        <h2>Patient Summary</h2>
+        <p>Total number of patients: <strong><?php echo $total_patients; ?></strong></p>
+        <p>Median age of patients: <strong><?php echo $median; ?> years</strong></p>
+        <p>25th percentile age of patients: <strong><?php echo $percentile_25; ?> years</strong></p>
+        <p>75th percentile age of patients: <strong><?php echo $percentile_75; ?> years</strong></p>
+        <p>Number of males: <strong><?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?></strong></p>
+        <p>Number of females: <strong><?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?></strong></p>
+    </div>
 
     <h3>Total Patients by Location</h3>
-    <ul>
+    <ul style="text-align: center; list-style: none; padding: 0;">
         <?php
         // Display the count of patients by location (e.g., Halifax, Kensington, Montreal)
         foreach ($location_data as $location => $count) {
-            echo "<li>$location: $count patients</li>";
+            echo "<li><strong>$location:</strong> $count patients</li>";
         }
         ?>
     </ul>
 
-    <h2>Graphs</h2>
-    <div>
-        <canvas id="genderChart"></canvas>
+    <div class="section">
+        <h2>Graphs</h2>
+        <div>
+            <canvas id="genderChart"></canvas>
+        </div>
+
+        <div>
+            <canvas id="ageChart"></canvas>
+        </div>
+
+        <div>
+            <canvas id="locationChart"></canvas>
+        </div>
     </div>
 
-    <div>
-        <canvas id="ageChart"></canvas>
+    <div class="section">
+        <h2>View Patient and Visit Data</h2>
+        <p>Click below to view the full list of patients and their visits:</p>
+        <a href="patient_visit.php">View Patients and Visits</a>
+
+        <h2>Add New Patient and Visit</h2>
+        <p>Click below to add a new patient and visit:</p>
+        <a href="form.php">Go to the form</a>
     </div>
-
-    <div>
-        <canvas id="locationChart"></canvas>
-    </div>
-
-    <h2>View Patient and Visit Data</h2>
-    <p>Click below to view the full list of patients and their visits:</p>
-    <a href="patient_visit.php">View Patients and Visits</a>
-
-    <h2>Add New Patient and Visit</h2>
-    <p>Click below to add a new patient and visit:</p>
-    <a href="form.php">Go to the form</a>
 
     <script>
-        // Gender Chart
+        // Gender Distribution Chart
         var genderData = {
             labels: ['Male', 'Female'],
             datasets: [{
@@ -180,10 +205,25 @@ while ($row_location = $result_location->fetch_assoc()) {
         var ctx1 = document.getElementById('genderChart').getContext('2d');
         new Chart(ctx1, {
             type: 'pie',
-            data: genderData
+            data: genderData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        backgroundColor: '#fff',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        borderColor: '#ddd',
+                        borderWidth: 1
+                    }
+                }
+            }
         });
 
-        // Age Chart (Median, Percentiles)
+        // Age Distribution Chart
         var ageData = {
             labels: ['Median', '25th Percentile', '75th Percentile'],
             datasets: [{
@@ -198,10 +238,28 @@ while ($row_location = $result_location->fetch_assoc()) {
         var ctx2 = document.getElementById('ageChart').getContext('2d');
         new Chart(ctx2, {
             type: 'bar',
-            data: ageData
+            data: ageData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        backgroundColor: '#fff',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        borderColor: '#ddd',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true }
+                }
+            }
         });
 
-        // Location Chart (Total by Location)
+        // Location Distribution Chart
         var locationData = {
             labels: <?php echo json_encode(array_keys($location_data)); ?>,
             datasets: [{
@@ -216,7 +274,25 @@ while ($row_location = $result_location->fetch_assoc()) {
         var ctx3 = document.getElementById('locationChart').getContext('2d');
         new Chart(ctx3, {
             type: 'bar',
-            data: locationData
+            data: locationData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        backgroundColor: '#fff',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        borderColor: '#ddd',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true }
+                }
+            }
         });
     </script>
 </body>
@@ -226,6 +302,7 @@ while ($row_location = $result_location->fetch_assoc()) {
 // Close connection
 $conn->close();
 ?>
+
 
 
 
