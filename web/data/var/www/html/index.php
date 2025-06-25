@@ -82,8 +82,17 @@ while ($row_location = $result_location->fetch_assoc()) {
             margin-top: 30px;
         }
 
-        h2 {
+        /* Patient Summary */
+        .stats-summary {
             text-align: center;
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
             font-size: 36px;
             font-family: 'Arial', sans-serif;
             margin-top: 30px;
@@ -132,11 +141,6 @@ while ($row_location = $result_location->fetch_assoc()) {
             font-size: 16px;
             color: #777;
             margin-top: 50px;
-        }
-
-        .stats-summary p {
-            font-size: 18px;
-            margin: 10px 0;
         }
 
     </style>
@@ -302,6 +306,7 @@ while ($row_location = $result_location->fetch_assoc()) {
 // Close connection
 $conn->close();
 ?>
+
 
 
 
