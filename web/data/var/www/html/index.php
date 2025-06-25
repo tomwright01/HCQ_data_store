@@ -204,7 +204,7 @@ $result_visits = $conn->query($sql_visits);
                             <td>" . $visit['visit_id'] . "</td>
                             <td>" . $visit['visit_date'] . "</td>
                             <td>" . $visit['visit_notes'] . "</td>
-                            <td><a href='view_visit.php?visit_id=" . $visit['visit_id'] . "'>View Visit Details</a></td>
+                            <td><a href='view_visits.php?visit_id=" . $visit['visit_id'] . "'>View Visit Details</a></td>
                         </tr>";
                 }
                 echo "</table>";
