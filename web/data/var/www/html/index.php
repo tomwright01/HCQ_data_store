@@ -73,6 +73,9 @@ while ($row_location = $result_location->fetch_assoc()) {
             padding: 0;
             background-color: #f4f7f6; /* Light background for the page */
             color: #333; /* Dark text color */
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         h1 {
@@ -82,6 +85,7 @@ while ($row_location = $result_location->fetch_assoc()) {
             margin-top: 30px;
         }
 
+        /* Patient Summary */
         .stats-summary {
             text-align: center;
             margin-top: 30px;
@@ -102,6 +106,22 @@ while ($row_location = $result_location->fetch_assoc()) {
             text-align: center;
             font-size: 28px;
             font-family: 'Arial', sans-serif;
+        }
+
+        /* Chart Styling */
+        canvas {
+            max-width: 600px;
+            max-height: 400px;
+            width: 100%;
+            height: auto;
+            margin: 30px auto;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Section Styling */
+        .section {
+            margin: 40px 20px;
         }
 
         /* Button Styling */
@@ -130,7 +150,6 @@ while ($row_location = $result_location->fetch_assoc()) {
             color: #777;
             margin-top: 50px;
         }
-
     </style>
 </head>
 <body>
@@ -294,7 +313,6 @@ while ($row_location = $result_location->fetch_assoc()) {
 // Close connection
 $conn->close();
 ?>
-
 
 
 
