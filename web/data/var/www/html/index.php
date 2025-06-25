@@ -229,6 +229,147 @@ if ($search_patient_id) {
         <h2><a href="form.php">Add New Patient and Visit</a></h2>
     </div>
 
+    <div class="section stats-summary">
+        <h2>Patient Summary</h2>
+        <p>Total number of patients: <strong><?php echo $total_patients; ?></strong></p>
+        <p>Median age of patients: <strong><?php echo $median; ?> years</strong></p>
+        <p>25th percentile age of patients: <strong><?php echo $percentile_25; ?> years</strong></p>
+        <p>75th percentile age of patients: <strong><?php echo $percentile_75; ?> years</strong></p>
+        <p>Number of males: <strong><?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?></strong></p>
+        <p>Number of females: <strong><?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?></strong></p>
+    </div>
+
+    <h3>Total Patients by Location</h3>
+    <ul style="text-align: center; list-style: none; padding: 0;">
+        <?php
+        // Display the count of patients by location (e.g., Halifax, Kensington, Montreal)
+        foreach ($location_data as $location => $count) {
+            echo "<li><strong>$location:</strong> $count patients</li>";
+        }
+        ?>
+    </ul>
+
+    <div class="section">
+        <h2>Kensington Health Patient Metrics</h2>
+        <div>
+            <canvas id="genderChart"></canvas>
+        </div>
+
+        <div>
+            <canvas id="ageChart"></canvas>
+        </div>
+
+        <div>
+            <canvas id="locationChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Gender Distribution Chart
+        var genderData = {
+            labels: ['Male', 'Female'],
+            datasets: [{
+                label: 'Gender Distribution',
+                data: [<?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?>, <?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?>],
+                backgroundColor: ['#36a2eb', '#ff6384'],
+                borderColor: ['#36a2eb', '#ff6384'],
+                borderWidth: 1
+            }]
+        };
+
+        var ctx1 = document.getElementById('genderChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'pie',
+            data: genderData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        backgroundColor: '#fff',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        borderColor: '#ddd',
+                        borderWidth: 1
+                    }
+                }
+            }
+        });
+
+        // Age Distribution Chart
+        var ageData = {
+            labels: ['Median', '25th Percentile', '75th Percentile'],
+            datasets: [{
+                label: 'Age Distribution',
+                data: [<?php echo $median; ?>, <?php echo $percentile_25; ?>, <?php echo $percentile_75; ?>],
+                backgroundColor: ['#ffcd56', '#ff9f40', '#ff5733'],
+                borderColor: ['#ffcd56', '#ff9f40', '#ff5733'],
+                borderWidth: 1
+            }]
+        };
+
+        var ctx2 = document.getElementById('ageChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'bar',
+            data: ageData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        backgroundColor: '#fff',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        borderColor: '#ddd',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true }
+                }
+            }
+        });
+
+        // Location Distribution Chart
+        var locationData = {
+            labels: <?php echo json_encode(array_keys($location_data)); ?>,
+            datasets: [{
+                label: 'Patients by Location',
+                data: <?php echo json_encode(array_values($location_data)); ?>,
+                backgroundColor: '#36a2eb',
+                borderColor: '#36a2eb',
+                borderWidth: 1
+            }]
+        };
+
+        var ctx3 = document.getElementById('locationChart').getContext('2d');
+        new Chart(ctx3, {
+            type: 'bar',
+            data: locationData,
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    tooltip: {
+                        backgroundColor: '#fff',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        borderColor: '#ddd',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: { beginAtZero: true }
+                }
+            }
+        });
+    </script>
 </body>
 </html>
 
@@ -236,10 +377,6 @@ if ($search_patient_id) {
 // Close connection
 $conn->close();
 ?>
-
-
-
-
 
 
 
