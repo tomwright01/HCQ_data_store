@@ -34,6 +34,7 @@ if ($conn->connect_error) {
             background-image: url('https://via.placeholder.com/1500x1000'); /* Optional background image */
             background-size: cover;
             background-position: center;
+            box-sizing: border-box;
         }
 
         .form-container {
@@ -43,6 +44,7 @@ if ($conn->connect_error) {
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             width: 100%;
             max-width: 800px;
+            overflow: hidden;
         }
 
         h1 {
@@ -279,21 +281,5 @@ if ($conn->connect_error) {
                 <input type="number" name="merci_rating_left_eye">
 
                 <label for="merci_rating_right_eye">MERCI Rating (Right Eye):</label>
-                <input type="number" name="merci_rating_right_eye">
-            </div>
 
-            <button type="submit" class="submit-btn">Submit Data</button>
-        </form>
-    </div>
-
-    <footer>
-        <p>Go back to <a href="index.php">Home</a></p>
-    </footer>
-
-</body>
-</html>
-
-<?php
-$conn->close();
-?>
 
