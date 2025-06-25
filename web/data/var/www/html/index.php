@@ -121,18 +121,23 @@ while ($row_location = $result_location->fetch_assoc()) {
             margin: 40px 20px;
         }
 
-        /* Styling for Links */
-        a {
-            display: block;
-            text-align: center;
+        /* Button Styling */
+        .btn {
+            display: inline-block;
+            background-color: #4CAF50;
+            color: white;
+            padding: 12px 24px;
             font-size: 18px;
-            color: #4CAF50;
-            margin-top: 30px;
+            font-weight: bold;
+            text-align: center;
             text-decoration: none;
+            border-radius: 8px;
+            margin: 20px auto;
+            transition: background-color 0.3s;
         }
 
-        a:hover {
-            color: #45a049;
+        .btn:hover {
+            background-color: #45a049;
         }
 
         /* Footer Styling */
@@ -142,7 +147,6 @@ while ($row_location = $result_location->fetch_assoc()) {
             color: #777;
             margin-top: 50px;
         }
-
     </style>
 </head>
 <body>
@@ -185,12 +189,12 @@ while ($row_location = $result_location->fetch_assoc()) {
 
     <div class="section">
         <h2>View Patient and Visit Data</h2>
-        <p>Click below to view the full list of patients and their visits:</p>
-        <a href="patient_visit.php">View Patients and Visits</a>
+        <p>Click the button below to view the full list of patients and their visits:</p>
+        <a href="patient_visit.php" class="btn">View Patients and Visits</a>
 
         <h2>Add New Patient and Visit</h2>
-        <p>Click below to add a new patient and visit:</p>
-        <a href="form.php">Go to the form</a>
+        <p>Click the button below to add a new patient and visit:</p>
+        <a href="form.php" class="btn">Go to the form</a>
     </div>
 
     <script>
