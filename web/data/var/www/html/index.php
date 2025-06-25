@@ -56,6 +56,24 @@ while ($row_location = $result_location->fetch_assoc()) {
     $location_data[$row_location['location']] = $row_location['count'];
 }
 
+// Patient search functionality
+$search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient_id'] : '';
+
+if ($search_patient_id) {
+    // Query to get the patient and visit data based on the patient_id
+    $sql_patient_data = "SELECT v.visit_id, v.visit_date, v.visit_notes, 
+                         v.faf_reference_OD, v.faf_reference_OS, 
+                         v.oct_reference_OD, v.oct_reference_OS, 
+                         v.vf_reference_OD, v.vf_reference_OS, 
+                         v.mferg_reference_OD, v.mferg_reference_OS, 
+                         v.merci_rating_left_eye, v.merci_rating_right_eye, 
+                         p.patient_id, p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor
+                         FROM Visits v
+                         LEFT JOIN Patients p ON v.patient_id = p.patient_id
+                         WHERE p.patient_id = $search_patient_id";
+
+    $result_patient = $conn->query($sql_patient_data);
+}
 ?>
 
 <!DOCTYPE html>
@@ -71,241 +89,146 @@ while ($row_location = $result_location->fetch_assoc()) {
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f4f7f6; /* Light background for the page */
-            color: #333; /* Dark text color */
+            background-color: #f4f7f6;
+            color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+            background-image: url('https://via.placeholder.com/1500x1000');
+            background-size: cover;
+            background-position: center;
+        }
+
+        .content {
+            width: 80%;
             max-width: 1200px;
-            margin-left: auto;
-            margin-right: auto;
+            text-align: center;
+            padding: 20px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
         }
 
         h1 {
-            text-align: center;
-            font-size: 50px;
-            color: #4CAF50; /* Green color */
-            margin-top: 30px;
-        }
-
-        /* Patient Summary */
-        .stats-summary {
-            text-align: center;
-            margin-top: 30px;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        h2 {
             font-size: 36px;
-            font-family: 'Arial', sans-serif;
-            margin-top: 30px;
-            color: #333;
+            color: #4CAF50;
         }
 
-        h3, h4 {
-            text-align: center;
-            font-size: 28px;
-            font-family: 'Arial', sans-serif;
+        .search-form {
+            margin: 20px;
         }
 
-        /* Chart Styling */
-        canvas {
-            max-width: 600px;
-            max-height: 400px;
-            width: 100%;
-            height: auto;
-            margin: 30px auto;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        .search-form input {
+            padding: 10px;
+            width: 300px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
         }
 
-        /* Section Styling */
-        .section {
-            margin: 40px 20px;
-        }
-
-        /* Button Styling */
-        .btn {
-            display: inline-block;
+        .search-form button {
+            padding: 10px 20px;
+            font-size: 16px;
             background-color: #4CAF50;
             color: white;
-            padding: 12px 24px;
-            font-size: 18px;
-            font-weight: bold;
-            text-align: center;
-            text-decoration: none;
-            border-radius: 8px;
-            margin: 20px auto;
-            transition: background-color 0.3s;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
         }
 
-        .btn:hover {
+        .search-form button:hover {
             background-color: #45a049;
         }
 
-        /* Footer Styling */
-        footer {
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
             text-align: center;
-            font-size: 16px;
-            color: #777;
-            margin-top: 50px;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        td a {
+            color: #4CAF50;
+            text-decoration: none;
         }
     </style>
 </head>
 <body>
-    <h1>Kensington Health Data Portal</h1>
 
-    <div class="section stats-summary">
-        <h2>Patient Summary</h2>
-        <p>Total number of patients: <strong><?php echo $total_patients; ?></strong></p>
-        <p>Median age of patients: <strong><?php echo $median; ?> years</strong></p>
-        <p>25th percentile age of patients: <strong><?php echo $percentile_25; ?> years</strong></p>
-        <p>75th percentile age of patients: <strong><?php echo $percentile_75; ?> years</strong></p>
-        <p>Number of males: <strong><?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?></strong></p>
-        <p>Number of females: <strong><?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?></strong></p>
-    </div>
+    <!-- Front Page Content -->
+    <div class="content">
+        <h1>Kensington Health Data Portal</h1>
 
-    <h3>Total Patients by Location</h3>
-    <ul style="text-align: center; list-style: none; padding: 0;">
+        <!-- Search Patient Form -->
+        <div class="search-form">
+            <form method="POST" action="index.php">
+                <label for="patient_id">Enter Patient ID to Search for Visits:</label><br>
+                <input type="number" name="search_patient_id" id="search_patient_id" required>
+                <button type="submit">Search</button>
+            </form>
+        </div>
+
         <?php
-        // Display the count of patients by location (e.g., Halifax, Kensington, Montreal)
-        foreach ($location_data as $location => $count) {
-            echo "<li><strong>$location:</strong> $count patients</li>";
+        // Display patient and visit data if search was made
+        if ($search_patient_id && isset($result_patient)) {
+            if ($result_patient->num_rows > 0) {
+                echo "<h3>Visits for Patient ID: $search_patient_id</h3>";
+                echo "<table>
+                        <tr>
+                            <th>Visit ID</th>
+                            <th>Visit Date</th>
+                            <th>Visit Notes</th>
+                            <th>FAF Reference (OD)</th>
+                            <th>FAF Reference (OS)</th>
+                            <th>OCT Reference (OD)</th>
+                            <th>OCT Reference (OS)</th>
+                            <th>VF Reference (OD)</th>
+                            <th>VF Reference (OS)</th>
+                            <th>MFERG Reference (OD)</th>
+                            <th>MFERG Reference (OS)</th>
+                            <th>MERCI Left Eye</th>
+                            <th>MERCI Right Eye</th>
+                        </tr>";
+                while ($row = $result_patient->fetch_assoc()) {
+                    echo "<tr>
+                            <td>" . $row["visit_id"] . "</td>
+                            <td>" . $row["visit_date"] . "</td>
+                            <td>" . $row["visit_notes"] . "</td>
+                            <td><a href='" . $row["faf_reference_OD"] . "' target='_blank'>View</a></td>
+                            <td><a href='" . $row["faf_reference_OS"] . "' target='_blank'>View</a></td>
+                            <td><a href='" . $row["oct_reference_OD"] . "' target='_blank'>View</a></td>
+                            <td><a href='" . $row["oct_reference_OS"] . "' target='_blank'>View</a></td>
+                            <td><a href='" . $row["vf_reference_OD"] . "' target='_blank'>View</a></td>
+                            <td><a href='" . $row["vf_reference_OS"] . "' target='_blank'>View</a></td>
+                            <td><a href='" . $row["mferg_reference_OD"] . "' target='_blank'>View</a></td>
+                            <td><a href='" . $row["mferg_reference_OS"] . "' target='_blank'>View</a></td>
+                            <td>" . $row["merci_rating_left_eye"] . "</td>
+                            <td>" . $row["merci_rating_right_eye"] . "</td>
+                          </tr>";
+                }
+                echo "</table>";
+            } else {
+                echo "<p>No visits found for Patient ID: $search_patient_id</p>";
+            }
         }
         ?>
-    </ul>
 
-    <div class="section">
-        <h2>Kensington Health Patient Metrics</h2>
-        <div>
-            <canvas id="genderChart"></canvas>
-        </div>
-
-        <div>
-            <canvas id="ageChart"></canvas>
-        </div>
-
-        <div>
-            <canvas id="locationChart"></canvas>
-        </div>
+        <h2><a href="form.php">Add New Patient and Visit</a></h2>
     </div>
 
-    <div class="section">
-        <h2>View Patient and Visit Data</h2>
-        <p>Click the button below to view the full list of patients and their visits:</p>
-        <a href="patient_visit.php" class="btn">View Patients and Visits</a>
-
-        <h2>Add New Patient and Visit</h2>
-        <p>Click the button below to add a new patient and visit:</p>
-        <a href="form.php" class="btn">Go to the form</a>
-    </div>
-
-    <script>
-        // Gender Distribution Chart
-        var genderData = {
-            labels: ['Male', 'Female'],
-            datasets: [{
-                label: 'Gender Distribution',
-                data: [<?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?>, <?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?>],
-                backgroundColor: ['#36a2eb', '#ff6384'],
-                borderColor: ['#36a2eb', '#ff6384'],
-                borderWidth: 1
-            }]
-        };
-
-        var ctx1 = document.getElementById('genderChart').getContext('2d');
-        new Chart(ctx1, {
-            type: 'pie',
-            data: genderData,
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    tooltip: {
-                        backgroundColor: '#fff',
-                        titleColor: '#333',
-                        bodyColor: '#333',
-                        borderColor: '#ddd',
-                        borderWidth: 1
-                    }
-                }
-            }
-        });
-
-        // Age Distribution Chart
-        var ageData = {
-            labels: ['Median', '25th Percentile', '75th Percentile'],
-            datasets: [{
-                label: 'Age Distribution',
-                data: [<?php echo $median; ?>, <?php echo $percentile_25; ?>, <?php echo $percentile_75; ?>],
-                backgroundColor: ['#ffcd56', '#ff9f40', '#ff5733'],
-                borderColor: ['#ffcd56', '#ff9f40', '#ff5733'],
-                borderWidth: 1
-            }]
-        };
-
-        var ctx2 = document.getElementById('ageChart').getContext('2d');
-        new Chart(ctx2, {
-            type: 'bar',
-            data: ageData,
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    tooltip: {
-                        backgroundColor: '#fff',
-                        titleColor: '#333',
-                        bodyColor: '#333',
-                        borderColor: '#ddd',
-                        borderWidth: 1
-                    }
-                },
-                scales: {
-                    x: { beginAtZero: true }
-                }
-            }
-        });
-
-        // Location Distribution Chart
-        var locationData = {
-            labels: <?php echo json_encode(array_keys($location_data)); ?>,
-            datasets: [{
-                label: 'Patients by Location',
-                data: <?php echo json_encode(array_values($location_data)); ?>,
-                backgroundColor: '#36a2eb',
-                borderColor: '#36a2eb',
-                borderWidth: 1
-            }]
-        };
-
-        var ctx3 = document.getElementById('locationChart').getContext('2d');
-        new Chart(ctx3, {
-            type: 'bar',
-            data: locationData,
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {
-                        position: 'top',
-                    },
-                    tooltip: {
-                        backgroundColor: '#fff',
-                        titleColor: '#333',
-                        bodyColor: '#333',
-                        borderColor: '#ddd',
-                        borderWidth: 1
-                    }
-                },
-                scales: {
-                    x: { beginAtZero: true }
-                }
-            }
-        });
-    </script>
 </body>
 </html>
 
@@ -313,6 +236,7 @@ while ($row_location = $result_location->fetch_assoc()) {
 // Close connection
 $conn->close();
 ?>
+
 
 
 
