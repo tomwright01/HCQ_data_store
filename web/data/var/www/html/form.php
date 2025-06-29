@@ -31,7 +31,7 @@ if ($conn->connect_error) {
             justify-content: center;
             align-items: center;
             height: 100vh;
-            background-image: url('https://via.placeholder.com/1500x1000');
+            background-image: url('https://via.placeholder.com/1500x1000'); /* Optional background image */
             background-size: cover;
             background-position: center;
             box-sizing: border-box;
@@ -52,6 +52,14 @@ if ($conn->connect_error) {
             font-size: 36px;
             color: #4CAF50;
             margin-bottom: 20px;
+        }
+
+        .form-title {
+            text-align: center;
+            font-size: 24px;
+            color: #4CAF50;
+            margin-bottom: 15px;
+            font-weight: bold;
         }
 
         label {
@@ -138,6 +146,9 @@ if ($conn->connect_error) {
 
     <div class="form-container">
         <h1>Add New Patient and Visit Information</h1>
+
+        <!-- Title for the form section -->
+        <div class="form-title">Patient and Visit Information Form</div>
 
         <form action="submit.php" method="post" enctype="multipart/form-data">
             <!-- Patient Information -->
