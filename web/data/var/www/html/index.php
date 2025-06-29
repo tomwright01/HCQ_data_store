@@ -109,6 +109,14 @@ if ($search_patient_id) {
             background-position: center;
         }
 
+        /* Logo Styling */
+        .logo {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 150px; /* Adjust the size of the logo */
+        }
+
         .content {
             width: 80%;
             max-width: 1200px;
@@ -175,6 +183,9 @@ if ($search_patient_id) {
     </style>
 </head>
 <body>
+
+    <!-- Kensington Clinic Logo -->
+    <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
 
     <!-- Front Page Content -->
     <div class="content">
@@ -385,6 +396,7 @@ if ($search_patient_id) {
 // Close connection
 $conn->close();
 ?>
+
 
 
 
