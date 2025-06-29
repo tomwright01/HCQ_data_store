@@ -39,17 +39,17 @@ if ($conn->connect_error) {
 
         .form-container {
             background-color: #fff;
-            padding: 20px;
+            padding: 30px;
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 900px;
+            max-width: 1000px;
             overflow: hidden;
         }
 
         h1 {
             text-align: center;
-            font-size: 30px;
+            font-size: 36px;
             color: #4CAF50;
             margin-bottom: 20px;
         }
@@ -77,7 +77,7 @@ if ($conn->connect_error) {
         }
 
         .form-section {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
 
         .form-section h3 {
@@ -89,20 +89,23 @@ if ($conn->connect_error) {
         }
 
         .form-group {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
             gap: 15px;
+            margin-bottom: 20px;
         }
 
-        .form-group input {
-            width: 48%;
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
         }
 
         .submit-btn {
             background-color: #4CAF50;
             color: white;
-            padding: 12px;
-            font-size: 16px;
+            padding: 15px;
+            font-size: 18px;
             font-weight: bold;
             border: none;
             border-radius: 8px;
@@ -141,145 +144,224 @@ if ($conn->connect_error) {
             <div class="form-section">
                 <h3>Patient Information</h3>
 
-                <label for="location">Location:</label>
-                <input type="text" name="location" required>
+                <div class="form-group">
+                    <div>
+                        <label for="location">Location:</label>
+                        <input type="text" name="location" required>
+                    </div>
 
-                <label for="disease_id">Disease ID:</label>
-                <select name="disease_id" required>
-                    <option value="1">Lupus</option>
-                    <option value="2">Rheumatoid Arthritis</option>
-                    <option value="3">RTMD</option>
-                    <option value="4">Sjorgens</option>
-                    <option value="5">Other</option>
-                </select>
+                    <div>
+                        <label for="disease_id">Disease ID:</label>
+                        <select name="disease_id" required>
+                            <option value="1">Lupus</option>
+                            <option value="2">Rheumatoid Arthritis</option>
+                            <option value="3">RTMD</option>
+                            <option value="4">Sjorgens</option>
+                            <option value="5">Other</option>
+                        </select>
+                    </div>
 
-                <label for="year_of_birth">Year of Birth:</label>
-                <input type="number" name="year_of_birth" required>
+                    <div>
+                        <label for="year_of_birth">Year of Birth:</label>
+                        <input type="number" name="year_of_birth" required>
+                    </div>
 
-                <label for="gender">Gender:</label>
-                <input type="radio" name="gender" value="m" required> Male
-                <input type="radio" name="gender" value="f" required> Female
+                    <div>
+                        <label for="gender">Gender:</label>
+                        <input type="radio" name="gender" value="m" required> Male
+                        <input type="radio" name="gender" value="f" required> Female
+                    </div>
 
-                <label for="referring_doctor">Referring Doctor:</label>
-                <input type="text" name="referring_doctor" required>
+                    <div>
+                        <label for="referring_doctor">Referring Doctor:</label>
+                        <input type="text" name="referring_doctor" required>
+                    </div>
+                </div>
 
                 <div class="form-group">
                     <div>
                         <label for="rx_OD">Prescription OD:</label>
                         <input type="text" name="rx_OD" required>
                     </div>
+
                     <div>
                         <label for="rx_OS">Prescription OS:</label>
                         <input type="text" name="rx_OS" required>
                     </div>
                 </div>
 
-                <label for="procedures_done">Procedures Done:</label>
-                <textarea name="procedures_done"></textarea>
-
                 <div class="form-group">
+                    <div>
+                        <label for="procedures_done">Procedures Done:</label>
+                        <textarea name="procedures_done"></textarea>
+                    </div>
+
                     <div>
                         <label for="dosage">Dosage:</label>
                         <input type="text" name="dosage" required>
                     </div>
+                </div>
+
+                <div class="form-group">
                     <div>
                         <label for="duration">Duration:</label>
                         <input type="number" name="duration" required>
                     </div>
+
+                    <div>
+                        <label for="cumulative_dosage">Cumulative Dosage:</label>
+                        <input type="text" name="cumulative_dosage">
+                    </div>
                 </div>
 
-                <label for="cumulative_dosage">Cumulative Dosage:</label>
-                <input type="text" name="cumulative_dosage">
+                <div class="form-group">
+                    <div>
+                        <label for="date_of_discontinuation">Date of Discontinuation:</label>
+                        <input type="date" name="date_of_discontinuation">
+                    </div>
 
-                <label for="date_of_discontinuation">Date of Discontinuation:</label>
-                <input type="date" name="date_of_discontinuation">
-
-                <label for="extra_notes">Extra Notes:</label>
-                <textarea name="extra_notes"></textarea>
+                    <div>
+                        <label for="extra_notes">Extra Notes:</label>
+                        <textarea name="extra_notes"></textarea>
+                    </div>
+                </div>
             </div>
 
             <!-- Visit Information -->
             <div class="form-section">
                 <h3>Visit Information</h3>
-                <label for="visit_date">Visit Date:</label>
-                <input type="date" name="visit_date" required>
 
-                <label for="visit_notes">Visit Notes:</label>
-                <textarea name="visit_notes"></textarea>
+                <div class="form-group">
+                    <div>
+                        <label for="visit_date">Visit Date:</label>
+                        <input type="date" name="visit_date" required>
+                    </div>
+
+                    <div>
+                        <label for="visit_notes">Visit Notes:</label>
+                        <textarea name="visit_notes"></textarea>
+                    </div>
+                </div>
             </div>
 
             <!-- FAF Data -->
             <div class="form-section">
                 <h3>FAF Data</h3>
-                <label for="faf_test_id_OD">FAF Test ID (OD):</label>
-                <input type="number" name="faf_test_id_OD">
+                <div class="form-group">
+                    <div>
+                        <label for="faf_test_id_OD">FAF Test ID (OD):</label>
+                        <input type="number" name="faf_test_id_OD">
+                    </div>
 
-                <label for="faf_image_number_OD">FAF Image Number (OD):</label>
-                <input type="number" name="faf_image_number_OD">
+                    <div>
+                        <label for="faf_image_number_OD">FAF Image Number (OD):</label>
+                        <input type="number" name="faf_image_number_OD">
+                    </div>
 
-                <label for="faf_test_id_OS">FAF Test ID (OS):</label>
-                <input type="number" name="faf_test_id_OS">
+                    <div>
+                        <label for="faf_test_id_OS">FAF Test ID (OS):</label>
+                        <input type="number" name="faf_test_id_OS">
+                    </div>
 
-                <label for="faf_image_number_OS">FAF Image Number (OS):</label>
-                <input type="number" name="faf_image_number_OS">
+                    <div>
+                        <label for="faf_image_number_OS">FAF Image Number (OS):</label>
+                        <input type="number" name="faf_image_number_OS">
+                    </div>
+                </div>
             </div>
 
             <!-- OCT Data -->
             <div class="form-section">
                 <h3>OCT Data</h3>
-                <label for="oct_test_id_OD">OCT Test ID (OD):</label>
-                <input type="number" name="oct_test_id_OD">
+                <div class="form-group">
+                    <div>
+                        <label for="oct_test_id_OD">OCT Test ID (OD):</label>
+                        <input type="number" name="oct_test_id_OD">
+                    </div>
 
-                <label for="oct_image_number_OD">OCT Image Number (OD):</label>
-                <input type="number" name="oct_image_number_OD">
+                    <div>
+                        <label for="oct_image_number_OD">OCT Image Number (OD):</label>
+                        <input type="number" name="oct_image_number_OD">
+                    </div>
 
-                <label for="oct_test_id_OS">OCT Test ID (OS):</label>
-                <input type="number" name="oct_test_id_OS">
+                    <div>
+                        <label for="oct_test_id_OS">OCT Test ID (OS):</label>
+                        <input type="number" name="oct_test_id_OS">
+                    </div>
 
-                <label for="oct_image_number_OS">OCT Image Number (OS):</label>
-                <input type="number" name="oct_image_number_OS">
+                    <div>
+                        <label for="oct_image_number_OS">OCT Image Number (OS):</label>
+                        <input type="number" name="oct_image_number_OS">
+                    </div>
+                </div>
             </div>
 
             <!-- VF Data -->
             <div class="form-section">
                 <h3>VF Data</h3>
-                <label for="vf_test_id_OD">VF Test ID (OD):</label>
-                <input type="number" name="vf_test_id_OD">
+                <div class="form-group">
+                    <div>
+                        <label for="vf_test_id_OD">VF Test ID (OD):</label>
+                        <input type="number" name="vf_test_id_OD">
+                    </div>
 
-                <label for="vf_image_number_OD">VF Image Number (OD):</label>
-                <input type="number" name="vf_image_number_OD">
+                    <div>
+                        <label for="vf_image_number_OD">VF Image Number (OD):</label>
+                        <input type="number" name="vf_image_number_OD">
+                    </div>
 
-                <label for="vf_test_id_OS">VF Test ID (OS):</label>
-                <input type="number" name="vf_test_id_OS">
+                    <div>
+                        <label for="vf_test_id_OS">VF Test ID (OS):</label>
+                        <input type="number" name="vf_test_id_OS">
+                    </div>
 
-                <label for="vf_image_number_OS">VF Image Number (OS):</label>
-                <input type="number" name="vf_image_number_OS">
+                    <div>
+                        <label for="vf_image_number_OS">VF Image Number (OS):</label>
+                        <input type="number" name="vf_image_number_OS">
+                    </div>
+                </div>
             </div>
 
             <!-- MFERG Data -->
             <div class="form-section">
                 <h3>MFERG Data</h3>
-                <label for="mferg_test_id_OD">MFERG Test ID (OD):</label>
-                <input type="number" name="mferg_test_id_OD">
+                <div class="form-group">
+                    <div>
+                        <label for="mferg_test_id_OD">MFERG Test ID (OD):</label>
+                        <input type="number" name="mferg_test_id_OD">
+                    </div>
 
-                <label for="mferg_image_number_OD">MFERG Image Number (OD):</label>
-                <input type="number" name="mferg_image_number_OD">
+                    <div>
+                        <label for="mferg_image_number_OD">MFERG Image Number (OD):</label>
+                        <input type="number" name="mferg_image_number_OD">
+                    </div>
 
-                <label for="mferg_test_id_OS">MFERG Test ID (OS):</label>
-                <input type="number" name="mferg_test_id_OS">
+                    <div>
+                        <label for="mferg_test_id_OS">MFERG Test ID (OS):</label>
+                        <input type="number" name="mferg_test_id_OS">
+                    </div>
 
-                <label for="mferg_image_number_OS">MFERG Image Number (OS):</label>
-                <input type="number" name="mferg_image_number_OS">
+                    <div>
+                        <label for="mferg_image_number_OS">MFERG Image Number (OS):</label>
+                        <input type="number" name="mferg_image_number_OS">
+                    </div>
+                </div>
             </div>
 
             <!-- MERCI Ratings -->
             <div class="form-section">
                 <h3>MERCI Ratings</h3>
-                <label for="merci_rating_left_eye">MERCI Rating (Left Eye):</label>
-                <input type="number" name="merci_rating_left_eye">
+                <div class="form-group">
+                    <div>
+                        <label for="merci_rating_left_eye">MERCI Rating (Left Eye):</label>
+                        <input type="number" name="merci_rating_left_eye">
+                    </div>
 
-                <label for="merci_rating_right_eye">MERCI Rating (Right Eye):</label>
-                <input type="number" name="merci_rating_right_eye">
+                    <div>
+                        <label for="merci_rating_right_eye">MERCI Rating (Right Eye):</label>
+                        <input type="number" name="merci_rating_right_eye">
+                    </div>
+                </div>
             </div>
 
             <button type="submit" class="submit-btn">Submit Data</button>
