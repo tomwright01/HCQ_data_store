@@ -1,3 +1,4 @@
+/*
 <?php
 $servername = "mariadb";
 $username = "root";
@@ -91,8 +92,8 @@ if ($search_patient_id) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kensington Health Data Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="react/static/css/main.css"> <!-- Include React CSS -->
     <style>
+        /* General Page Styling */
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
@@ -104,8 +105,12 @@ if ($search_patient_id) {
             align-items: center;
             flex-direction: column;
             height: 100vh;
+            background-image: url('https://via.placeholder.com/1500x1000');
+            background-size: cover;
+            background-position: center;
         }
 
+        /* Logo Styling */
         .logo {
             position: absolute;
             top: 20px;
@@ -130,21 +135,61 @@ if ($search_patient_id) {
         }
 
         h2 {
-            font-size: 48px;
+            font-size: 48px; /* Larger title size */
             color: #333;
             margin-top: 30px;
         }
 
-        /* Your existing CSS styles here */
+        .search-form {
+            margin: 20px;
+        }
 
+        .search-form input {
+            padding: 10px;
+            width: 300px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .search-form button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .search-form button:hover {
+            background-color: #45a049;
+        }
+
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        td a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
     </style>
 </head>
 <body>
-
-    <!-- React App Container -->
-    <div id="react-root"></div>
-
-    <script src="react/static/js/main.js"></script> <!-- Include React JS -->
 
     <!-- Front Page Content -->
     <div class="content">
@@ -355,6 +400,7 @@ if ($search_patient_id) {
 // Close connection
 $conn->close();
 ?>
+*/
 
 
 
