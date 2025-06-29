@@ -1,4 +1,3 @@
-/*
 <?php
 $servername = "mariadb";
 $username = "root";
@@ -134,12 +133,6 @@ if ($search_patient_id) {
             color: #4CAF50;
         }
 
-        h2 {
-            font-size: 48px; /* Larger title size */
-            color: #333;
-            margin-top: 30px;
-        }
-
         .search-form {
             margin: 20px;
         }
@@ -190,6 +183,9 @@ if ($search_patient_id) {
     </style>
 </head>
 <body>
+
+    <!-- Kensington Clinic Logo -->
+    <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
 
     <!-- Front Page Content -->
     <div class="content">
@@ -400,7 +396,19 @@ if ($search_patient_id) {
 // Close connection
 $conn->close();
 ?>
-*/
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
