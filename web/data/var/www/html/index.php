@@ -181,26 +181,29 @@ if ($search_patient_id) {
             text-decoration: none;
         }
 
-        /* Styling for the sliders */
-        .slider-container {
-            margin: 20px;
+        /* Styling for the static bars */
+        .metric-bar-container {
+            margin-top: 30px;
             width: 80%;
             max-width: 600px;
-            text-align: center;
         }
 
-        .slider {
+        .metric-bar {
             width: 100%;
+            background-color: #ddd;
+            height: 30px;
             margin: 10px 0;
+            border-radius: 5px;
+            position: relative;
         }
 
-        .slider-label {
-            margin-bottom: 10px;
-            font-size: 18px;
-        }
-
-        .slider-value {
+        .metric-bar .metric-value {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             font-size: 16px;
+            color: #fff;
         }
     </style>
 </head>
@@ -270,49 +273,24 @@ if ($search_patient_id) {
         <h2><a href="form.php">Add New Patient and Visit</a></h2>
     </div>
 
-    <div class="section stats-summary">
-        <h2>Patient Summary</h2>
-        <p>Total number of patients: <strong><?php echo $total_patients; ?></strong></p>
-        <p>Median age of patients: <strong><?php echo $median; ?> years</strong></p>
-        <p>25th percentile age of patients: <strong><?php echo $percentile_25; ?> years</strong></p>
-        <p>75th percentile age of patients: <strong><?php echo $percentile_75; ?> years</strong></p>
-        <p>Number of males: <strong><?php echo isset($gender_data['m']) ? $gender_data['m'] : 0; ?></strong></p>
-        <p>Number of females: <strong><?php echo isset($gender_data['f']) ? $gender_data['f'] : 0; ?></strong></p>
+    <!-- Patient Metrics Section with Static Bars -->
+    <div class="metric-bar-container">
+        <div class="metric-bar" style="width: <?php echo ($total_patients / 1000) * 100; ?>%">
+            <div class="metric-value"><?php echo $total_patients; ?> Patients</div>
+        </div>
+
+        <div class="metric-bar" style="width: <?php echo ($median / 100) * 100; ?>%">
+            <div class="metric-value"><?php echo $median; ?> Median Age</div>
+        </div>
+
+        <div class="metric-bar" style="width: <?php echo ($percentile_25 / 100) * 100; ?>%">
+            <div class="metric-value"><?php echo $percentile_25; ?> 25th Percentile Age</div>
+        </div>
+
+        <div class="metric-bar" style="width: <?php echo ($percentile_75 / 100) * 100; ?>%">
+            <div class="metric-value"><?php echo $percentile_75; ?> 75th Percentile Age</div>
+        </div>
     </div>
-
-    <!-- Sliders for Patient Statistics -->
-    <div class="slider-container">
-        <div class="slider-label">Total Patients: <span id="totalPatients" class="slider-value"><?php echo $total_patients; ?></span></div>
-        <input type="range" min="0" max="1000" value="<?php echo $total_patients; ?>" class="slider" id="totalPatientsSlider">
-
-        <div class="slider-label">Median Age: <span id="medianAge" class="slider-value"><?php echo $median; ?></span></div>
-        <input type="range" min="0" max="100" value="<?php echo $median; ?>" class="slider" id="medianAgeSlider">
-
-        <div class="slider-label">25th Percentile Age: <span id="percentile25" class="slider-value"><?php echo $percentile_25; ?></span></div>
-        <input type="range" min="0" max="100" value="<?php echo $percentile_25; ?>" class="slider" id="percentile25Slider">
-
-        <div class="slider-label">75th Percentile Age: <span id="percentile75" class="slider-value"><?php echo $percentile_75; ?></span></div>
-        <input type="range" min="0" max="100" value="<?php echo $percentile_75; ?>" class="slider" id="percentile75Slider">
-    </div>
-
-    <script>
-        // Update slider values dynamically
-        document.getElementById('totalPatientsSlider').addEventListener('input', function() {
-            document.getElementById('totalPatients').textContent = this.value;
-        });
-
-        document.getElementById('medianAgeSlider').addEventListener('input', function() {
-            document.getElementById('medianAge').textContent = this.value;
-        });
-
-        document.getElementById('percentile25Slider').addEventListener('input', function() {
-            document.getElementById('percentile25').textContent = this.value;
-        });
-
-        document.getElementById('percentile75Slider').addEventListener('input', function() {
-            document.getElementById('percentile75').textContent = this.value;
-        });
-    </script>
 
     <h3>Total Patients by Location</h3>
     <ul style="text-align: center; list-style: none; padding: 0;">
@@ -452,7 +430,6 @@ if ($search_patient_id) {
 // Close connection
 $conn->close();
 ?>
-
 
 
 
