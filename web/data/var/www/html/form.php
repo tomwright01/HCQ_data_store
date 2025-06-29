@@ -31,7 +31,7 @@ if ($conn->connect_error) {
             justify-content: center;
             align-items: center;
             height: 100vh;
-            background-image: url('https://via.placeholder.com/1500x1000'); /* Optional background image */
+            background-image: url('https://via.placeholder.com/1500x1000');
             background-size: cover;
             background-position: center;
             box-sizing: border-box;
@@ -138,7 +138,7 @@ if ($conn->connect_error) {
     <div class="form-container">
         <h1>Add New Patient and Visit Information</h1>
 
-        <form action="submit.php" method="post">
+        <form action="submit.php" method="post" enctype="multipart/form-data">
             <!-- Patient Information -->
             <div class="form-section">
                 <h3>Patient Information</h3>
