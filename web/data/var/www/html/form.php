@@ -39,34 +39,35 @@ if ($conn->connect_error) {
 
         .form-container {
             background-color: #fff;
-            padding: 30px;
+            padding: 20px;
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 800px;
+            max-width: 900px;
             overflow: hidden;
         }
 
         h1 {
             text-align: center;
-            font-size: 36px;
+            font-size: 30px;
             color: #4CAF50;
+            margin-bottom: 20px;
         }
 
         label {
             display: block;
-            margin: 10px 0 5px;
-            font-size: 18px;
+            margin: 5px 0;
+            font-size: 14px;
             font-weight: bold;
         }
 
         input, textarea, select {
             width: 100%;
-            padding: 10px;
-            margin: 8px 0 20px;
+            padding: 8px;
+            margin: 6px 0 15px;
             border: 1px solid #ddd;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: 14px;
             box-sizing: border-box;
         }
 
@@ -76,24 +77,21 @@ if ($conn->connect_error) {
         }
 
         .form-section {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
 
         .form-section h3 {
             color: #333;
-            margin-bottom: 15px;
-            font-size: 24px;
+            margin-bottom: 10px;
+            font-size: 20px;
             border-bottom: 2px solid #ddd;
             padding-bottom: 5px;
-        }
-
-        .form-section label {
-            font-size: 16px;
         }
 
         .form-group {
             display: flex;
             justify-content: space-between;
+            gap: 15px;
         }
 
         .form-group input {
@@ -103,8 +101,8 @@ if ($conn->connect_error) {
         .submit-btn {
             background-color: #4CAF50;
             color: white;
-            padding: 15px;
-            font-size: 18px;
+            padding: 12px;
+            font-size: 16px;
             font-weight: bold;
             border: none;
             border-radius: 8px;
@@ -119,13 +117,13 @@ if ($conn->connect_error) {
 
         .form-container footer {
             text-align: center;
-            margin-top: 30px;
+            margin-top: 20px;
         }
 
         footer a {
             text-decoration: none;
             color: #4CAF50;
-            font-size: 16px;
+            font-size: 14px;
         }
 
         footer a:hover {
@@ -298,6 +296,7 @@ if ($conn->connect_error) {
 <?php
 $conn->close();
 ?>
+
 
 
 
