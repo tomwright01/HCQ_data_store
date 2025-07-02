@@ -1,3 +1,4 @@
+/*
 import React, { useState } from 'react';
 import {
   Button, Paper, Typography, Box, Grid,
@@ -190,3 +191,4 @@ const ImageUpload = () => {
 };
 
 export default ImageUpload;
+*/

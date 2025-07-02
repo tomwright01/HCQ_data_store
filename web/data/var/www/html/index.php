@@ -1,4 +1,6 @@
+
 <?php
+/*
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
@@ -429,6 +431,7 @@ if ($search_patient_id) {
 <?php
 // Close connection
 $conn->close();
+*/
 ?>
 
 

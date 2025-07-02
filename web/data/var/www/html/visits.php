@@ -1,4 +1,6 @@
+
 <?php
+/*
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
@@ -211,5 +213,5 @@ function closeModal() {
   cursor: pointer;
 }
 </style>
-
+*/
 

@@ -1,4 +1,6 @@
+
 <?php
+/*
 header("Content-Type: application/json");
 header("Access-Control-Allow-Origin: *"); // This is to allow any domain to access the API
 
@@ -116,4 +118,5 @@ if ($_SERVER['REQUEST_METHOD'] == 'DELETE') {
 }
 
 $conn->close();
+*/
 ?>
