@@ -112,20 +112,8 @@ const PatientForm = () => {
             </FormControl>
           </Grid>
           
-          {/* Rest of the form fields remain the same */}
+          {/* Rest of the form fields remain the same */
           
-          <Grid item xs={12}>
-            <Button type="submit" variant="contained" color="primary">
-              Submit
-            </Button>
-          </Grid>
-        </Grid>
-      </form>
-    </Paper>
-  );
-};
-
-export default PatientForm;
-*/
+        
 
 
