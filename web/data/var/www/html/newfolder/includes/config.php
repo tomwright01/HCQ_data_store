@@ -5,8 +5,8 @@ define('DB_USERNAME', 'root');
 define('DB_PASSWORD', 'notgood');
 define('DB_NAME', 'PatientData');
 
-// Image configuration - SIMPLIFIED
-define('IMAGE_BASE_DIR', 'file:///C:/path/to/your/SAMPLE/'); // CHANGE THIS PATH
+// Image configuration - USE YOUR EXACT PATH
+define('IMAGE_BASE_DIR', 'file:///C:/Users/owenc/downloads/SAMPLE/');
 
 // Create connection
 $conn = new mysqli(DB_SERVER, DB_USERNAME, DB_PASSWORD, DB_NAME);
@@ -18,6 +18,6 @@ if ($conn->connect_error) {
 
 // Simple function to get image path
 function getLocalImagePath($folder, $filename) {
-    return IMAGE_BASE_DIR . $folder . '/' . $filename;
+    return IMAGE_BASE_DIR . $folder . '/' . rawurlencode($filename);
 }
 ?>
