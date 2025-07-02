@@ -217,68 +217,44 @@ if ($result_visit && $result_visit->num_rows > 0) {
         <h2>Test Results</h2>
         
         <!-- FAF Images -->
-        <h3>FAF Images</h3>
-        <div class="test-images">
-            <?php if ($visit['faf_reference_OD']): 
-                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['faf_reference_OD'];
-                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
-                    <div class="test-image">
-                        <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
-                            <img src="<?= htmlspecialchars($imagePath) ?>" alt="FAF OD">
-                        </a>
-                        <p>OD (Right Eye)</p>
-                    </div>
-                <?php else: ?>
-                    <p>Image not found: <?= htmlspecialchars($visit['faf_reference_OD']) ?></p>
-                <?php endif; ?>
-            <?php endif; ?>
-            
-            <?php if ($visit['faf_reference_OS']): 
-                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['faf_reference_OS'];
-                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
-                    <div class="test-image">
-                        <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
-                            <img src="<?= htmlspecialchars($imagePath) ?>" alt="FAF OS">
-                        </a>
-                        <p>OS (Left Eye)</p>
-                    </div>
-                <?php else: ?>
-                    <p>Image not found: <?= htmlspecialchars($visit['faf_reference_OS']) ?></p>
-                <?php endif; ?>
-            <?php endif; ?>
+<h3>FAF Images</h3>
+<div class="test-images">
+    <?php if ($visit['faf_reference_OD']): ?>
+        <div class="test-image">
+            <a href="<?= getLocalImagePath('FAF', $visit['faf_reference_OD']) ?>" target="_blank">
+                View FAF OD
+            </a>
         </div>
+    <?php endif; ?>
+    
+    <?php if ($visit['faf_reference_OS']): ?>
+        <div class="test-image">
+            <a href="<?= getLocalImagePath('FAF', $visit['faf_reference_OS']) ?>" target="_blank">
+                View FAF OS
+            </a>
+        </div>
+    <?php endif; ?>
+</div>
 
-        <!-- Optos Images -->
-        <h3>Optos Images</h3>
-        <div class="test-images">
-            <?php if ($visit['optos_reference_OD']): 
-                $imagePath = IMAGE_BASE_PATH . OPTOS_FOLDER . $visit['optos_reference_OD'];
-                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
-                    <div class="test-image">
-                        <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
-                            <img src="<?= htmlspecialchars($imagePath) ?>" alt="Optos OD">
-                        </a>
-                        <p>OD (Right Eye)</p>
-                    </div>
-                <?php else: ?>
-                    <p>Image not found: <?= htmlspecialchars($visit['optos_reference_OD']) ?></p>
-                <?php endif; ?>
-            <?php endif; ?>
-            
-            <?php if ($visit['optos_reference_OS']): 
-                $imagePath = IMAGE_BASE_PATH . OPTOS_FOLDER . $visit['optos_reference_OS'];
-                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
-                    <div class="test-image">
-                        <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
-                            <img src="<?= htmlspecialchars($imagePath) ?>" alt="Optos OS">
-                        </a>
-                        <p>OS (Left Eye)</p>
-                    </div>
-                <?php else: ?>
-                    <p>Image not found: <?= htmlspecialchars($visit['optos_reference_OS']) ?></p>
-                <?php endif; ?>
-            <?php endif; ?>
+<!-- Optos Images -->
+<h3>Optos Images</h3>
+<div class="test-images">
+    <?php if ($visit['optos_reference_OD']): ?>
+        <div class="test-image">
+            <a href="<?= getLocalImagePath('optos', $visit['optos_reference_OD']) ?>" target="_blank">
+                View Optos OD
+            </a>
         </div>
+    <?php endif; ?>
+    
+    <?php if ($visit['optos_reference_OS']): ?>
+        <div class="test-image">
+            <a href="<?= getLocalImagePath('optos', $visit['optos_reference_OS']) ?>" target="_blank">
+                View Optos OS
+            </a>
+        </div>
+    <?php endif; ?>
+</div>
 
         <!-- OCT Images -->
         <h3>OCT Images</h3>
