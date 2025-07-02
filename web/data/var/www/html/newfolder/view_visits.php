@@ -16,6 +16,8 @@ $sql_visit = "SELECT
                 v.visit_notes,
                 v.faf_reference_OD,
                 v.faf_reference_OS,
+                v.optos_reference_OD,
+                v.optos_reference_OS,
                 v.oct_reference_OD,
                 v.oct_reference_OS,
                 v.vf_reference_OD,
@@ -61,7 +63,6 @@ if ($result_visit && $result_visit->num_rows > 0) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visit Details</title>
     <style>
-        /* Your existing CSS styles */
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
@@ -86,7 +87,118 @@ if ($result_visit && $result_visit->num_rows > 0) {
             margin: 30px 0;
         }
 
-        /* Rest of your CSS styles */
+        h1 {
+            font-size: 36px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-size: 28px;
+            color: #333;
+            margin: 20px 0;
+            text-align: left;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            text-align: left;
+            margin: 20px 0;
+        }
+
+        .info-item {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .info-item p {
+            margin: 8px 0;
+        }
+
+        .info-item strong {
+            color: #4CAF50;
+        }
+
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: center;
+            border: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        td a {
+            color: #4CAF50;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        td a:hover {
+            text-decoration: underline;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+
+        .back-link:hover {
+            background-color: #45a049;
+        }
+
+        .test-images {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .test-image {
+            text-align: center;
+        }
+
+        .test-image img {
+            width: 200px;
+            height: 150px;
+            object-fit: cover;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        .test-image p {
+            margin-top: 5px;
+            font-weight: bold;
+        }
+
+        .success-message {
+            background-color: #dff0d8;
+            color: #3c763d;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -108,8 +220,8 @@ if ($result_visit && $result_visit->num_rows > 0) {
         <h3>FAF Images</h3>
         <div class="test-images">
             <?php if ($visit['faf_reference_OD']): 
-                $imagePath = IMAGE_BASE_PATH . $visit['faf_reference_OD'];
-                if (file_exists($imagePath)): ?>
+                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['faf_reference_OD'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
                     <div class="test-image">
                         <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
                             <img src="<?= htmlspecialchars($imagePath) ?>" alt="FAF OD">
@@ -122,8 +234,8 @@ if ($result_visit && $result_visit->num_rows > 0) {
             <?php endif; ?>
             
             <?php if ($visit['faf_reference_OS']): 
-                $imagePath = IMAGE_BASE_PATH . $visit['faf_reference_OS'];
-                if (file_exists($imagePath)): ?>
+                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['faf_reference_OS'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
                     <div class="test-image">
                         <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
                             <img src="<?= htmlspecialchars($imagePath) ?>" alt="FAF OS">
@@ -134,9 +246,37 @@ if ($result_visit && $result_visit->num_rows > 0) {
                     <p>Image not found: <?= htmlspecialchars($visit['faf_reference_OS']) ?></p>
                 <?php endif; ?>
             <?php endif; ?>
+        </div>
+
+        <!-- Optos Images -->
+        <h3>Optos Images</h3>
+        <div class="test-images">
+            <?php if ($visit['optos_reference_OD']): 
+                $imagePath = IMAGE_BASE_PATH . OPTOS_FOLDER . $visit['optos_reference_OD'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
+                    <div class="test-image">
+                        <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
+                            <img src="<?= htmlspecialchars($imagePath) ?>" alt="Optos OD">
+                        </a>
+                        <p>OD (Right Eye)</p>
+                    </div>
+                <?php else: ?>
+                    <p>Image not found: <?= htmlspecialchars($visit['optos_reference_OD']) ?></p>
+                <?php endif; ?>
+            <?php endif; ?>
             
-            <?php if (!$visit['faf_reference_OD'] && !$visit['faf_reference_OS']): ?>
-                <p>No FAF images available</p>
+            <?php if ($visit['optos_reference_OS']): 
+                $imagePath = IMAGE_BASE_PATH . OPTOS_FOLDER . $visit['optos_reference_OS'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
+                    <div class="test-image">
+                        <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
+                            <img src="<?= htmlspecialchars($imagePath) ?>" alt="Optos OS">
+                        </a>
+                        <p>OS (Left Eye)</p>
+                    </div>
+                <?php else: ?>
+                    <p>Image not found: <?= htmlspecialchars($visit['optos_reference_OS']) ?></p>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
 
@@ -144,8 +284,8 @@ if ($result_visit && $result_visit->num_rows > 0) {
         <h3>OCT Images</h3>
         <div class="test-images">
             <?php if ($visit['oct_reference_OD']): 
-                $imagePath = IMAGE_BASE_PATH . $visit['oct_reference_OD'];
-                if (file_exists($imagePath)): ?>
+                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['oct_reference_OD'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
                     <div class="test-image">
                         <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
                             <img src="<?= htmlspecialchars($imagePath) ?>" alt="OCT OD">
@@ -158,8 +298,8 @@ if ($result_visit && $result_visit->num_rows > 0) {
             <?php endif; ?>
             
             <?php if ($visit['oct_reference_OS']): 
-                $imagePath = IMAGE_BASE_PATH . $visit['oct_reference_OS'];
-                if (file_exists($imagePath)): ?>
+                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['oct_reference_OS'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
                     <div class="test-image">
                         <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
                             <img src="<?= htmlspecialchars($imagePath) ?>" alt="OCT OS">
@@ -170,18 +310,14 @@ if ($result_visit && $result_visit->num_rows > 0) {
                     <p>Image not found: <?= htmlspecialchars($visit['oct_reference_OS']) ?></p>
                 <?php endif; ?>
             <?php endif; ?>
-            
-            <?php if (!$visit['oct_reference_OD'] && !$visit['oct_reference_OS']): ?>
-                <p>No OCT images available</p>
-            <?php endif; ?>
         </div>
 
         <!-- VF Images -->
         <h3>VF Images</h3>
         <div class="test-images">
             <?php if ($visit['vf_reference_OD']): 
-                $imagePath = IMAGE_BASE_PATH . $visit['vf_reference_OD'];
-                if (file_exists($imagePath)): ?>
+                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['vf_reference_OD'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
                     <div class="test-image">
                         <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
                             <img src="<?= htmlspecialchars($imagePath) ?>" alt="VF OD">
@@ -194,8 +330,8 @@ if ($result_visit && $result_visit->num_rows > 0) {
             <?php endif; ?>
             
             <?php if ($visit['vf_reference_OS']): 
-                $imagePath = IMAGE_BASE_PATH . $visit['vf_reference_OS'];
-                if (file_exists($imagePath)): ?>
+                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['vf_reference_OS'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
                     <div class="test-image">
                         <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
                             <img src="<?= htmlspecialchars($imagePath) ?>" alt="VF OS">
@@ -206,18 +342,14 @@ if ($result_visit && $result_visit->num_rows > 0) {
                     <p>Image not found: <?= htmlspecialchars($visit['vf_reference_OS']) ?></p>
                 <?php endif; ?>
             <?php endif; ?>
-            
-            <?php if (!$visit['vf_reference_OD'] && !$visit['vf_reference_OS']): ?>
-                <p>No VF images available</p>
-            <?php endif; ?>
         </div>
 
         <!-- MFERG Images -->
         <h3>MFERG Images</h3>
         <div class="test-images">
             <?php if ($visit['mferg_reference_OD']): 
-                $imagePath = IMAGE_BASE_PATH . $visit['mferg_reference_OD'];
-                if (file_exists($imagePath)): ?>
+                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['mferg_reference_OD'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
                     <div class="test-image">
                         <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
                             <img src="<?= htmlspecialchars($imagePath) ?>" alt="MFERG OD">
@@ -230,8 +362,8 @@ if ($result_visit && $result_visit->num_rows > 0) {
             <?php endif; ?>
             
             <?php if ($visit['mferg_reference_OS']): 
-                $imagePath = IMAGE_BASE_PATH . $visit['mferg_reference_OS'];
-                if (file_exists($imagePath)): ?>
+                $imagePath = IMAGE_BASE_PATH . FAF_FOLDER . $visit['mferg_reference_OS'];
+                if (file_exists($_SERVER['DOCUMENT_ROOT'] . $imagePath)): ?>
                     <div class="test-image">
                         <a href="<?= htmlspecialchars($imagePath) ?>" target="_blank">
                             <img src="<?= htmlspecialchars($imagePath) ?>" alt="MFERG OS">
@@ -241,10 +373,6 @@ if ($result_visit && $result_visit->num_rows > 0) {
                 <?php else: ?>
                     <p>Image not found: <?= htmlspecialchars($visit['mferg_reference_OS']) ?></p>
                 <?php endif; ?>
-            <?php endif; ?>
-            
-            <?php if (!$visit['mferg_reference_OD'] && !$visit['mferg_reference_OS']): ?>
-                <p>No MFERG images available</p>
             <?php endif; ?>
         </div>
 
@@ -257,4 +385,3 @@ if ($result_visit && $result_visit->num_rows > 0) {
 <?php
 $conn->close();
 ?>
-
