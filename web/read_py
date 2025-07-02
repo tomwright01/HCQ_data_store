@@ -4,7 +4,7 @@ import mysql.connector
 from mysql.connector import Error
 
 start_dir = 'SAMPLE/FAF'
-
+- 
 # MySQL Database connection setup
 def connect_to_db():
     try:
