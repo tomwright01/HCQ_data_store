@@ -56,15 +56,12 @@ while ($row_location = $result_location->fetch_assoc()) {
     $location_data[$row_location['location']] = $row_location['count'];
 }
 
-// Patient search functionality with sanitization
+// Patient search functionality
 $search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient_id'] : '';
 
 if ($search_patient_id) {
-    // Sanitize the search input to prevent SQL injection
-    $search_patient_id = (int)$search_patient_id; // Casting ensures it's an integer
-
+    $search_patient_id = (int)$search_patient_id;
     if ($search_patient_id > 0) {
-        // Query to get the patient and visit data based on the patient_id
         $sql_patient_data = "SELECT v.visit_id, v.visit_date, v.visit_notes, 
                              v.faf_reference_OD, v.faf_reference_OS, 
                              v.oct_reference_OD, v.oct_reference_OS, 
@@ -78,7 +75,6 @@ if ($search_patient_id) {
 
         $result_patient = $conn->query($sql_patient_data);
     } else {
-        // Handle invalid patient ID
         echo "<p>Invalid Patient ID. Please enter a valid ID.</p>";
     }
 }
@@ -91,8 +87,8 @@ if ($search_patient_id) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kensington Health Data Portal</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.0.2/dist/chartjs-plugin-annotation.min.js"></script>
     <style>
-        /* General Page Styling */
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
@@ -103,13 +99,12 @@ if ($search_patient_id) {
             justify-content: center;
             align-items: center;
             flex-direction: column;
-            height: 100vh;
+            min-height: 100vh;
             background-image: url('https://via.placeholder.com/1500x1000');
             background-size: cover;
             background-position: center;
         }
 
-        /* Logo Styling */
         .logo {
             position: absolute;
             top: 20px;
@@ -181,7 +176,6 @@ if ($search_patient_id) {
             text-decoration: none;
         }
 
-        /* Styling for the static bars */
         .metric-bar-container {
             margin-top: 30px;
             width: 80%;
@@ -206,7 +200,6 @@ if ($search_patient_id) {
             color: #fff;
         }
 
-        /* Chart container styling */
         .chart-container {
             width: 100%;
             max-width: 600px;
@@ -234,14 +227,11 @@ if ($search_patient_id) {
 </head>
 <body>
 
-    <!-- Kensington Clinic Logo -->
     <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
 
-    <!-- Front Page Content -->
     <div class="content">
         <h1>Kensington Health Data Portal</h1>
 
-        <!-- Search Patient Form -->
         <div class="search-form">
             <form method="POST" action="index.php">
                 <label for="patient_id">Enter Patient ID to Search for Visits:</label><br>
@@ -250,91 +240,83 @@ if ($search_patient_id) {
             </form>
         </div>
 
-        <?php
-        // Display patient and visit data if search was made
-        if ($search_patient_id && isset($result_patient)) {
-            if ($result_patient->num_rows > 0) {
-                echo "<h3>Visits for Patient ID: $search_patient_id</h3>";
-                echo "<table>
+        <?php if ($search_patient_id && isset($result_patient)): ?>
+            <?php if ($result_patient->num_rows > 0): ?>
+                <h3>Visits for Patient ID: <?= $search_patient_id ?></h3>
+                <table>
+                    <tr>
+                        <th>Visit ID</th>
+                        <th>Visit Date</th>
+                        <th>Visit Notes</th>
+                        <th>FAF (OD)</th>
+                        <th>FAF (OS)</th>
+                        <th>OCT (OD)</th>
+                        <th>OCT (OS)</th>
+                        <th>VF (OD)</th>
+                        <th>VF (OS)</th>
+                        <th>MFERG (OD)</th>
+                        <th>MFERG (OS)</th>
+                        <th>MERCI Left</th>
+                        <th>MERCI Right</th>
+                    </tr>
+                    <?php while ($row = $result_patient->fetch_assoc()): ?>
                         <tr>
-                            <th>Visit ID</th>
-                            <th>Visit Date</th>
-                            <th>Visit Notes</th>
-                            <th>FAF Reference (OD)</th>
-                            <th>FAF Reference (OS)</th>
-                            <th>OCT Reference (OD)</th>
-                            <th>OCT Reference (OS)</th>
-                            <th>VF Reference (OD)</th>
-                            <th>VF Reference (OS)</th>
-                            <th>MFERG Reference (OD)</th>
-                            <th>MFERG Reference (OS)</th>
-                            <th>MERCI Left Eye</th>
-                            <th>MERCI Right Eye</th>
-                        </tr>";
-                while ($row = $result_patient->fetch_assoc()) {
-                    echo "<tr>
-                            <td>" . $row["visit_id"] . "</td>
-                            <td>" . $row["visit_date"] . "</td>
-                            <td>" . $row["visit_notes"] . "</td>
-                            <td><a href='" . $row["faf_reference_OD"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["faf_reference_OS"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["oct_reference_OD"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["oct_reference_OS"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["vf_reference_OD"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["vf_reference_OS"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["mferg_reference_OD"] . "' target='_blank'>View</a></td>
-                            <td><a href='" . $row["mferg_reference_OS"] . "' target='_blank'>View</a></td>
-                            <td>" . $row["merci_rating_left_eye"] . "</td>
-                            <td>" . $row["merci_rating_right_eye"] . "</td>
-                          </tr>";
-                }
-                echo "</table>";
-            } else {
-                echo "<p>No visits found for Patient ID: $search_patient_id</p>";
-            }
-        }
-        ?>
+                            <td><?= $row["visit_id"] ?></td>
+                            <td><?= $row["visit_date"] ?></td>
+                            <td><?= $row["visit_notes"] ?></td>
+                            <td><a href="<?= $row["faf_reference_OD"] ?>" target="_blank">View</a></td>
+                            <td><a href="<?= $row["faf_reference_OS"] ?>" target="_blank">View</a></td>
+                            <td><a href="<?= $row["oct_reference_OD"] ?>" target="_blank">View</a></td>
+                            <td><a href="<?= $row["oct_reference_OS"] ?>" target="_blank">View</a></td>
+                            <td><a href="<?= $row["vf_reference_OD"] ?>" target="_blank">View</a></td>
+                            <td><a href="<?= $row["vf_reference_OS"] ?>" target="_blank">View</a></td>
+                            <td><a href="<?= $row["mferg_reference_OD"] ?>" target="_blank">View</a></td>
+                            <td><a href="<?= $row["mferg_reference_OS"] ?>" target="_blank">View</a></td>
+                            <td><?= $row["merci_rating_left_eye"] ?></td>
+                            <td><?= $row["merci_rating_right_eye"] ?></td>
+                        </tr>
+                    <?php endwhile; ?>
+                </table>
+            <?php else: ?>
+                <p>No visits found for Patient ID: <?= $search_patient_id ?></p>
+            <?php endif; ?>
+        <?php endif; ?>
 
         <h2><a href="form.php">Add New Patient and Visit</a></h2>
     </div>
 
-    <!-- Statistics Section with Charts -->
     <div class="stats-section">
-        <!-- Gender Distribution Chart -->
         <div class="chart-container">
             <h3 class="chart-title">Gender Distribution</h3>
             <canvas id="genderChart"></canvas>
         </div>
 
-        <!-- Location Distribution Chart -->
         <div class="chart-container">
             <h3 class="chart-title">Location Distribution</h3>
             <canvas id="locationChart"></canvas>
         </div>
 
-        <!-- Age Distribution Chart -->
         <div class="chart-container">
             <h3 class="chart-title">Age Distribution</h3>
             <canvas id="ageChart"></canvas>
         </div>
     </div>
 
-    <!-- Patient Metrics Section with Static Bars -->
     <div class="metric-bar-container">
-        <div class="metric-bar" style="width: <?php echo min(($total_patients / 100) * 100, 100); ?>%">
-            <div class="metric-value"><?php echo $total_patients; ?> Patients</div>
+        <div class="metric-bar" style="width: <?= min(($total_patients / 100) * 100, 100) ?>%">
+            <div class="metric-value"><?= $total_patients ?> Patients</div>
         </div>
 
-        <div class="metric-bar" style="width: <?php echo min(($median / 100) * 100, 100); ?>%">
-            <div class="metric-value"><?php echo $median; ?> Median Age</div>
+        <div class="metric-bar" style="width: <?= min(($median / 100) * 100, 100) ?>%">
+            <div class="metric-value"><?= $median ?> Median Age</div>
         </div>
 
-        <div class="metric-bar" style="width: <?php echo min(($percentile_25 / 100) * 100, 100); ?>%">
-            <div class="metric-value"><?php echo $percentile_25; ?> 25th Percentile Age</div>
+        <div class="metric-bar" style="width: <?= min(($percentile_25 / 100) * 100, 100) ?>%">
+            <div class="metric-value"><?= $percentile_25 ?> 25th Percentile Age</div>
         </div>
 
-        <div class="metric-bar" style="width: <?php echo min(($percentile_75 / 100) * 100, 100); ?>%">
-            <div class="metric-value"><?php echo $percentile_75; ?> 75th Percentile Age</div>
+        <div class="metric-bar" style="width: <?= min(($percentile_75 / 100) * 100, 100) ?>%">
+            <div class="metric-value"><?= $percentile_75 ?> 75th Percentile Age</div>
         </div>
     </div>
 
@@ -346,7 +328,7 @@ if ($search_patient_id) {
             data: {
                 labels: ['Male', 'Female'],
                 datasets: [{
-                    data: [<?php echo $gender_data['m'] ?? 0; ?>, <?php echo $gender_data['f'] ?? 0; ?>],
+                    data: [<?= $gender_data['m'] ?? 0 ?>, <?= $gender_data['f'] ?? 0 ?>],
                     backgroundColor: ['#36a2eb', '#ff6384'],
                     borderColor: ['#36a2eb', '#ff6384'],
                     borderWidth: 1
@@ -355,9 +337,7 @@ if ($search_patient_id) {
             options: {
                 responsive: true,
                 plugins: {
-                    legend: {
-                        position: 'top',
-                    },
+                    legend: { position: 'top' },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
@@ -378,10 +358,10 @@ if ($search_patient_id) {
         var locationChart = new Chart(locationCtx, {
             type: 'bar',
             data: {
-                labels: <?php echo json_encode(array_keys($location_data)); ?>,
+                labels: <?= json_encode(array_keys($location_data)) ?>,
                 datasets: [{
                     label: 'Patients by Location',
-                    data: <?php echo json_encode(array_values($location_data)); ?>,
+                    data: <?= json_encode(array_values($location_data)) ?>,
                     backgroundColor: '#4CAF50',
                     borderColor: '#4CAF50',
                     borderWidth: 1
@@ -390,9 +370,7 @@ if ($search_patient_id) {
             options: {
                 responsive: true,
                 plugins: {
-                    legend: {
-                        display: false
-                    },
+                    legend: { display: false },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
@@ -404,47 +382,119 @@ if ($search_patient_id) {
                 scales: {
                     y: {
                         beginAtZero: true,
-                        ticks: {
-                            stepSize: 1
-                        }
+                        ticks: { stepSize: 1 }
                     }
                 }
             }
         });
 
-        // Age Distribution Chart
+        // Age Distribution Histogram
         var ageCtx = document.getElementById('ageChart').getContext('2d');
+        
+        <?php
+        $min_age = min($ages);
+        $max_age = max($ages);
+        $bin_size = 5;
+        $bins = [];
+        $labels = [];
+        
+        for ($i = $min_age - ($min_age % $bin_size); $i <= $max_age; $i += $bin_size) {
+            $labels[] = $i . '-' . ($i + $bin_size - 1);
+            $bins[] = 0;
+        }
+        
+        foreach ($ages as $age) {
+            $bin_index = floor(($age - $min_age) / $bin_size);
+            $bins[$bin_index]++;
+        }
+        ?>
+        
         var ageChart = new Chart(ageCtx, {
             type: 'bar',
             data: {
-                labels: ['25th Percentile', 'Median', '75th Percentile'],
+                labels: <?= json_encode($labels) ?>,
                 datasets: [{
-                    label: 'Age Distribution',
-                    data: [<?php echo $percentile_25; ?>, <?php echo $median; ?>, <?php echo $percentile_75; ?>],
-                    backgroundColor: ['#ffcd56', '#4CAF50', '#36a2eb'],
-                    borderColor: ['#ffcd56', '#4CAF50', '#36a2eb'],
+                    label: 'Number of Patients',
+                    data: <?= json_encode($bins) ?>,
+                    backgroundColor: 'rgba(76, 175, 80, 0.6)',
+                    borderColor: 'rgba(76, 175, 80, 1)',
                     borderWidth: 1
                 }]
             },
             options: {
                 responsive: true,
                 plugins: {
-                    legend: {
-                        display: false
-                    },
+                    legend: { display: false },
                     tooltip: {
                         callbacks: {
                             label: function(context) {
-                                return 'Age: ' + context.parsed.y;
+                                return context.parsed.y + ' patients';
+                            }
+                        }
+                    },
+                    annotation: {
+                        annotations: {
+                            line25: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: <?= max($bins) ?>,
+                                xMin: (<?= $percentile_25 ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                xMax: (<?= $percentile_25 ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                borderColor: '#ff9800',
+                                borderWidth: 2,
+                                label: {
+                                    content: '25th: <?= $percentile_25 ?>',
+                                    enabled: true,
+                                    position: 'top'
+                                }
+                            },
+                            lineMedian: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: <?= max($bins) ?>,
+                                xMin: (<?= $median ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                xMax: (<?= $median ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                borderColor: '#f44336',
+                                borderWidth: 2,
+                                label: {
+                                    content: 'Median: <?= $median ?>',
+                                    enabled: true,
+                                    position: 'top'
+                                }
+                            },
+                            line75: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: <?= max($bins) ?>,
+                                xMin: (<?= $percentile_75 ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                xMax: (<?= $percentile_75 ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                borderColor: '#2196f3',
+                                borderWidth: 2,
+                                label: {
+                                    content: '75th: <?= $percentile_75 ?>',
+                                    enabled: true,
+                                    position: 'top'
+                                }
                             }
                         }
                     }
                 },
                 scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Age Range'
+                        }
+                    },
                     y: {
-                        beginAtZero: false,
-                        min: Math.max(0, <?php echo min($ages); ?> - 5),
-                        max: Math.min(100, <?php echo max($ages); ?> + 5)
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Patients'
+                        },
+                        ticks: {
+                            stepSize: 1
+                        }
                     }
                 }
             }
@@ -454,6 +504,5 @@ if ($search_patient_id) {
 </html>
 
 <?php
-// Close connection
 $conn->close();
 ?>
