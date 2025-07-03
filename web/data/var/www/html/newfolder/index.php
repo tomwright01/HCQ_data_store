@@ -62,18 +62,44 @@ $search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient
 if ($search_patient_id) {
     $search_patient_id = (int)$search_patient_id;
     if ($search_patient_id > 0) {
-        $sql_patient_data = "SELECT v.visit_id, v.visit_date, v.visit_notes, 
-                             v.faf_reference_OD, v.faf_reference_OS, 
-                             v.oct_reference_OD, v.oct_reference_OS, 
-                             v.vf_reference_OD, v.vf_reference_OS, 
-                             v.mferg_reference_OD, v.mferg_reference_OS, 
-                             v.merci_rating_left_eye, v.merci_rating_right_eye, 
-                             p.patient_id, p.location, p.disease_id, p.year_of_birth, p.gender, p.referring_doctor
-                             FROM Visits v
-                             LEFT JOIN Patients p ON v.patient_id = p.patient_id
-                             WHERE p.patient_id = $search_patient_id";
+        // Modified query to use the new database structure
+        $sql_patient_data = "SELECT 
+                v.visit_id, 
+                v.visit_date, 
+                v.visit_notes,
+                v.merci_rating_left_eye, 
+                v.merci_rating_right_eye,
+                p.patient_id, 
+                p.location, 
+                p.disease_id, 
+                p.year_of_birth, 
+                p.gender, 
+                p.referring_doctor
+            FROM Visits v
+            LEFT JOIN Patients p ON v.patient_id = p.patient_id
+            WHERE p.patient_id = $search_patient_id";
 
         $result_patient = $conn->query($sql_patient_data);
+        
+        // Get all test results for the patient
+        $sql_test_results = "SELECT 
+                tr.result_id,
+                tt.test_name,
+                es.side_name,
+                v.visit_date
+            FROM TestResults tr
+            JOIN Visits v ON tr.visit_id = v.visit_id
+            JOIN TestTypes tt ON tr.test_type_id = tt.test_type_id
+            JOIN EyeSides es ON tr.side_id = es.side_id
+            WHERE v.patient_id = $search_patient_id
+            ORDER BY v.visit_date, tt.test_name, es.side_name";
+            
+        $result_tests = $conn->query($sql_test_results);
+        $test_results = [];
+        
+        while ($row_test = $result_tests->fetch_assoc()) {
+            $test_results[] = $row_test;
+        }
     } else {
         echo "<p>Invalid Patient ID. Please enter a valid ID.</p>";
     }
@@ -223,6 +249,58 @@ if ($search_patient_id) {
             gap: 20px;
             margin-top: 30px;
         }
+
+        /* Image gallery styles */
+        .image-gallery {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .image-card {
+            width: 200px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+
+        .image-card:hover {
+            transform: scale(1.05);
+        }
+
+        .image-card img {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+        }
+
+        .image-info {
+            padding: 10px;
+            background: #f9f9f9;
+        }
+
+        .image-info p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .test-section {
+            margin-top: 30px;
+            background: #f9f9f9;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .test-title {
+            color: #4CAF50;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 <body>
@@ -248,14 +326,6 @@ if ($search_patient_id) {
                         <th>Visit ID</th>
                         <th>Visit Date</th>
                         <th>Visit Notes</th>
-                        <th>FAF (OD)</th>
-                        <th>FAF (OS)</th>
-                        <th>OCT (OD)</th>
-                        <th>OCT (OS)</th>
-                        <th>VF (OD)</th>
-                        <th>VF (OS)</th>
-                        <th>MFERG (OD)</th>
-                        <th>MFERG (OS)</th>
                         <th>MERCI Left</th>
                         <th>MERCI Right</th>
                     </tr>
@@ -264,19 +334,38 @@ if ($search_patient_id) {
                             <td><?= $row["visit_id"] ?></td>
                             <td><?= $row["visit_date"] ?></td>
                             <td><?= $row["visit_notes"] ?></td>
-                            <td><a href="<?= '/data/FAF/' . $row["faf_reference_OD"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/FAF/' . $row["faf_reference_OS"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/OCT/' . $row["oct_reference_OD"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/OCT/' . $row["oct_reference_OS"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/VF/' . $row["vf_reference_OD"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/VF/' . $row["vf_reference_OS"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/MFERG/' . $row["mferg_reference_OD"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/MFERG/' . $row["mferg_reference_OS"] ?>" target="_blank">View</a></td>
                             <td><?= $row["merci_rating_left_eye"] ?></td>
                             <td><?= $row["merci_rating_right_eye"] ?></td>
                         </tr>
                     <?php endwhile; ?>
                 </table>
+
+                <?php if (!empty($test_results)): ?>
+                    <div class="test-section">
+                        <h3 class="test-title">Patient Test Results</h3>
+                        <div class="image-gallery">
+                            <?php foreach ($test_results as $test): 
+                                $image_path = "./SAMPLE/{$search_patient_id}_{$test['side_name']}_" . 
+                                    date('Ymd', strtotime($test['visit_date'])) . "_" . 
+                                    strtolower($test['test_name']) . ".png";
+                            ?>
+                                <div class="image-card">
+                                    <a href="<?= $image_path ?>" target="_blank">
+                                        <img src="<?= $image_path ?>" alt="<?= $test['test_name'] ?> Image" 
+                                            onerror="this.src='images/no-image.png';this.onerror=null;">
+                                    </a>
+                                    <div class="image-info">
+                                        <p><strong><?= $test['test_name'] ?></strong></p>
+                                        <p>Eye: <?= $test['side_name'] ?></p>
+                                        <p>Date: <?= date('M j, Y', strtotime($test['visit_date'])) ?></p>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <p>No test results found for this patient.</p>
+                <?php endif; ?>
             <?php else: ?>
                 <p>No visits found for Patient ID: <?= $search_patient_id ?></p>
             <?php endif; ?>
