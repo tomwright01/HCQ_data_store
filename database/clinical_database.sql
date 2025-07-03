@@ -49,3 +49,12 @@ CREATE TABLE IF NOT EXISTS Visits (
     date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
 );
+
+-- Step 6: Create the Grading table for storing grading scores of the tests
+CREATE TABLE IF NOT EXISTS Grading (
+    visit_id INT,
+    test_type ENUM('faf', 'oct', 'vf', 'mferg'),
+    score INT,
+    PRIMARY KEY (visit_id, test_type),
+    FOREIGN KEY (visit_id) REFERENCES Visits(visit_id) ON DELETE CASCADE
+);
