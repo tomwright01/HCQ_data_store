@@ -5,15 +5,9 @@ define('DB_USERNAME', 'root');
 define('DB_PASSWORD', 'notgood');
 define('DB_NAME', 'PatientData');
 
-// Image configuration
+// Image configuration - using your SAMPLE folder structure
 define('IMAGE_BASE_DIR', '/var/www/html/data/'); // Docker container path
 define('IMAGE_BASE_URL', '/data/'); // Web-accessible URL path
-
-// Test type folders
-define('FAF_FOLDER', 'FAF/');
-define('OCT_FOLDER', 'OCT/');
-define('VF_FOLDER', 'VF/');
-define('MFERG_FOLDER', 'MFERG/');
 
 // Create connection
 $conn = new mysqli(DB_SERVER, DB_USERNAME, DB_PASSWORD, DB_NAME);
@@ -23,25 +17,19 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Function to get image path (both local and web accessible)
-function getImagePath($testType, $filename) {
+// Function to get image path (dynamically checks file system)
+function getDynamicImagePath($filename) {
     if (empty($filename)) return false;
     
-    // Map test types to folders
-    $folders = [
-        'FAF' => FAF_FOLDER,
-        'OCT' => OCT_FOLDER,
-        'VF' => VF_FOLDER,
-        'MFERG' => MFERG_FOLDER
-    ];
+    $testTypes = ['FAF', 'OCT', 'VF', 'MFERG'];
     
-    if (!isset($folders[$testType])) {
-        return false;
+    foreach ($testTypes as $type) {
+        $fullPath = IMAGE_BASE_DIR . $type . '/' . $filename;
+        if (file_exists($fullPath)) {
+            return IMAGE_BASE_URL . $type . '/' . rawurlencode($filename);
+        }
     }
     
-    $localPath = IMAGE_BASE_DIR . $folders[$testType] . $filename;
-    $webPath = IMAGE_BASE_URL . $folders[$testType] . rawurlencode($filename);
-    
-    return $webPath;
+    return false;
 }
 ?>
