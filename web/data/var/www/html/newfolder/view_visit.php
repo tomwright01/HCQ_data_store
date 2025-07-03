@@ -4,7 +4,7 @@ require_once 'includes/functions.php';
 
 // Get visit ID from URL parameter
 $visit_id = isset($_GET['visit_id']) ? (int)$_GET['visit_id'] : 0;
-$visit = getVisitById($visit_id);
+$visit = getVisitById($visit_id);  // Fetch visit details by visit_id
 
 if (!$visit) {
     die("Visit not found.");
@@ -26,7 +26,7 @@ function displayTestSection($testType, $odRef, $osRef) {
                     <p>OD (Right Eye)</p>
                   </div>";
         } else {
-            echo "<p class='image-missing'>$testType OD image not found in SAMPLE folder</p>";
+            echo "<p class='image-missing'>$testType OD image not found</p>";
         }
     }
     
@@ -41,7 +41,7 @@ function displayTestSection($testType, $odRef, $osRef) {
                     <p>OS (Left Eye)</p>
                   </div>";
         } else {
-            echo "<p class='image-missing'>$testType OS image not found in SAMPLE folder</p>";
+            echo "<p class='image-missing'>$testType OS image not found</p>";
         }
     }
     
@@ -59,14 +59,11 @@ function displayTestSection($testType, $odRef, $osRef) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visit Details - <?= htmlspecialchars($visit['visit_id']) ?></title>
-    <style>
-        /* Keep your existing CSS styles */
-    </style>
 </head>
 <body>
     <div class="container">
-        <h1>Visit Details - ID: <?= htmlspecialchars($visit['visit_id']) ?></h1>
-        
+        <h1>Visit Details for Visit ID: <?= htmlspecialchars($visit['visit_id']) ?></h1>
+
         <div class="info-header">
             <h2>Visit on <?= htmlspecialchars($visit['visit_date']) ?></h2>
             <p><strong>Patient:</strong> ID <?= htmlspecialchars($visit['patient_id']) ?></p>
@@ -83,8 +80,7 @@ function displayTestSection($testType, $odRef, $osRef) {
             ?>
         </div>
         
-        <a href="view_visits.php?patient_id=<?= htmlspecialchars($visit['patient_id']) ?>" class="button">Back to Patient Visits</a>
+        <a href="index.php" class="button">Back to Patient Search</a>
     </div>
 </body>
 </html>
-
