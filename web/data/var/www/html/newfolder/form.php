@@ -11,6 +11,80 @@ $conn = new mysqli($servername, $username, $password, $dbname);
 if ($conn->connect_error) {
   die("Connection failed: " . $conn->connect_error);
 }
+
+// Check if form data has been submitted
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Prepare SQL statement for patient information
+    $stmt = $conn->prepare("INSERT INTO patients (
+        location, disease_id, year_of_birth, gender, referring_doctor, 
+        rx_OD, rx_OS, procedures_done, dosage, duration, 
+        cumulative_dosage, date_of_discontinuation, extra_notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    
+    $stmt->bind_param(
+        "siisdddsdiiss", 
+        $_POST['location'],
+        $_POST['disease_id'],
+        $_POST['year_of_birth'],
+        $_POST['gender'],
+        $_POST['referring_doctor'],
+        $_POST['rx_OD'],
+        $_POST['rx_OS'],
+        $_POST['procedures_done'],
+        $_POST['dosage'],
+        $_POST['duration'],
+        $_POST['cumulative_dosage'],
+        $_POST['date_of_discontinuation'],
+        $_POST['extra_notes']
+    );
+    
+    $stmt->execute();
+    $patient_id = $stmt->insert_id;
+    $stmt->close();
+    
+    // Prepare SQL statement for visit information
+    $stmt = $conn->prepare("INSERT INTO visits (
+        patient_id, visit_date, visit_notes,
+        faf_test_id_OD, faf_image_number_OD, faf_test_id_OS, faf_image_number_OS,
+        oct_test_id_OD, oct_image_number_OD, oct_test_id_OS, oct_image_number_OS,
+        vf_test_id_OD, vf_image_number_OD, vf_test_id_OS, vf_image_number_OS,
+        mferg_test_id_OD, mferg_image_number_OD, mferg_test_id_OS, mferg_image_number_OS,
+        merci_rating_left_eye, merci_rating_right_eye
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    
+    $stmt->bind_param(
+        "issiiiiiiiiiiiiiiiiii", 
+        $patient_id,
+        $_POST['visit_date'],
+        $_POST['visit_notes'],
+        $_POST['faf_test_id_OD'],
+        $_POST['faf_image_number_OD'],
+        $_POST['faf_test_id_OS'],
+        $_POST['faf_image_number_OS'],
+        $_POST['oct_test_id_OD'],
+        $_POST['oct_image_number_OD'],
+        $_POST['oct_test_id_OS'],
+        $_POST['oct_image_number_OS'],
+        $_POST['vf_test_id_OD'],
+        $_POST['vf_image_number_OD'],
+        $_POST['vf_test_id_OS'],
+        $_POST['vf_image_number_OS'],
+        $_POST['mferg_test_id_OD'],
+        $_POST['mferg_image_number_OD'],
+        $_POST['mferg_test_id_OS'],
+        $_POST['mferg_image_number_OS'],
+        $_POST['merci_rating_left_eye'],
+        $_POST['merci_rating_right_eye']
+    );
+    
+    if ($stmt->execute()) {
+        echo "<script>alert('Patient and visit information successfully saved!');</script>";
+    } else {
+        echo "<script>alert('Error saving visit information: " . $stmt->error . "');</script>";
+    }
+    
+    $stmt->close();
+}
 ?>
 
 <!DOCTYPE html>
@@ -142,7 +216,7 @@ if ($conn->connect_error) {
 
         <div class="form-title">Patient and Visit Information Form</div>
 
-        <form action="submit.php" method="post" enctype="multipart/form-data">
+        <form action="" method="post" enctype="multipart/form-data">
             <!-- Patient Information -->
             <div class="form-section">
                 <h3>Patient Information</h3>
