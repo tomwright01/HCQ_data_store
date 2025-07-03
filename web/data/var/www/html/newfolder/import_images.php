@@ -124,7 +124,7 @@ if (isset($_POST['import'])) {
         <?php endif; ?>
 
         <!-- Back to Home button -->
-        <a href="mainpage.php" class="back-button">Back to Home</a>
+        <a href="index.php" class="back-button">Back to Home</a>
     </div>
 
 </body>
