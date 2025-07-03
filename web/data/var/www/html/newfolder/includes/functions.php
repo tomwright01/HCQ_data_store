@@ -21,7 +21,11 @@ function getVisitsByPatientId($patient_id) {
 
 function getVisitById($visit_id) {
     global $conn;
-    $stmt = $conn->prepare("SELECT v.*, p.* FROM Visits v JOIN Patients p ON v.patient_id = p.patient_id WHERE v.visit_id = ?");
+    $stmt = $conn->prepare("SELECT v.*, p.*, d.disease_name 
+                           FROM Visits v 
+                           JOIN Patients p ON v.patient_id = p.patient_id
+                           JOIN Diseases d ON p.disease_id = d.disease_id
+                           WHERE v.visit_id = ?");
     $stmt->bind_param("i", $visit_id);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -30,9 +34,13 @@ function getVisitById($visit_id) {
 
 function getAllPatients() {
     global $conn;
-    $result = $conn->query("SELECT * FROM Patients ORDER BY patient_id DESC");
+    $result = $conn->query("SELECT p.*, d.disease_name 
+                           FROM Patients p
+                           JOIN Diseases d ON p.disease_id = d.disease_id
+                           ORDER BY p.patient_id DESC");
     return $result->fetch_all(MYSQLI_ASSOC);
 }
+
 
 function getPatientStatistics() {
     global $conn;
