@@ -342,5 +342,168 @@ if ($search_patient_id) {
                         callbacks: {
                             label: function(context) {
                                 var label = context.label || '';
-                                var v
+                                var value = context.raw || 0;
+                                var total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                var percentage = Math.round((value / total) * 100);
+                                return label + ': ' + value + ' (' + percentage + '%)';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Location Distribution Chart
+        var locationCtx = document.getElementById('locationChart').getContext('2d');
+        var locationChart = new Chart(locationCtx, {
+            type: 'bar',
+            data: {
+                labels: <?= json_encode(array_keys($location_data)) ?>,
+                datasets: [{
+                    label: 'Patients by Location',
+                    data: <?= json_encode(array_values($location_data)) ?>,
+                    backgroundColor: '#4CAF50',
+                    borderColor: '#4CAF50',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y + ' patients';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                }
+            }
+        });
+
+        // Age Distribution Histogram
+        var ageCtx = document.getElementById('ageChart').getContext('2d');
+        
+        <?php
+        $min_age = min($ages);
+        $max_age = max($ages);
+        $bin_size = 5;
+        $bins = [];
+        $labels = [];
+        
+        for ($i = $min_age - ($min_age % $bin_size); $i <= $max_age; $i += $bin_size) {
+            $labels[] = $i . '-' . ($i + $bin_size - 1);
+            $bins[] = 0;
+        }
+        
+        foreach ($ages as $age) {
+            $bin_index = floor(($age - $min_age) / $bin_size);
+            $bins[$bin_index]++;
+        }
+        ?>
+        
+        var ageChart = new Chart(ageCtx, {
+            type: 'bar',
+            data: {
+                labels: <?= json_encode($labels) ?>,
+                datasets: [{
+                    label: 'Number of Patients',
+                    data: <?= json_encode($bins) ?>,
+                    backgroundColor: 'rgba(76, 175, 80, 0.6)',
+                    borderColor: 'rgba(76, 175, 80, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y + ' patients';
+                            }
+                        }
+                    },
+                    annotation: {
+                        annotations: {
+                            line25: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: <?= max($bins) ?>,
+                                xMin: (<?= $percentile_25 ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                xMax: (<?= $percentile_25 ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                borderColor: '#ff9800',
+                                borderWidth: 2,
+                                label: {
+                                    content: '25th: <?= $percentile_25 ?>',
+                                    enabled: true,
+                                    position: 'top'
+                                }
+                            },
+                            lineMedian: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: <?= max($bins) ?>,
+                                xMin: (<?= $median ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                xMax: (<?= $median ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                borderColor: '#f44336',
+                                borderWidth: 2,
+                                label: {
+                                    content: 'Median: <?= $median ?>',
+                                    enabled: true,
+                                    position: 'top'
+                                }
+                            },
+                            line75: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: <?= max($bins) ?>,
+                                xMin: (<?= $percentile_75 ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                xMax: (<?= $percentile_75 ?> - <?= $min_age ?>) / <?= $bin_size ?>,
+                                borderColor: '#2196f3',
+                                borderWidth: 2,
+                                label: {
+                                    content: '75th: <?= $percentile_75 ?>',
+                                    enabled: true,
+                                    position: 'top'
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Age Range'
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Patients'
+                        },
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+
+<?php
+$conn->close();
+?>
 
