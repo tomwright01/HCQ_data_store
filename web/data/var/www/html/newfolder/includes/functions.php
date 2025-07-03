@@ -39,28 +39,29 @@ function getVisitById($visit_id) {
 }
 
 // Function to scan and import images into the database
-function scanAndImportImages() {
+function scanAndImportImages($directory) {
     global $conn;
     
-    $testTypes = ['FAF', 'OCT', 'VF', 'MFERG'];
+    $testTypes = ['FAF', 'OCT', 'VF', 'MFERG'];  // Add test types as needed
     $imported = 0;
     
     foreach ($testTypes as $type) {
-        $dir = IMAGE_BASE_DIR . $type . '/';
+        $dir = $directory . '/' . $type . '/';  // Make sure the directory path is correct
         
         if (!file_exists($dir)) continue;
         
-        $files = scandir($dir);
+        $files = scandir($dir);  // Scan the directory
         foreach ($files as $file) {
             if (in_array($file, ['.', '..'])) continue;
-            if (pathinfo($file, PATHINFO_EXTENSION) !== 'png') continue;
+            if (pathinfo($file, PATHINFO_EXTENSION) !== 'png') continue;  // Only import PNG files
             
+            // Extract patient ID and date from the filename (e.g., 12_OD_20250513.png)
             $parts = explode('_', $file);
-            if (count($parts) < 3) continue;
+            if (count($parts) < 3) continue;  // Skip if the filename doesn't match the pattern
             
-            $patient_id = (int)$parts[0];
-            $eye = $parts[1];
-            $date = str_replace('.png', '', $parts[2]);
+            $patient_id = (int)$parts[0];  // Patient ID is the first part
+            $eye = $parts[1];  // Eye: OD or OS
+            $date = str_replace('.png', '', $parts[2]);  // Date from filename
             
             // Ensure patient exists
             $patient = getPatientById($patient_id);
@@ -70,21 +71,22 @@ function scanAndImportImages() {
                 $stmt->execute();
             }
             
-            // Check for existing visit on this date
+            // Check if visit exists for this patient on this date
             $stmt = $conn->prepare("SELECT visit_id FROM Visits WHERE patient_id = ? AND visit_date = ?");
             $stmt->bind_param("is", $patient_id, $date);
             $stmt->execute();
             $result = $stmt->get_result();
             
-            $field = strtolower($type) . '_reference_' . $eye;
+            // Determine the correct field for storing the image (based on eye and test type)
+            $field = strtolower($type) . '_reference_' . $eye;  // e.g., faf_reference_OD or oct_reference_OS
             
             if ($result->num_rows > 0) {
-                // Update existing visit
+                // Update existing visit with the image
                 $visit = $result->fetch_assoc();
                 $stmt = $conn->prepare("UPDATE Visits SET $field = ? WHERE visit_id = ?");
                 $stmt->bind_param("si", $file, $visit['visit_id']);
             } else {
-                // Create new visit
+                // Create a new visit if none exists
                 $stmt = $conn->prepare("INSERT INTO Visits (patient_id, visit_date, $field) VALUES (?, ?, ?)");
                 $stmt->bind_param("iss", $patient_id, $date, $file);
             }
@@ -94,46 +96,6 @@ function scanAndImportImages() {
         }
     }
     
-    return $imported;
-}
-
-// Function to get patient statistics
-function getPatientStatistics() {
-    global $conn;
-    
-    $stats = [];
-    
-    $result = $conn->query("SELECT COUNT(*) AS total_patients FROM Patients");
-    $stats['total_patients'] = $result->fetch_assoc()['total_patients'];
-    
-    $result = $conn->query("SELECT YEAR(CURRENT_DATE) - year_of_birth AS age FROM Patients");
-    $ages = [];
-    while ($row = $result->fetch_assoc()) {
-        $ages[] = $row['age'];
-    }
-    sort($ages);
-    $stats['median_age'] = calculatePercentile($ages, 50);
-    $stats['percentile_25'] = calculatePercentile($ages, 25);
-    $stats['percentile_75'] = calculatePercentile($ages, 75);
-    
-    $stats['gender'] = [];
-    $result = $conn->query("SELECT gender, COUNT(*) AS count FROM Patients GROUP BY gender");
-    while ($row = $result->fetch_assoc()) {
-        $stats['gender'][$row['gender']] = $row['count'];
-    }
-    
-    $stats['location'] = [];
-    $result = $conn->query("SELECT location, COUNT(*) AS count FROM Patients GROUP BY location");
-    while ($row = $result->fetch_assoc()) {
-        $stats['location'][$row['location']] = $row['count'];
-    }
-    
-    return $stats;
-}
-
-function calculatePercentile($arr, $percentile) {
-    $index = (int)floor($percentile / 100 * count($arr));
-    return $arr[$index];
+    return $imported;  // Return the number of images imported
 }
 ?>
-
