@@ -4,8 +4,8 @@ require_once 'includes/functions.php';
 
 // Process import if requested
 if (isset($_POST['import'])) {
-    // Path to the FAF directory inside the container (corrected to match volume mapping)
-    $directory = '/var/www/html/data/FAF';  // This should work for the FAF folder inside the container
+    // Correct directory path - directly pointing to FAF (no extra concatenation)
+    $directory = '/var/www/html/data/FAF';  // Correct path inside container
     $imported = scanAndImportImages($directory);  // Call the function to import images
     echo "<p>$imported images imported successfully.</p>";
 }
