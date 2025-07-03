@@ -9,15 +9,13 @@ if (!$visit) {
     die("Visit not found.");
 }
 
-// Function to display test images with dynamic paths
 function displayTestSection($testType, $odRef, $osRef) {
     echo "<div class='test-card'>";
     echo "<h3>$testType Images</h3>";
     echo "<div class='test-images'>";
     
-    // OD (Right Eye)
     if ($odRef) {
-        $odPath = getImagePath($testType, $odRef);
+        $odPath = getDynamicImagePath($odRef);
         if ($odPath) {
             echo "<div class='test-image'>
                     <a href='$odPath' target='_blank'>
@@ -26,13 +24,12 @@ function displayTestSection($testType, $odRef, $osRef) {
                     <p>OD (Right Eye)</p>
                   </div>";
         } else {
-            echo "<p class='image-missing'>$testType OD image not found: $odRef</p>";
+            echo "<p class='image-missing'>$testType OD image not found in SAMPLE folder</p>";
         }
     }
     
-    // OS (Left Eye)
     if ($osRef) {
-        $osPath = getImagePath($testType, $osRef);
+        $osPath = getDynamicImagePath($osRef);
         if ($osPath) {
             echo "<div class='test-image'>
                     <a href='$osPath' target='_blank'>
@@ -41,12 +38,12 @@ function displayTestSection($testType, $odRef, $osRef) {
                     <p>OS (Left Eye)</p>
                   </div>";
         } else {
-            echo "<p class='image-missing'>$testType OS image not found: $osRef</p>";
+            echo "<p class='image-missing'>$testType OS image not found in SAMPLE folder</p>";
         }
     }
     
     if (!$odRef && !$osRef) {
-        echo "<p>No $testType images available for this visit</p>";
+        echo "<p>No $testType images recorded for this visit</p>";
     }
     
     echo "</div></div>";
@@ -58,7 +55,7 @@ function displayTestSection($testType, $odRef, $osRef) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Visit Details - <?= $visit['visit_id'] ?></title>
+    <title>Visit Details - <?= htmlspecialchars($visit['visit_id']) ?></title>
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -142,25 +139,34 @@ function displayTestSection($testType, $odRef, $osRef) {
             border-radius: 4px;
             margin-top: 20px;
         }
+        
+        h1, h2, h3 {
+            color: #2c3e50;
+        }
+        
+        .info-header h2 {
+            color: white;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <img src="assets/images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
-        <h1>Visit Details - ID: <?= $visit['visit_id'] ?></h1>
+        <h1>Visit Details - ID: <?= htmlspecialchars($visit['visit_id']) ?></h1>
         
         <div class="info-header">
             <h2>Visit on <?= date('F j, Y', strtotime($visit['visit_date'])) ?></h2>
-            <p><strong>Patient:</strong> ID <?= $visit['patient_id'] ?> | 
+            <p><strong>Patient:</strong> ID <?= htmlspecialchars($visit['patient_id']) ?> | 
                <?= $visit['gender'] == 'm' ? 'Male' : 'Female' ?>, 
                Age <?= date('Y') - $visit['year_of_birth'] ?> | 
-               <?= $visit['disease_name'] ?></p>
+               <?= htmlspecialchars($visit['disease_name']) ?></p>
         </div>
         
         <div class="info-grid">
             <div>
                 <h3>Visit Notes</h3>
-                <p><?= $visit['visit_notes'] ?: 'No notes available' ?></p>
+                <p><?= $visit['visit_notes'] ? nl2br(htmlspecialchars($visit['visit_notes'])) : 'No notes available' ?></p>
             </div>
             
             <div>
@@ -173,7 +179,6 @@ function displayTestSection($testType, $odRef, $osRef) {
         <h2>Test Results</h2>
         <div class="test-grid">
             <?php
-            // Display each test type section dynamically
             displayTestSection('FAF', $visit['faf_reference_OD'], $visit['faf_reference_OS']);
             displayTestSection('OCT', $visit['oct_reference_OD'], $visit['oct_reference_OS']);
             displayTestSection('VF', $visit['vf_reference_OD'], $visit['vf_reference_OS']);
@@ -181,7 +186,7 @@ function displayTestSection($testType, $odRef, $osRef) {
             ?>
         </div>
         
-        <a href="view_visits.php?patient_id=<?= $visit['patient_id'] ?>" class="button">Back to Patient Visits</a>
+        <a href="view_visits.php?patient_id=<?= htmlspecialchars($visit['patient_id']) ?>" class="button">Back to Patient Visits</a>
     </div>
 </body>
 </html>
