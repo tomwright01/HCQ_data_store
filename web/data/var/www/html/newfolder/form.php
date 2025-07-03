@@ -97,13 +97,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
-            padding: 0;
+            padding: 20px;
             background-color: #f4f7f6;
             color: #333;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
+            min-height: 100vh;
             background-image: url('https://via.placeholder.com/1500x1000');
             background-size: cover;
             background-position: center;
@@ -116,8 +113,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             width: 100%;
-            max-width: 1000px;
-            overflow: hidden;
+            max-width: 1200px;
+            margin: 20px auto;
+            overflow: auto;
+            max-height: 90vh;
         }
 
         h1 {
@@ -125,6 +124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 36px;
             color: #4CAF50;
             margin-bottom: 20px;
+            margin-top: 0;
         }
 
         .form-title {
@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             background-color: #45a049;
         }
 
-        .form-container footer {
+        footer {
             text-align: center;
             margin-top: 20px;
         }
