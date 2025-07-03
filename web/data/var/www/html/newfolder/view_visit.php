@@ -10,36 +10,39 @@ if (!$visit) {
 }
 
 // Function to display test images with dynamic paths
-function displayTestSection($testType, $odRef, $osRef, $visit) {
-    $odPath = $odRef ? getImagePath($testType, $odRef) : false;
-    $osPath = $osRef ? getImagePath($testType, $osRef) : false;
-    
+function displayTestSection($testType, $odRef, $osRef) {
     echo "<div class='test-card'>";
     echo "<h3>$testType Images</h3>";
     echo "<div class='test-images'>";
     
     // OD (Right Eye)
-    if ($odPath) {
-        echo "<div class='test-image'>
-                <a href='$odPath' target='_blank'>
-                    <img src='$odPath' alt='$testType OD' class='test-thumbnail'>
-                </a>
-                <p>OD (Right Eye)</p>
-              </div>";
-    } elseif ($odRef) {
-        echo "<p class='image-missing'>$testType OD image not found: $odRef</p>";
+    if ($odRef) {
+        $odPath = getImagePath($testType, $odRef);
+        if ($odPath) {
+            echo "<div class='test-image'>
+                    <a href='$odPath' target='_blank'>
+                        <img src='$odPath' alt='$testType OD' class='test-thumbnail'>
+                    </a>
+                    <p>OD (Right Eye)</p>
+                  </div>";
+        } else {
+            echo "<p class='image-missing'>$testType OD image not found: $odRef</p>";
+        }
     }
     
     // OS (Left Eye)
-    if ($osPath) {
-        echo "<div class='test-image'>
-                <a href='$osPath' target='_blank'>
-                    <img src='$osPath' alt='$testType OS' class='test-thumbnail'>
-                </a>
-                <p>OS (Left Eye)</p>
-              </div>";
-    } elseif ($osRef) {
-        echo "<p class='image-missing'>$testType OS image not found: $osRef</p>";
+    if ($osRef) {
+        $osPath = getImagePath($testType, $osRef);
+        if ($osPath) {
+            echo "<div class='test-image'>
+                    <a href='$osPath' target='_blank'>
+                        <img src='$osPath' alt='$testType OS' class='test-thumbnail'>
+                    </a>
+                    <p>OS (Left Eye)</p>
+                  </div>";
+        } else {
+            echo "<p class='image-missing'>$testType OS image not found: $osRef</p>";
+        }
     }
     
     if (!$odRef && !$osRef) {
@@ -171,10 +174,10 @@ function displayTestSection($testType, $odRef, $osRef, $visit) {
         <div class="test-grid">
             <?php
             // Display each test type section dynamically
-            displayTestSection('FAF', $visit['faf_reference_OD'], $visit['faf_reference_OS'], $visit);
-            displayTestSection('OCT', $visit['oct_reference_OD'], $visit['oct_reference_OS'], $visit);
-            displayTestSection('VF', $visit['vf_reference_OD'], $visit['vf_reference_OS'], $visit);
-            displayTestSection('MFERG', $visit['mferg_reference_OD'], $visit['mferg_reference_OS'], $visit);
+            displayTestSection('FAF', $visit['faf_reference_OD'], $visit['faf_reference_OS']);
+            displayTestSection('OCT', $visit['oct_reference_OD'], $visit['oct_reference_OS']);
+            displayTestSection('VF', $visit['vf_reference_OD'], $visit['vf_reference_OS']);
+            displayTestSection('MFERG', $visit['mferg_reference_OD'], $visit['mferg_reference_OS']);
             ?>
         </div>
         
