@@ -14,30 +14,6 @@ function getPatientById($patient_id) {
     return $result->fetch_assoc();
 }
 
-// Function to get visits by patient_id
-function getVisitsByPatientId($patient_id) {
-    global $conn;
-    $stmt = $conn->prepare("SELECT * FROM Visits WHERE patient_id = ? ORDER BY visit_date DESC");
-    $stmt->bind_param("i", $patient_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    return $result->fetch_all(MYSQLI_ASSOC);
-}
-
-// Function to get visit details by visit_id
-function getVisitById($visit_id) {
-    global $conn;
-    $stmt = $conn->prepare("SELECT v.*, p.*, d.disease_name 
-                          FROM Visits v
-                          JOIN Patients p ON v.patient_id = p.patient_id
-                          LEFT JOIN Diseases d ON p.disease_id = d.disease_id
-                          WHERE v.visit_id = ?");
-    $stmt->bind_param("i", $visit_id);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    return $result->fetch_assoc();
-}
-
 // Function to scan and import images into the database
 function scanAndImportImages($directory) {
     global $conn;
@@ -46,7 +22,7 @@ function scanAndImportImages($directory) {
     $imported = 0;
     
     foreach ($testTypes as $type) {
-        $dir = $directory . '/' . $type . '/';  // Make sure the directory path is correct
+        $dir = $directory . '/' . $type . '/';  // Correctly set the directory
         
         if (!file_exists($dir)) continue;
         
