@@ -36,31 +36,16 @@ CREATE TABLE IF NOT EXISTS Visits (
     patient_id INT,
     visit_date DATE NOT NULL,
     visit_notes TEXT,
-    
-    -- FAF data for both eyes (OD & OS)
-    faf_image_number_OD INT DEFAULT NULL,
-    faf_image_number_OS INT DEFAULT NULL,
-
-    -- OCT data for both eyes (OD & OS)
-    oct_image_number_OD INT DEFAULT NULL,
-    oct_image_number_OS INT DEFAULT NULL,
-
-    -- Visual Field (VF) data for both eyes (OD & OS)
-    vf_image_number_OD INT DEFAULT NULL,
-    vf_image_number_OS INT DEFAULT NULL,
-
-    -- MFERG data for both eyes (OD & OS)
-    mferg_image_number_OD INT DEFAULT NULL,
-    mferg_image_number_OS INT DEFAULT NULL,
-
-    -- MERCI ratings for both eyes
+    faf_reference_OD VARCHAR(255) DEFAULT NULL,
+    faf_reference_OS VARCHAR(255) DEFAULT NULL,
+    oct_reference_OD VARCHAR(255) DEFAULT NULL,
+    oct_reference_OS VARCHAR(255) DEFAULT NULL,
+    vf_reference_OD VARCHAR(255) DEFAULT NULL,
+    vf_reference_OS VARCHAR(255) DEFAULT NULL,
+    mferg_reference_OD VARCHAR(255) DEFAULT NULL,
+    mferg_reference_OS VARCHAR(255) DEFAULT NULL,
     merci_rating_left_eye INT DEFAULT NULL,
     merci_rating_right_eye INT DEFAULT NULL,
-
     date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
 );
-
-
-
-
