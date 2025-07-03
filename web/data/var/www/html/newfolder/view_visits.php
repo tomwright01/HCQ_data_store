@@ -1,4 +1,5 @@
 <?php
+/*
 require_once 'config.php';
 
 // Get visit ID from URL parameter
