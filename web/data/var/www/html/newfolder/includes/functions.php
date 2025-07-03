@@ -18,12 +18,11 @@ function getPatientById($patient_id) {
 function scanAndImportImages($directory) {
     global $conn;
     
-    $testTypes = ['FAF', 'OCT', 'VF', 'MFERG'];  // Add test types as needed
+    $testTypes = ['FAF', 'OCT', 'VF', 'MFERG'];  // Define the test types
     $imported = 0;
     
     foreach ($testTypes as $type) {
-        // Now scanning the directory inside /var/www/html/data (which is mapped from the SAMPLE directory)
-        $dir = $directory . '/' . $type . '/';  // Adjusted to match Docker volume mapping
+        $dir = $directory . '/' . $type;  // Directory path without appending it again
         
         if (!file_exists($dir)) continue;
         
