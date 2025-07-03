@@ -1,5 +1,83 @@
 <?php
+
 require_once 'config.php';
+
+function addOrUpdatePatientFromImage($filename, $testType = 'FAF') {
+    global $conn;
+    
+    // Parse filename (format: {patient_id}_{eye}_{date}.png)
+    $parts = explode('_', $filename);
+    if (count($parts) < 3) return false;
+    
+    $patient_id = (int)$parts[0];
+    $eye = $parts[1];
+    $date = str_replace('.png', '', $parts[2]);
+    
+    // Check if patient exists
+    $patient = getPatientById($patient_id);
+    
+    if (!$patient) {
+        // Create basic patient record
+        $stmt = $conn->prepare("INSERT INTO Patients (patient_id, location) VALUES (?, 'Unknown')");
+        $stmt->bind_param("i", $patient_id);
+        $stmt->execute();
+    }
+    
+    // Check if visit exists for this date
+    $stmt = $conn->prepare("SELECT visit_id FROM Visits WHERE patient_id = ? AND visit_date = ?");
+    $stmt->bind_param("is", $patient_id, $date);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows > 0) {
+        // Update existing visit
+        $visit = $result->fetch_assoc();
+        $visit_id = $visit['visit_id'];
+        
+        $field = strtolower($testType) . '_reference_' . $eye;
+        $stmt = $conn->prepare("UPDATE Visits SET $field = ? WHERE visit_id = ?");
+        $stmt->bind_param("si", $filename, $visit_id);
+        $stmt->execute();
+    } else {
+        // Create new visit
+        $field = strtolower($testType) . '_reference_' . $eye;
+        $sql = "INSERT INTO Visits (patient_id, visit_date, $field) VALUES (?, ?, ?)";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("iss", $patient_id, $date, $filename);
+        $stmt->execute();
+    }
+    
+    return true;
+}
+
+// New function to scan directory and update database
+function scanAndImportImages($directory, $testType = 'FAF') {
+    if (!file_exists($directory)) {
+        return ['success' => false, 'message' => 'Directory not found'];
+    }
+    
+    $files = scandir($directory);
+    $imported = 0;
+    $errors = 0;
+    
+    foreach ($files as $file) {
+        if (in_array($file, ['.', '..'])) continue;
+        if (pathinfo($file, PATHINFO_EXTENSION) !== 'png') continue;
+        
+        if (addOrUpdatePatientFromImage($file, $testType)) {
+            $imported++;
+        } else {
+            $errors++;
+        }
+    }
+    
+    return [
+        'success' => true,
+        'imported' => $imported,
+        'errors' => $errors,
+        'total' => count($files) - 2 // subtract . and ..
+    ];
+}
 
 function getPatientById($patient_id) {
     global $conn;
