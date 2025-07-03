@@ -24,8 +24,11 @@ function scanAndImportImages($directory) {
     foreach ($testTypes as $type) {
         $dir = $directory . '/' . $type;  // Directory path without appending it again
         
-        if (!file_exists($dir)) continue;
-        
+        if (!file_exists($dir)) {
+            echo "<p>Directory $dir not found!</p>";  // Debug message
+            continue;
+        }
+
         $files = scandir($dir);  // Scan the directory for files
         foreach ($files as $file) {
             if (in_array($file, ['.', '..'])) continue;
