@@ -18,11 +18,12 @@ function getPatientById($patient_id) {
 function scanAndImportImages($directory) {
     global $conn;
     
-    $testTypes = ['FAF', 'OCT', 'VF', 'MFERG'];  // Define the test types
+    $testTypes = ['FAF', 'OCT', 'VF', 'MFERG'];  // Define the test types (can add more if needed)
     $imported = 0;
     
     foreach ($testTypes as $type) {
-        $dir = $directory . '/' . $type;  // Directory path without appending it again
+        // Correct directory path - no extra concatenation
+        $dir = $directory . '/' . $type;  // Use the existing path, no double pathing
         
         if (!file_exists($dir)) {
             echo "<p>Directory $dir not found!</p>";  // Debug message
