@@ -1,4 +1,4 @@
-<?php
+<?php 
 // Database configuration
 define('DB_SERVER', 'mariadb');
 define('DB_USERNAME', 'root');
