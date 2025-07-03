@@ -342,7 +342,7 @@ if ($result_visit && $result_visit->num_rows > 0) {
 
 </body>
 </html>
-
+*/
 <?php
 $conn->close();
 ?>
