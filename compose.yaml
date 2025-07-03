@@ -18,5 +18,7 @@ services:
         build: ./web
         restart: always
         container_name: web
+        volumes:
+            - ./SAMPLE/:/var/www/html/data
         ports: 
             - "8888:8080"
