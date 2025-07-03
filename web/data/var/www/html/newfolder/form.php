@@ -217,10 +217,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-title">Patient and Visit Information Form</div>
 
         <form action="" method="post" enctype="multipart/form-data">
-            <!-- Patient Information -->
+            <!-- Patient ID -->
             <div class="form-section">
                 <h3>Patient Information</h3>
+                
+                <div class="form-group">
+                    <div>
+                        <label for="patient_id">Patient ID:</label>
+                        <input type="number" name="patient_id" required>
+                    </div>
+                </div>
 
+                <!-- Patient Information -->
                 <div class="form-group">
                     <div>
                         <label for="location">Location:</label>
