@@ -5,7 +5,7 @@ define('DB_USERNAME', 'root');
 define('DB_PASSWORD', 'notgood');
 define('DB_NAME', 'PatientData');
 
-// Image configuration - Updated to use proper paths for web access
+// Image configuration
 define('IMAGE_BASE_DIR', '/var/www/html/data/'); // Docker container path
 define('IMAGE_BASE_URL', '/data/'); // Web-accessible URL path
 
@@ -42,11 +42,6 @@ function getImagePath($testType, $filename) {
     $localPath = IMAGE_BASE_DIR . $folders[$testType] . $filename;
     $webPath = IMAGE_BASE_URL . $folders[$testType] . rawurlencode($filename);
     
-    // Check if file exists (local path)
-    if (file_exists($localPath)) {
-        return $webPath;
-    }
-    
-    return false;
+    return $webPath;
 }
 ?>
