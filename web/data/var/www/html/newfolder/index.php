@@ -51,5 +51,3 @@ if ($search_patient_id) {
     <?php endif; ?>
 </body>
 </html>
-
-
