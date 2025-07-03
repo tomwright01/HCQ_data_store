@@ -1,5 +1,4 @@
 <?php
-/*
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
