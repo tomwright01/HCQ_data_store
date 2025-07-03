@@ -7,7 +7,7 @@ define('DB_NAME', 'PatientData');
 
 // Image configuration - using your SAMPLE folder structure
 define('IMAGE_BASE_DIR', '/var/www/html/data/'); // Docker container path
-define('IMAGE_BASE_URL', '/data/'); // Web-accessible URL path
+define('IMAGE_BASE_URL', '/data/'); // Web-accessible URL path (corrected to serve images via this path)
 
 // Create connection
 $conn = new mysqli(DB_SERVER, DB_USERNAME, DB_PASSWORD, DB_NAME);
@@ -33,4 +33,5 @@ function getDynamicImagePath($filename) {
     return false;
 }
 ?>
+
 
