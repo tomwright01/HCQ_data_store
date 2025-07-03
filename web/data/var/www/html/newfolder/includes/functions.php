@@ -22,14 +22,15 @@ function scanAndImportImages($directory) {
     $imported = 0;
     
     foreach ($testTypes as $type) {
-        $dir = $directory . '/' . $type . '/';  // Correctly set the directory
+        // Now scanning the directory inside /var/www/html/data (which is mapped from the SAMPLE directory)
+        $dir = $directory . '/' . $type . '/';  // Adjusted to match Docker volume mapping
         
         if (!file_exists($dir)) continue;
         
-        $files = scandir($dir);  // Scan the directory
+        $files = scandir($dir);  // Scan the directory for files
         foreach ($files as $file) {
             if (in_array($file, ['.', '..'])) continue;
-            if (pathinfo($file, PATHINFO_EXTENSION) !== 'png') continue;  // Only import PNG files
+            if (pathinfo($file, PATHINFO_EXTENSION) !== 'png') continue;  // Only process PNG files
             
             // Extract patient ID and date from the filename (e.g., 12_OD_20250513.png)
             $parts = explode('_', $file);
@@ -39,7 +40,7 @@ function scanAndImportImages($directory) {
             $eye = $parts[1];  // Eye: OD or OS
             $date = str_replace('.png', '', $parts[2]);  // Date from filename
             
-            // Ensure patient exists
+            // Ensure the patient exists in the database
             $patient = getPatientById($patient_id);
             if (!$patient) {
                 $stmt = $conn->prepare("INSERT INTO Patients (patient_id) VALUES (?)");
