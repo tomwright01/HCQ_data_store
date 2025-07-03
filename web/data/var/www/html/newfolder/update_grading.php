@@ -1,4 +1,5 @@
 <?php
+/*
 require_once 'includes/config.php';
 
 // Retrieve the visit_id and the grading scores
@@ -35,4 +36,5 @@ if ($visit_id > 0) {
     header("Location: gradingview.php?visit_id=" . $visit_id);
     exit;
 }
+*/
 ?>
