@@ -49,3 +49,41 @@ CREATE TABLE IF NOT EXISTS Visits (
     date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
 );
+
+-- Create FAF Images table if not exists
+CREATE TABLE IF NOT EXISTS FAF_Images (
+    faf_reference VARCHAR(255) PRIMARY KEY,
+    faf_score DECIMAL(10,2) NOT NULL,
+    patient_id INT NOT NULL,
+    eye_side ENUM('OD', 'OS') NOT NULL,
+    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
+
+-- Create similar tables for other image types
+CREATE TABLE IF NOT EXISTS OCT_Images (
+    oct_reference VARCHAR(255) PRIMARY KEY,
+    oct_score DECIMAL(10,2) NOT NULL,
+    patient_id INT NOT NULL,
+    eye_side ENUM('OD', 'OS') NOT NULL,
+    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS VF_Images (
+    vf_reference VARCHAR(255) PRIMARY KEY,
+    vf_score DECIMAL(10,2) NOT NULL,
+    patient_id INT NOT NULL,
+    eye_side ENUM('OD', 'OS') NOT NULL,
+    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
+
+CREATE TABLE IF NOT EXISTS MFERG_Images (
+    mferg_reference VARCHAR(255) PRIMARY KEY,
+    mferg_score DECIMAL(10,2) NOT NULL,
+    patient_id INT NOT NULL,
+    eye_side ENUM('OD', 'OS') NOT NULL,
+    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
