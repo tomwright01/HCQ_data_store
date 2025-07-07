@@ -1,4 +1,5 @@
 <?php
+/*
 // Assuming database connection is established
 require_once 'includes/config.php';
 
@@ -153,6 +154,7 @@ $mferg_image = $visit['mferg_reference_OD']; // MFERG OD Image
 
 <?php
 $conn->close();
+*/
 ?>
 
 
