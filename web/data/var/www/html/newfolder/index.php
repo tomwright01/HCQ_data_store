@@ -174,6 +174,13 @@ if ($search_patient_id) {
         td a {
             color: #4CAF50;
             text-decoration: none;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        td a:hover {
+            color: #3d8b40;
+            text-decoration: underline;
         }
 
         .metric-bar-container {
@@ -189,6 +196,15 @@ if ($search_patient_id) {
             margin: 10px 0;
             border-radius: 5px;
             position: relative;
+            overflow: hidden;
+            transition: width 1s ease;
+        }
+
+        .metric-bar .metric-fill {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0;
+            transition: width 1s ease;
         }
 
         .metric-bar .metric-value {
@@ -198,6 +214,7 @@ if ($search_patient_id) {
             transform: translate(-50%, -50%);
             font-size: 16px;
             color: #fff;
+            text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
         }
 
         .chart-container {
@@ -222,6 +239,41 @@ if ($search_patient_id) {
             justify-content: center;
             gap: 20px;
             margin-top: 30px;
+        }
+
+        .patient-card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin: 10px;
+            width: 300px;
+            text-align: left;
+        }
+
+        .patient-card h3 {
+            color: #4CAF50;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+
+        .patient-card p {
+            margin: 8px 0;
+        }
+
+        .viewer-link {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            border-radius: 4px;
+            text-decoration: none;
+            transition: background 0.3s;
+        }
+
+        .viewer-link:hover {
+            background: #3d8b40;
         }
     </style>
 </head>
@@ -264,14 +316,14 @@ if ($search_patient_id) {
                             <td><?= $row["visit_id"] ?></td>
                             <td><?= $row["visit_date"] ?></td>
                             <td><?= $row["visit_notes"] ?></td>
-                            <td><a href="<?= '/data/FAF/' . $row["faf_reference_OD"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/FAF/' . $row["faf_reference_OS"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/OCT/' . $row["oct_reference_OD"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/OCT/' . $row["oct_reference_OS"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/VF/' . $row["vf_reference_OD"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/VF/' . $row["vf_reference_OS"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/MFERG/' . $row["mferg_reference_OD"] ?>" target="_blank">View</a></td>
-                            <td><a href="<?= '/data/MFERG/' . $row["mferg_reference_OS"] ?>" target="_blank">View</a></td>
+                            <td><a href="view_faf.php?ref=<?= urlencode($row["faf_reference_OD"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OD" target="_blank" class="viewer-link">View</a></td>
+                            <td><a href="view_faf.php?ref=<?= urlencode($row["faf_reference_OS"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OS" target="_blank" class="viewer-link">View</a></td>
+                            <td><a href="view_oct.php?ref=<?= urlencode($row["oct_reference_OD"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OD" target="_blank" class="viewer-link">View</a></td>
+                            <td><a href="view_oct.php?ref=<?= urlencode($row["oct_reference_OS"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OS" target="_blank" class="viewer-link">View</a></td>
+                            <td><a href="view_vf.php?ref=<?= urlencode($row["vf_reference_OD"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OD" target="_blank" class="viewer-link">View</a></td>
+                            <td><a href="view_vf.php?ref=<?= urlencode($row["vf_reference_OS"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OS" target="_blank" class="viewer-link">View</a></td>
+                            <td><a href="view_mferg.php?ref=<?= urlencode($row["mferg_reference_OD"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OD" target="_blank" class="viewer-link">View</a></td>
+                            <td><a href="view_mferg.php?ref=<?= urlencode($row["mferg_reference_OS"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OS" target="_blank" class="viewer-link">View</a></td>
                             <td><?= $row["merci_rating_left_eye"] ?></td>
                             <td><?= $row["merci_rating_right_eye"] ?></td>
                         </tr>
@@ -282,7 +334,7 @@ if ($search_patient_id) {
             <?php endif; ?>
         <?php endif; ?>
 
-        <h2><a href="form.php">Add New Patient and Visit</a></h2>
+        <h2><a href="form.php" style="color: #4CAF50; text-decoration: none; font-weight: bold;">Add New Patient and Visit</a></h2>
     </div>
 
     <div class="stats-section">
@@ -303,19 +355,23 @@ if ($search_patient_id) {
     </div>
 
     <div class="metric-bar-container">
-        <div class="metric-bar" style="width: <?= min(($total_patients / 100) * 100, 100) ?>%">
+        <div class="metric-bar">
+            <div class="metric-fill" style="width: <?= min(($total_patients / 100) * 100, 100) ?>%"></div>
             <div class="metric-value"><?= $total_patients ?> Patients</div>
         </div>
 
-        <div class="metric-bar" style="width: <?= min(($median / 100) * 100, 100) ?>%">
+        <div class="metric-bar">
+            <div class="metric-fill" style="width: <?= min(($median / 100) * 100, 100) ?>%"></div>
             <div class="metric-value"><?= $median ?> Median Age</div>
         </div>
 
-        <div class="metric-bar" style="width: <?= min(($percentile_25 / 100) * 100, 100) ?>%">
+        <div class="metric-bar">
+            <div class="metric-fill" style="width: <?= min(($percentile_25 / 100) * 100, 100) ?>%"></div>
             <div class="metric-value"><?= $percentile_25 ?> 25th Percentile Age</div>
         </div>
 
-        <div class="metric-bar" style="width: <?= min(($percentile_75 / 100) * 100, 100) ?>%">
+        <div class="metric-bar">
+            <div class="metric-fill" style="width: <?= min(($percentile_75 / 100) * 100, 100) ?>%"></div>
             <div class="metric-value"><?= $percentile_75 ?> 75th Percentile Age</div>
         </div>
     </div>
@@ -499,10 +555,21 @@ if ($search_patient_id) {
                 }
             }
         });
+
+        // Animate metric bars on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const metricBars = document.querySelectorAll('.metric-fill');
+            metricBars.forEach(bar => {
+                const width = bar.style.width;
+                bar.style.width = '0';
+                setTimeout(() => {
+                    bar.style.width = width;
+                }, 100);
+            });
+        });
     </script>
 </body>
 </html>
-
 <?php
 $conn->close();
 ?>
