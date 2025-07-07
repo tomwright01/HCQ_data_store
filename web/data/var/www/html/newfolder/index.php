@@ -316,8 +316,8 @@ if ($search_patient_id) {
                             <td><?= $row["visit_id"] ?></td>
                             <td><?= $row["visit_date"] ?></td>
                             <td><?= $row["visit_notes"] ?></td>
-                            <td><a href="view_faf.php?ref=<?= urlencode($row["faf_reference_OD"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OD" target="_blank" class="viewer-link">View</a></td>
-                            <td><a href="view_faf.php?ref=<?= urlencode($row["faf_reference_OS"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OS" target="_blank" class="viewer-link">View</a></td>
+                            <td><a href="view_faf.php?ref=<?= urlencode($row["faf_reference_OD"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OD" target="_blank">View</a></td>
+                            <td><a href="view_faf.php?ref=<?= urlencode($row["faf_reference_OS"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OS" target="_blank">View</a></td>
                             <td><a href="view_oct.php?ref=<?= urlencode($row["oct_reference_OD"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OD" target="_blank" class="viewer-link">View</a></td>
                             <td><a href="view_oct.php?ref=<?= urlencode($row["oct_reference_OS"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OS" target="_blank" class="viewer-link">View</a></td>
                             <td><a href="view_vf.php?ref=<?= urlencode($row["vf_reference_OD"]) ?>&patient_id=<?= $row['patient_id'] ?>&eye=OD" target="_blank" class="viewer-link">View</a></td>
