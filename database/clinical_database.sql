@@ -1,5 +1,46 @@
 -- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
+USE PatientData;
+
+-- Step 2: Create Patients table with new structure
+CREATE TABLE IF NOT EXISTS Patients (
+    patient_id INT AUTO_INCREMENT PRIMARY KEY,
+    subject_id VARCHAR(50) NOT NULL UNIQUE,
+    date_of_birth DATE NOT NULL,
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Step 3: Create Tests table
+CREATE TABLE IF NOT EXISTS Tests (
+    test_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    date_of_test DATE NOT NULL,
+    eye ENUM('OD', 'OS') NOT NULL,
+    report_diagnosis ENUM('normal', 'abnormal', 'no input') DEFAULT 'no input',
+    exclusion ENUM('retinal detachment', 'generalized retinal dysfunction', 'unilateral testing', 'none') DEFAULT 'none',
+    merci_score TINYINT CHECK (merci_score BETWEEN 1 AND 100 OR merci_score IS NULL),
+    merci_diagnosis ENUM('normal', 'abnormal', 'no value') DEFAULT 'no value',
+    error_type ENUM('TN', 'FP', 'none') DEFAULT 'none',
+    faf_grade TINYINT CHECK (faf_grade BETWEEN 1 AND 4 OR faf_grade IS NULL),
+    oct_score DECIMAL(5,2) CHECK (oct_score BETWEEN 0 AND 10 OR oct_score IS NULL),
+    vf_score DECIMAL(5,2) CHECK (vf_score BETWEEN 0 AND 10 OR vf_score IS NULL),
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
+
+-- Create indexes for better performance
+CREATE INDEX idx_patient_subject ON Patients(subject_id);
+CREATE INDEX idx_test_patient ON Tests(patient_id);
+CREATE INDEX idx_test_date ON Tests(date_of_test);
+
+
+
+
+
+
+
+/*-- Step 1: Create the database
+CREATE DATABASE IF NOT EXISTS PatientData;
 
 -- Step 2: Use the created database
 USE PatientData;
@@ -101,3 +142,4 @@ CREATE TABLE IF NOT EXISTS Grading (
     FOREIGN KEY (visit_id) REFERENCES Visits(visit_id),
     FOREIGN KEY (grader_id) REFERENCES Users(user_id)  -- Assuming you have a Users table
 );
+*/
