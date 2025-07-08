@@ -183,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .image-container {
-            transition: filter 0.3s ease;
+            transition: transform 0.3s ease;
             transform-origin: center center;
             display: flex;
             align-items: center;
@@ -523,6 +523,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <button class="control-btn zoom-reset">1:1</button>
                     <button class="control-btn zoom-in">+</button>
                 </div>
+                <div class="control-group">
+                    <button class="control-btn" id="center-eye-btn">👁️</button>
+                </div>
                 <form method="POST" class="control-group brightness-control">
                     <button type="button" class="control-btn brightness-down">-</button>
                     <input type="range" class="brightness-slider" name="brightness" min="0.1" max="3.0" step="0.1" 
@@ -765,6 +768,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             fafImage.style.filter = `brightness(${brightnessSlider.value})`;
         }
         
+        // Center eye functionality
+        document.getElementById('center-eye-btn').addEventListener('click', centerEye);
+        
+        function centerEye() {
+            const imgWidth = fafImage.naturalWidth;
+            const imgHeight = fafImage.naturalHeight;
+            
+            // Calculate center coordinates (assuming eye is roughly centered in the image)
+            const centerX = imgWidth / 2;
+            const centerY = imgHeight / 2;
+            
+            // Calculate the viewport dimensions
+            const viewportWidth = imageWrapper.clientWidth;
+            const viewportHeight = imageWrapper.clientHeight;
+            
+            // Calculate the scale needed to fit the image to the viewport
+            const scaleX = viewportWidth / imgWidth;
+            const scaleY = viewportHeight / imgHeight;
+            const scale = Math.min(scaleX, scaleY);
+            
+            // Calculate the translation needed to center the eye
+            const translateX = (viewportWidth / 2 - centerX * scale) / scale;
+            const translateY = (viewportHeight / 2 - centerY * scale) / scale;
+            
+            // Apply the transformation
+            imageContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+            
+            // Update current zoom level
+            currentZoom = scale;
+        }
+        
         // Fullscreen functionality
         fullscreenBtn.addEventListener('click', () => {
             if (!document.fullscreenElement) {
@@ -778,33 +812,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 
                 // Center the eye in fullscreen mode
-                setTimeout(() => {
-                    const imgWidth = fafImage.naturalWidth;
-                    const imgHeight = fafImage.naturalHeight;
-                    
-                    // Calculate center coordinates (assuming eye is roughly centered in the image)
-                    const centerX = imgWidth / 2;
-                    const centerY = imgHeight / 2;
-                    
-                    // Calculate the viewport dimensions
-                    const viewportWidth = window.innerWidth;
-                    const viewportHeight = window.innerHeight;
-                    
-                    // Calculate the scale needed to fit the image to the viewport
-                    const scaleX = viewportWidth / imgWidth;
-                    const scaleY = viewportHeight / imgHeight;
-                    const scale = Math.min(scaleX, scaleY);
-                    
-                    // Calculate the translation needed to center the eye
-                    const translateX = (viewportWidth / 2 - centerX * scale) / scale;
-                    const translateY = (viewportHeight / 2 - centerY * scale) / scale;
-                    
-                    // Apply the transformation
-                    imageContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
-                    
-                    // Reset current zoom to the calculated scale
-                    currentZoom = scale;
-                }, 100);
+                setTimeout(centerEye, 100);
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
@@ -837,6 +845,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 updateZoom();
             } else if (e.key === 'f') {
                 fullscreenBtn.click();
+            } else if (e.key === 'c') {
+                centerEye();
             }
         });
         
