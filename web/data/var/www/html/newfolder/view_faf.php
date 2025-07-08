@@ -42,6 +42,27 @@ $age = $current_year - $patient['year_of_birth'];
 
 // Get MERCI score for the appropriate eye
 $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci_rating_left_eye'];
+
+// Get current FAF stage (new database fields)
+$current_stage = ($eye == 'OD') ? $visit['faf_stage_OD'] : $visit['faf_stage_OS'];
+
+// Handle stage submission
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['stage'])) {
+    $new_stage = (int)$_POST['stage'];
+    if ($new_stage >= 0 && $new_stage <= 4) {
+        $field = ($eye == 'OD') ? 'faf_stage_OD' : 'faf_stage_OS';
+        $stmt = $conn->prepare("UPDATE Visits SET $field = ? WHERE visit_id = ?");
+        $stmt->bind_param("ii", $new_stage, $visit['visit_id']);
+        if ($stmt->execute()) {
+            $current_stage = $new_stage;
+            // Refresh visit data
+            $stmt = $conn->prepare("SELECT * FROM Visits WHERE visit_id = ?");
+            $stmt->bind_param("i", $visit['visit_id']);
+            $stmt->execute();
+            $visit = $stmt->get_result()->fetch_assoc();
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -226,12 +247,12 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
             border-left: 4px solid #4CAF50;
         }
         
-        .stage-checkbox {
+        .stage-radio {
             margin-right: 15px;
             margin-top: 3px;
             accent-color: #4CAF50;
             transform: scale(1.3);
-            pointer-events: none;
+            cursor: pointer;
         }
         
         .stage-content {
@@ -255,6 +276,36 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
             color: #666;
             font-style: italic;
             margin-top: 15px;
+        }
+        
+        .stage-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .save-btn {
+            align-self: flex-start;
+            padding: 8px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+            transition: background-color 0.3s;
+        }
+        
+        .save-btn:hover {
+            background-color: #3d8b40;
+        }
+        
+        .save-confirmation {
+            color: #4CAF50;
+            font-size: 14px;
+            margin-top: 10px;
+            display: none;
         }
         
         .visit-details {
@@ -399,47 +450,71 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
             <div class="grading-card">
                 <h2>FAF Staging System</h2>
                 
-                <div class="grading-system">
-                    <div class="stage <?= ($merci_score == 0) ? 'active' : '' ?>">
-                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 0) ? 'checked' : '' ?>>
-                        <div class="stage-content">
-                            <div class="stage-number">Stage 0</div>
-                            <div class="stage-description">No hyperautofluorescence (normal)</div>
+                <form method="POST" class="stage-form">
+                    <div class="grading-system">
+                        <div class="stage <?= ($current_stage == 0) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="0" class="stage-radio" 
+                                   id="stage-0" <?= ($current_stage == 0) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-0">
+                                    <div class="stage-number">Stage 0</div>
+                                    <div class="stage-description">No hyperautofluorescence (normal)</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="stage <?= ($current_stage == 1) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="1" class="stage-radio" 
+                                   id="stage-1" <?= ($current_stage == 1) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-1">
+                                    <div class="stage-number">Stage 1</div>
+                                    <div class="stage-description">Localized parafoveal or pericentral hyperautofluorescence</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="stage <?= ($current_stage == 2) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="2" class="stage-radio" 
+                                   id="stage-2" <?= ($current_stage == 2) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-2">
+                                    <div class="stage-number">Stage 2</div>
+                                    <div class="stage-description">Hyperautofluorescence extending >180° around fovea</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="stage <?= ($current_stage == 3) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="3" class="stage-radio" 
+                                   id="stage-3" <?= ($current_stage == 3) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-3">
+                                    <div class="stage-number">Stage 3</div>
+                                    <div class="stage-description">Combined RPE defects (hypoautofluorescence) without foveal involvement</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="stage <?= ($current_stage == 4) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="4" class="stage-radio" 
+                                   id="stage-4" <?= ($current_stage == 4) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-4">
+                                    <div class="stage-number">Stage 4</div>
+                                    <div class="stage-description">Fovea-involving hypoautofluorescence</div>
+                                </label>
+                            </div>
                         </div>
                     </div>
                     
-                    <div class="stage <?= ($merci_score == 1) ? 'active' : '' ?>">
-                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 1) ? 'checked' : '' ?>>
-                        <div class="stage-content">
-                            <div class="stage-number">Stage 1</div>
-                            <div class="stage-description">Localized parafoveal or pericentral hyperautofluorescence</div>
+                    <button type="submit" class="save-btn">Save FAF Stage</button>
+                    <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['stage'])): ?>
+                        <div class="save-confirmation" style="display: block;">
+                            Stage updated successfully!
                         </div>
-                    </div>
-                    
-                    <div class="stage <?= ($merci_score == 2) ? 'active' : '' ?>">
-                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 2) ? 'checked' : '' ?>>
-                        <div class="stage-content">
-                            <div class="stage-number">Stage 2</div>
-                            <div class="stage-description">Hyperautofluorescence extending >180° around fovea</div>
-                        </div>
-                    </div>
-                    
-                    <div class="stage <?= ($merci_score == 3) ? 'active' : '' ?>">
-                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 3) ? 'checked' : '' ?>>
-                        <div class="stage-content">
-                            <div class="stage-number">Stage 3</div>
-                            <div class="stage-description">Combined RPE defects (hypoautofluorescence) without foveal involvement</div>
-                        </div>
-                    </div>
-                    
-                    <div class="stage <?= ($merci_score == 4) ? 'active' : '' ?>">
-                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 4) ? 'checked' : '' ?>>
-                        <div class="stage-content">
-                            <div class="stage-number">Stage 4</div>
-                            <div class="stage-description">Fovea-involving hypoautofluorescence</div>
-                        </div>
-                    </div>
-                </div>
+                    <?php endif; ?>
+                </form>
                 
                 <p class="grading-note">
                     This classification system addresses topographic characteristics of retinopathy 
@@ -478,6 +553,13 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
                         </div>
                     </div>
                 <?php endif; ?>
+                
+                <div class="detail-row">
+                    <div class="detail-label">FAF Stage:</div>
+                    <div class="detail-value">
+                        <?= !is_null($current_stage) ? "Stage $current_stage" : "Not graded" ?>
+                    </div>
+                </div>
             </div>
             
             <a href="index.php?search_patient_id=<?= $patient_id ?>" class="back-button">
@@ -485,5 +567,18 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
             </a>
         </div>
     </div>
+
+    <script>
+        // Simple confirmation animation
+        document.querySelector('.stage-form')?.addEventListener('submit', function() {
+            const btn = this.querySelector('.save-btn');
+            if (btn) {
+                btn.textContent = 'Saving...';
+                setTimeout(() => {
+                    btn.textContent = 'Saved!';
+                }, 500);
+            }
+        });
+    </script>
 </body>
 </html>
