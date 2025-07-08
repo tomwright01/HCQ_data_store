@@ -5,8 +5,8 @@ $username = "root";
 $password = "notgood";
 $dbname = "PatientData";
 
-// CSV file path - change this to your file path
-$csvFilePath = "C:/Users/owenc/Downloads/Patient Info Master 1(Retrospective Data).csv";
+// Updated CSV file path
+$csvFilePath = "/var/www/html/data/Patient Info Master 1(Retrospective Data).csv";
 
 // Create database connection
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -28,9 +28,17 @@ $results = [
 ];
 
 try {
+    // Verify file exists and is readable
+    if (!file_exists($csvFilePath)) {
+        throw new Exception("CSV file not found at: $csvFilePath");
+    }
+    if (!is_readable($csvFilePath)) {
+        throw new Exception("CSV file is not readable. Check permissions.");
+    }
+
     // Open CSV file
     if (($handle = fopen($csvFilePath, "r")) === FALSE) {
-        throw new Exception("Could not open CSV file: $csvFilePath");
+        throw new Exception("Could not open CSV file");
     }
 
     // Start transaction
@@ -45,6 +53,9 @@ try {
         $lineNumber++;
         
         try {
+            // Skip empty rows
+            if (count(array_filter($data)) === 0) continue;
+            
             // Validate minimum columns
             if (count($data) < 13) {
                 throw new Exception("Row has only " . count($data) . " columns (minimum 13 required)");
@@ -79,13 +90,20 @@ try {
     // Commit or rollback
     if (empty($results['errors'])) {
         $conn->commit();
+        $message = "Successfully imported {$results['patients']} patients and {$results['visits']} visits";
+        $messageClass = 'success';
     } else {
         $conn->rollback();
+        $message = "Completed with " . count($results['errors']) . " errors. No data was imported.";
+        $messageClass = 'error';
     }
     
 } catch (Exception $e) {
-    $results['errors'][] = "System error: " . $e->getMessage();
-    $conn->rollback();
+    $message = "Fatal error: " . $e->getMessage();
+    $messageClass = 'error';
+    if (isset($conn) && method_exists($conn, 'rollback')) {
+        $conn->rollback();
+    }
 }
 
 // Database functions
@@ -217,56 +235,62 @@ function processImageType($conn, $table, $reference, $patientId, $eyeSide, &$cou
     <title>CSV Import Results</title>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; }
-        .results { background: #f5f5f5; padding: 20px; border-radius: 5px; }
-        .success { color: green; }
-        .error { color: red; }
-        table { border-collapse: collapse; width: 100%; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .results { background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .success { color: #28a745; border-left: 4px solid #28a745; padding-left: 10px; }
+        .error { color: #dc3545; border-left: 4px solid #dc3545; padding-left: 10px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background-color: #f2f2f2; }
+        .error-list { max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
     </style>
 </head>
 <body>
-    <h1>CSV Import Results</h1>
-    
-    <div class="results">
-        <h2>Import Summary</h2>
-        <table>
-            <tr>
-                <th>Patients Imported</th>
-                <td><?= $results['patients'] ?></td>
-            </tr>
-            <tr>
-                <th>Visits Imported</th>
-                <td><?= $results['visits'] ?></td>
-            </tr>
-            <tr>
-                <th>FAF Images Processed</th>
-                <td><?= $results['faf_images'] ?></td>
-            </tr>
-            <tr>
-                <th>OCT Images Processed</th>
-                <td><?= $results['oct_images'] ?></td>
-            </tr>
-            <tr>
-                <th>VF Images Processed</th>
-                <td><?= $results['vf_images'] ?></td>
-            </tr>
-            <tr>
-                <th>MFERG Images Processed</th>
-                <td><?= $results['mferg_images'] ?></td>
-            </tr>
-        </table>
+    <div class="container">
+        <h1>CSV Import Results</h1>
+        <p>File processed: <?= htmlspecialchars($csvFilePath) ?></p>
         
-        <?php if (!empty($results['errors'])): ?>
-            <h2 class="error">Errors Encountered (<?= count($results['errors']) ?>)</h2>
-            <ul>
-                <?php foreach ($results['errors'] as $error): ?>
-                    <li><?= htmlspecialchars($error) ?></li>
-                <?php endforeach; ?>
-            </ul>
-        <?php else: ?>
-            <p class="success">Import completed successfully!</p>
-        <?php endif; ?>
+        <div class="results">
+            <h2 class="<?= $messageClass ?>"><?= $message ?></h2>
+            
+            <table>
+                <tr>
+                    <th>Patients Imported</th>
+                    <td><?= $results['patients'] ?></td>
+                </tr>
+                <tr>
+                    <th>Visits Imported</th>
+                    <td><?= $results['visits'] ?></td>
+                </tr>
+                <tr>
+                    <th>FAF Images Processed</th>
+                    <td><?= $results['faf_images'] ?></td>
+                </tr>
+                <tr>
+                    <th>OCT Images Processed</th>
+                    <td><?= $results['oct_images'] ?></td>
+                </tr>
+                <tr>
+                    <th>VF Images Processed</th>
+                    <td><?= $results['vf_images'] ?></td>
+                </tr>
+                <tr>
+                    <th>MFERG Images Processed</th>
+                    <td><?= $results['mferg_images'] ?></td>
+                </tr>
+            </table>
+            
+            <?php if (!empty($results['errors'])): ?>
+                <h3>Errors Encountered:</h3>
+                <div class="error-list">
+                    <?php foreach ($results['errors'] as $error): ?>
+                        <p><?= htmlspecialchars($error) ?></p>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+        
+        <p><a href="index.php">Return to Dashboard</a></p>
     </div>
 </body>
 </html>
