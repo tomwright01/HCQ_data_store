@@ -93,14 +93,13 @@ if ($search_patient_id) {
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f4f7f6;
+            background-color: white;
             color: #333;
             display: flex;
             justify-content: center;
             align-items: center;
             flex-direction: column;
             min-height: 100vh;
-            background-image: url('https://via.placeholder.com/1500x1000');
             background-size: cover;
             background-position: center;
         }
@@ -121,11 +120,12 @@ if ($search_patient_id) {
             border-radius: 10px;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             margin-bottom: 30px;
+            border: 1px solid #ddd;
         }
 
         h1 {
             font-size: 36px;
-            color: #4CAF50;
+            color: rgb(0, 168, 143);
         }
 
         .search-form {
@@ -143,15 +143,16 @@ if ($search_patient_id) {
         .search-form button {
             padding: 10px 20px;
             font-size: 16px;
-            background-color: #4CAF50;
+            background-color: rgb(0, 168, 143);
             color: white;
             border: none;
             border-radius: 5px;
             cursor: pointer;
+            transition: background-color 0.3s;
         }
 
         .search-form button:hover {
-            background-color: #45a049;
+            background-color: rgb(0, 140, 120);
         }
 
         table {
@@ -167,19 +168,27 @@ if ($search_patient_id) {
         }
 
         th {
-            background-color: #4CAF50;
+            background-color: rgb(0, 168, 143);
             color: white;
         }
 
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+
         td a {
-            color: #4CAF50;
+            color: rgb(0, 168, 143);
             text-decoration: none;
             font-weight: bold;
             transition: all 0.3s ease;
         }
 
         td a:hover {
-            color: #3d8b40;
+            color: rgb(0, 140, 120);
             text-decoration: underline;
         }
 
@@ -191,18 +200,19 @@ if ($search_patient_id) {
 
         .metric-bar {
             width: 100%;
-            background-color: #ddd;
+            background-color: #eee;
             height: 30px;
             margin: 10px 0;
             border-radius: 5px;
             position: relative;
             overflow: hidden;
             transition: width 1s ease;
+            border: 1px solid #ddd;
         }
 
         .metric-bar .metric-fill {
             height: 100%;
-            background-color: #4CAF50;
+            background-color: rgb(0, 168, 143);
             width: 0;
             transition: width 1s ease;
         }
@@ -225,11 +235,12 @@ if ($search_patient_id) {
             padding: 20px;
             border-radius: 10px;
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            border: 1px solid #ddd;
         }
 
         .chart-title {
             text-align: center;
-            color: #4CAF50;
+            color: rgb(0, 168, 143);
             margin-bottom: 15px;
         }
 
@@ -249,10 +260,11 @@ if ($search_patient_id) {
             margin: 10px;
             width: 300px;
             text-align: left;
+            border: 1px solid #ddd;
         }
 
         .patient-card h3 {
-            color: #4CAF50;
+            color: rgb(0, 168, 143);
             border-bottom: 1px solid #eee;
             padding-bottom: 10px;
         }
@@ -265,7 +277,7 @@ if ($search_patient_id) {
             display: inline-block;
             margin-top: 10px;
             padding: 8px 15px;
-            background: #4CAF50;
+            background: rgb(0, 168, 143);
             color: white;
             border-radius: 4px;
             text-decoration: none;
@@ -273,7 +285,18 @@ if ($search_patient_id) {
         }
 
         .viewer-link:hover {
-            background: #3d8b40;
+            background: rgb(0, 140, 120);
+        }
+
+        a {
+            color: rgb(0, 168, 143);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        a:hover {
+            color: rgb(0, 140, 120);
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -334,7 +357,7 @@ if ($search_patient_id) {
             <?php endif; ?>
         <?php endif; ?>
 
-        <h2><a href="form.php" style="color: #4CAF50; text-decoration: none; font-weight: bold;">Add New Patient and Visit</a></h2>
+        <h2><a href="form.php" style="color: rgb(0, 168, 143); text-decoration: none; font-weight: bold;">Add New Patient and Visit</a></h2>
     </div>
 
     <div class="stats-section">
@@ -385,8 +408,8 @@ if ($search_patient_id) {
                 labels: ['Male', 'Female'],
                 datasets: [{
                     data: [<?= $gender_data['m'] ?? 0 ?>, <?= $gender_data['f'] ?? 0 ?>],
-                    backgroundColor: ['#36a2eb', '#ff6384'],
-                    borderColor: ['#36a2eb', '#ff6384'],
+                    backgroundColor: ['rgb(0, 168, 143)', 'rgb(0, 100, 80)'],
+                    borderColor: ['#fff', '#fff'],
                     borderWidth: 1
                 }]
             },
@@ -418,8 +441,8 @@ if ($search_patient_id) {
                 datasets: [{
                     label: 'Patients by Location',
                     data: <?= json_encode(array_values($location_data)) ?>,
-                    backgroundColor: '#4CAF50',
-                    borderColor: '#4CAF50',
+                    backgroundColor: 'rgb(0, 168, 143)',
+                    borderColor: 'rgb(0, 140, 120)',
                     borderWidth: 1
                 }]
             },
@@ -472,8 +495,8 @@ if ($search_patient_id) {
                 datasets: [{
                     label: 'Number of Patients',
                     data: <?= json_encode($bins) ?>,
-                    backgroundColor: 'rgba(76, 175, 80, 0.6)',
-                    borderColor: 'rgba(76, 175, 80, 1)',
+                    backgroundColor: 'rgba(0, 168, 143, 0.6)',
+                    borderColor: 'rgba(0, 140, 120, 1)',
                     borderWidth: 1
                 }]
             },
