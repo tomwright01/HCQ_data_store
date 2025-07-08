@@ -87,12 +87,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>FAF Viewer - Patient <?= $patient_id ?></title>
     <style>
+        :root {
+            --primary-color: #00a88f;
+            --primary-dark: #008774;
+            --text-color: #333;
+            --bg-color: #fff;
+            --light-bg: #f5f5f5;
+            --border-color: #e0e0e0;
+            --meta-bg: #f0f0f0;
+            --card-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f5f5f5;
-            color: #333;
+            background-color: var(--light-bg);
+            color: var(--text-color);
         }
         
         .container {
@@ -132,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .control-btn {
-            background: #4CAF50;
+            background: var(--primary-color);
             color: white;
             border: none;
             border-radius: 4px;
@@ -146,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .control-btn:hover {
-            background: #3d8b40;
+            background: var(--primary-dark);
         }
         
         .zoom-controls {
@@ -190,18 +201,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .info-section {
             flex: 1;
             padding: 30px;
-            background-color: white;
+            background-color: var(--bg-color);
             overflow-y: auto;
         }
         
         .patient-header {
-            border-bottom: 2px solid #4CAF50;
+            border-bottom: 2px solid var(--primary-color);
             padding-bottom: 15px;
             margin-bottom: 20px;
         }
         
         .patient-header h1 {
-            color: #4CAF50;
+            color: var(--primary-color);
             margin: 0;
             display: flex;
             align-items: center;
@@ -215,7 +226,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .meta-item {
-            background-color: #f0f0f0;
+            background-color: var(--meta-bg);
             padding: 8px 15px;
             border-radius: 20px;
             font-size: 14px;
@@ -225,21 +236,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .meta-item i {
             margin-right: 8px;
-            color: #4CAF50;
+            color: var(--primary-color);
         }
         
         .score-card {
-            background-color: #f9f9f9;
+            background-color: var(--light-bg);
             border-radius: 10px;
             padding: 25px;
             margin: 25px 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
         }
         
         .score-value {
             font-size: 72px;
             font-weight: bold;
-            color: #4CAF50;
+            color: var(--primary-color);
             text-align: center;
             margin: 20px 0;
             line-height: 1;
@@ -254,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .progress-container {
             width: 100%;
-            background-color: #e0e0e0;
+            background-color: var(--border-color);
             border-radius: 5px;
             margin: 20px 0;
             height: 25px;
@@ -262,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .progress-bar {
             height: 100%;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             border-radius: 5px;
             width: <?= $merci_score ? ($merci_score / 5 * 100) : 0 ?>%;
             transition: width 0.3s ease;
@@ -285,28 +296,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .grading-card {
-            background-color: #f9f9f9;
+            background-color: var(--light-bg);
             border-radius: 10px;
             padding: 25px;
             margin: 25px 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
         }
         
         .grading-card h2 {
-            color: #4CAF50;
+            color: var(--primary-color);
             margin-top: 0;
             margin-bottom: 20px;
         }
         
         .grading-system {
-            border-left: 3px solid #e0e0e0;
+            border-left: 3px solid var(--border-color);
             padding-left: 15px;
             margin: 15px 0;
         }
         
         .stage {
             padding: 12px 0;
-            border-bottom: 1px dashed #e0e0e0;
+            border-bottom: 1px dashed var(--border-color);
             display: flex;
             align-items: flex-start;
         }
@@ -316,16 +327,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .stage.active {
-            background-color: #f0f9f0;
+            background-color: rgba(0, 168, 143, 0.1);
             margin: 0 -25px;
             padding: 12px 25px;
-            border-left: 4px solid #4CAF50;
+            border-left: 4px solid var(--primary-color);
         }
         
         .stage-radio {
             margin-right: 15px;
             margin-top: 3px;
-            accent-color: #4CAF50;
+            accent-color: var(--primary-color);
             transform: scale(1.3);
             cursor: pointer;
         }
@@ -336,7 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .stage-number {
             font-weight: bold;
-            color: #4CAF50;
+            color: var(--primary-color);
             margin-bottom: 5px;
         }
         
@@ -362,7 +373,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .save-btn {
             align-self: flex-start;
             padding: 8px 20px;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
             border: none;
             border-radius: 5px;
@@ -373,11 +384,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .save-btn:hover {
-            background-color: #3d8b40;
+            background-color: var(--primary-dark);
         }
         
         .save-confirmation {
-            color: #4CAF50;
+            color: var(--primary-color);
             font-size: 14px;
             margin-top: 10px;
         }
@@ -390,7 +401,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: flex;
             margin-bottom: 12px;
             padding-bottom: 12px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border-color);
         }
         
         .detail-label {
@@ -409,7 +420,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             padding: 12px 25px;
             margin-top: 25px;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
             text-decoration: none;
             border-radius: 5px;
@@ -418,14 +429,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .back-button:hover {
-            background-color: #3d8b40;
+            background-color: var(--primary-dark);
         }
         
         .eye-indicator {
             display: inline-flex;
             align-items: center;
             padding: 5px 15px;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
             border-radius: 20px;
             font-size: 14px;
@@ -444,6 +455,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .scale-item {
             text-align: center;
             flex: 1;
+        }
+        
+        .fullscreen-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 168, 143, 0.7);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 10;
+        }
+        
+        .fullscreen-btn:hover {
+            background: rgba(0, 168, 143, 0.9);
+        }
+        
+        .image-section.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1000;
+        }
+        
+        .image-section.fullscreen .image-wrapper {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .image-section.fullscreen .fullscreen-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
         }
         
         @media (max-width: 768px) {
@@ -467,7 +516,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <body>
     <div class="container">
         <!-- Image Section with Controls -->
-        <div class="image-section">
+        <div class="image-section" id="image-section">
             <div class="image-controls">
                 <div class="control-group zoom-controls">
                     <button class="control-btn zoom-out">-</button>
@@ -489,6 +538,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                          style="filter: brightness(<?= $current_brightness ?>);">
                 </div>
             </div>
+            
+            <button class="fullscreen-btn" id="fullscreen-btn">Fullscreen</button>
+            
             <div class="eye-indicator">
                 <?= $eye ?> (<?= $eye == 'OD' ? 'Right Eye' : 'Left Eye' ?>)
             </div>
@@ -670,6 +722,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Image Zoom and Brightness Controls
         const imageContainer = document.getElementById('image-container');
         const fafImage = document.getElementById('faf-image');
+        const imageSection = document.getElementById('image-section');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
         let currentZoom = 1;
         const brightnessSlider = document.querySelector('.brightness-slider');
         
@@ -710,6 +764,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             fafImage.style.filter = `brightness(${brightnessSlider.value})`;
         }
         
+        // Fullscreen functionality
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                imageSection.classList.add('fullscreen');
+                if (imageSection.requestFullscreen) {
+                    imageSection.requestFullscreen();
+                } else if (imageSection.webkitRequestFullscreen) {
+                    imageSection.webkitRequestFullscreen();
+                } else if (imageSection.msRequestFullscreen) {
+                    imageSection.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
+        });
+        
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                imageSection.classList.remove('fullscreen');
+            }
+        });
+        
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === '+') {
@@ -721,6 +803,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else if (e.key === '0') {
                 currentZoom = 1;
                 updateZoom();
+            } else if (e.key === 'f') {
+                fullscreenBtn.click();
             }
         });
         
