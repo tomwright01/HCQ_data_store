@@ -211,6 +211,8 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
         .stage {
             padding: 12px 0;
             border-bottom: 1px dashed #e0e0e0;
+            display: flex;
+            align-items: flex-start;
         }
         
         .stage:last-child {
@@ -222,6 +224,18 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
             margin: 0 -25px;
             padding: 12px 25px;
             border-left: 4px solid #4CAF50;
+        }
+        
+        .stage-checkbox {
+            margin-right: 15px;
+            margin-top: 3px;
+            accent-color: #4CAF50;
+            transform: scale(1.3);
+            pointer-events: none;
+        }
+        
+        .stage-content {
+            flex: 1;
         }
         
         .stage-number {
@@ -387,28 +401,43 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
                 
                 <div class="grading-system">
                     <div class="stage <?= ($merci_score == 0) ? 'active' : '' ?>">
-                        <div class="stage-number">Stage 0</div>
-                        <div class="stage-description">No hyperautofluorescence (normal)</div>
+                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 0) ? 'checked' : '' ?>>
+                        <div class="stage-content">
+                            <div class="stage-number">Stage 0</div>
+                            <div class="stage-description">No hyperautofluorescence (normal)</div>
+                        </div>
                     </div>
                     
                     <div class="stage <?= ($merci_score == 1) ? 'active' : '' ?>">
-                        <div class="stage-number">Stage 1</div>
-                        <div class="stage-description">Localized parafoveal or pericentral hyperautofluorescence</div>
+                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 1) ? 'checked' : '' ?>>
+                        <div class="stage-content">
+                            <div class="stage-number">Stage 1</div>
+                            <div class="stage-description">Localized parafoveal or pericentral hyperautofluorescence</div>
+                        </div>
                     </div>
                     
                     <div class="stage <?= ($merci_score == 2) ? 'active' : '' ?>">
-                        <div class="stage-number">Stage 2</div>
-                        <div class="stage-description">Hyperautofluorescence extending >180° around fovea</div>
+                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 2) ? 'checked' : '' ?>>
+                        <div class="stage-content">
+                            <div class="stage-number">Stage 2</div>
+                            <div class="stage-description">Hyperautofluorescence extending >180° around fovea</div>
+                        </div>
                     </div>
                     
                     <div class="stage <?= ($merci_score == 3) ? 'active' : '' ?>">
-                        <div class="stage-number">Stage 3</div>
-                        <div class="stage-description">Combined RPE defects (hypoautofluorescence) without foveal involvement</div>
+                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 3) ? 'checked' : '' ?>>
+                        <div class="stage-content">
+                            <div class="stage-number">Stage 3</div>
+                            <div class="stage-description">Combined RPE defects (hypoautofluorescence) without foveal involvement</div>
+                        </div>
                     </div>
                     
                     <div class="stage <?= ($merci_score == 4) ? 'active' : '' ?>">
-                        <div class="stage-number">Stage 4</div>
-                        <div class="stage-description">Fovea-involving hypoautofluorescence</div>
+                        <input type="checkbox" class="stage-checkbox" <?= ($merci_score == 4) ? 'checked' : '' ?>>
+                        <div class="stage-content">
+                            <div class="stage-number">Stage 4</div>
+                            <div class="stage-description">Fovea-involving hypoautofluorescence</div>
+                        </div>
                     </div>
                 </div>
                 
