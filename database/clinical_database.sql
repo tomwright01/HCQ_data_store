@@ -89,11 +89,15 @@ CREATE TABLE IF NOT EXISTS MFERG_Images (
 );
 
 CREATE TABLE IF NOT EXISTS Grading (
-  grading_id     INT AUTO_INCREMENT PRIMARY KEY,
-  visit_id       INT NOT NULL,
-  test_type      ENUM('faf','oct','vf','mferg') NOT NULL,
-  score          TINYINT NOT NULL CHECK (score BETWEEN 0 AND 4),
-  date_recorded  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (visit_id) REFERENCES Visits(visit_id)
+    grading_id INT AUTO_INCREMENT PRIMARY KEY,
+    visit_id INT NOT NULL,
+    test_type ENUM('faf', 'oct', 'vf', 'mferg') NOT NULL,
+    eye_side ENUM('OD', 'OS') NOT NULL,
+    score_type ENUM('stage', 'merci', 'severity', 'other') NOT NULL,
+    score_value TINYINT NOT NULL,
+    notes TEXT,
+    grader_id INT,
+    date_recorded TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (visit_id) REFERENCES Visits(visit_id),
+    FOREIGN KEY (grader_id) REFERENCES Users(user_id)  -- Assuming you have a Users table
 );
-
