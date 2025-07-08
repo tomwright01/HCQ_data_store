@@ -188,6 +188,61 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
             justify-content: center;
         }
         
+        .grading-card {
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .grading-card h2 {
+            color: #4CAF50;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        
+        .grading-system {
+            border-left: 3px solid #e0e0e0;
+            padding-left: 15px;
+            margin: 15px 0;
+        }
+        
+        .stage {
+            padding: 12px 0;
+            border-bottom: 1px dashed #e0e0e0;
+        }
+        
+        .stage:last-child {
+            border-bottom: none;
+        }
+        
+        .stage.active {
+            background-color: #f0f9f0;
+            margin: 0 -25px;
+            padding: 12px 25px;
+            border-left: 4px solid #4CAF50;
+        }
+        
+        .stage-number {
+            font-weight: bold;
+            color: #4CAF50;
+            margin-bottom: 5px;
+        }
+        
+        .stage-description {
+            color: #555;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .grading-note {
+            font-size: 13px;
+            color: #666;
+            font-style: italic;
+            margin-top: 15px;
+        }
+        
         .visit-details {
             margin-top: 30px;
         }
@@ -325,10 +380,41 @@ $merci_score = ($eye == 'OD') ? $visit['merci_rating_right_eye'] : $visit['merci
                     <div class="scale-item">4 - Significant</div>
                     <div class="scale-item">5 - Severe</div>
                 </div>
+            </div>
+            
+            <div class="grading-card">
+                <h2>FAF Staging System</h2>
                 
-                <p style="margin-top: 20px; font-size: 14px; color: #666;">
-                    The MERCI grading system evaluates the severity of retinal changes visible on FAF imaging.
-                    Higher scores indicate more severe retinal abnormalities.
+                <div class="grading-system">
+                    <div class="stage <?= ($merci_score == 0) ? 'active' : '' ?>">
+                        <div class="stage-number">Stage 0</div>
+                        <div class="stage-description">No hyperautofluorescence (normal)</div>
+                    </div>
+                    
+                    <div class="stage <?= ($merci_score == 1) ? 'active' : '' ?>">
+                        <div class="stage-number">Stage 1</div>
+                        <div class="stage-description">Localized parafoveal or pericentral hyperautofluorescence</div>
+                    </div>
+                    
+                    <div class="stage <?= ($merci_score == 2) ? 'active' : '' ?>">
+                        <div class="stage-number">Stage 2</div>
+                        <div class="stage-description">Hyperautofluorescence extending >180° around fovea</div>
+                    </div>
+                    
+                    <div class="stage <?= ($merci_score == 3) ? 'active' : '' ?>">
+                        <div class="stage-number">Stage 3</div>
+                        <div class="stage-description">Combined RPE defects (hypoautofluorescence) without foveal involvement</div>
+                    </div>
+                    
+                    <div class="stage <?= ($merci_score == 4) ? 'active' : '' ?>">
+                        <div class="stage-number">Stage 4</div>
+                        <div class="stage-description">Fovea-involving hypoautofluorescence</div>
+                    </div>
+                </div>
+                
+                <p class="grading-note">
+                    This classification system addresses topographic characteristics of retinopathy 
+                    using disease patterns and assesses risk of vision-threatening retinopathy.
                 </p>
             </div>
             
