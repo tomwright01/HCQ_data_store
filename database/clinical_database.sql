@@ -1,4 +1,4 @@
--- Step 1: Create the database
+/*-- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
@@ -33,13 +33,12 @@ CREATE INDEX idx_patient_subject ON Patients(subject_id);
 CREATE INDEX idx_test_patient ON Tests(patient_id);
 CREATE INDEX idx_test_date ON Tests(date_of_test);
 
+*/
 
 
 
 
-
-
-/*-- Step 1: Create the database
+-- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
 
 -- Step 2: Use the created database
@@ -142,4 +141,4 @@ CREATE TABLE IF NOT EXISTS Grading (
     FOREIGN KEY (visit_id) REFERENCES Visits(visit_id),
     FOREIGN KEY (grader_id) REFERENCES Users(user_id)  -- Assuming you have a Users table
 );
-*/
+
