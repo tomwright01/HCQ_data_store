@@ -56,6 +56,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->bind_param("ii", $new_stage, $visit['visit_id']);
             if ($stmt->execute()) {
                 $current_stage = $new_stage;
+                // Refresh visit data
+                $stmt = $conn->prepare("SELECT * FROM Visits WHERE visit_id = ?");
+                $stmt->bind_param("i", $visit['visit_id']);
+                $stmt->execute();
+                $visit = $stmt->get_result()->fetch_assoc();
             }
         }
     }
@@ -489,7 +494,176 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
         
-        <!-- [Rest of the HTML remains exactly the same as previous version] -->
+        <!-- Information Section -->
+        <div class="info-section">
+            <div class="patient-header">
+                <h1>
+                    Patient <?= htmlspecialchars($patient_id) ?>
+                    <?php if (!empty($patient['disease_name'])): ?>
+                        <span style="font-size: 18px; margin-left: 15px; color: #666;">
+                            (<?= htmlspecialchars($patient['disease_name']) ?>)
+                        </span>
+                    <?php endif; ?>
+                </h1>
+                <div class="patient-meta">
+                    <div class="meta-item">
+                        <i>👤</i> <?= $age ?> years
+                    </div>
+                    <div class="meta-item">
+                        <i>⚥</i> <?= $patient['gender'] == 'm' ? 'Male' : 'Female' ?>
+                    </div>
+                    <div class="meta-item">
+                        <i>📍</i> <?= htmlspecialchars($patient['location']) ?>
+                    </div>
+                    <?php if (!empty($patient['referring_doctor'])): ?>
+                        <div class="meta-item">
+                            <i>👨‍⚕️</i> Dr. <?= htmlspecialchars($patient['referring_doctor']) ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+            
+            <div class="score-card">
+                <h2>MERCI Grading Score</h2>
+                <div class="score-value"><?= $merci_score ? htmlspecialchars($merci_score) : 'N/A' ?></div>
+                <div class="score-label">out of 5</div>
+                
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <?php if ($merci_score): ?>
+                            <div class="progress-marker"><?= $merci_score ?></div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+                
+                <div class="severity-scale">
+                    <div class="scale-item">1 - Minimal</div>
+                    <div class="scale-item">2 - Mild</div>
+                    <div class="scale-item">3 - Moderate</div>
+                    <div class="scale-item">4 - Significant</div>
+                    <div class="scale-item">5 - Severe</div>
+                </div>
+            </div>
+            
+            <div class="grading-card">
+                <h2>FAF Staging System</h2>
+                
+                <form method="POST" class="stage-form">
+                    <div class="grading-system">
+                        <div class="stage <?= ($current_stage == 0) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="0" class="stage-radio" 
+                                   id="stage-0" <?= ($current_stage == 0) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-0">
+                                    <div class="stage-number">Stage 0</div>
+                                    <div class="stage-description">No hyperautofluorescence (normal)</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="stage <?= ($current_stage == 1) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="1" class="stage-radio" 
+                                   id="stage-1" <?= ($current_stage == 1) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-1">
+                                    <div class="stage-number">Stage 1</div>
+                                    <div class="stage-description">Localized parafoveal or pericentral hyperautofluorescence</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="stage <?= ($current_stage == 2) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="2" class="stage-radio" 
+                                   id="stage-2" <?= ($current_stage == 2) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-2">
+                                    <div class="stage-number">Stage 2</div>
+                                    <div class="stage-description">Hyperautofluorescence extending >180° around fovea</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="stage <?= ($current_stage == 3) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="3" class="stage-radio" 
+                                   id="stage-3" <?= ($current_stage == 3) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-3">
+                                    <div class="stage-number">Stage 3</div>
+                                    <div class="stage-description">Combined RPE defects (hypoautofluorescence) without foveal involvement</div>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="stage <?= ($current_stage == 4) ? 'active' : '' ?>">
+                            <input type="radio" name="stage" value="4" class="stage-radio" 
+                                   id="stage-4" <?= ($current_stage == 4) ? 'checked' : '' ?>>
+                            <div class="stage-content">
+                                <label for="stage-4">
+                                    <div class="stage-number">Stage 4</div>
+                                    <div class="stage-description">Fovea-involving hypoautofluorescence</div>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="save-btn">Save FAF Stage</button>
+                    <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['stage'])): ?>
+                        <div class="save-confirmation" style="display: block;">
+                            Stage updated successfully!
+                        </div>
+                    <?php endif; ?>
+                </form>
+                
+                <p class="grading-note">
+                    This classification system addresses topographic characteristics of retinopathy 
+                    using disease patterns and assesses risk of vision-threatening retinopathy.
+                </p>
+            </div>
+            
+            <div class="visit-details">
+                <h2>Visit Information</h2>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Visit Date:</div>
+                    <div class="detail-value"><?= htmlspecialchars($visit['visit_date']) ?></div>
+                </div>
+                
+                <?php if (!empty($visit['visit_notes'])): ?>
+                    <div class="detail-row">
+                        <div class="detail-label">Clinical Notes:</div>
+                        <div class="detail-value"><?= nl2br(htmlspecialchars($visit['visit_notes'])) ?></div>
+                    </div>
+                <?php endif; ?>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Image Reference:</div>
+                    <div class="detail-value"><?= htmlspecialchars($ref) ?></div>
+                </div>
+                
+                <?php if (!empty($patient['disease_id'])): ?>
+                    <div class="detail-row">
+                        <div class="detail-label">Disease Code:</div>
+                        <div class="detail-value">
+                            <?= htmlspecialchars($patient['disease_id']) ?>
+                            <?php if (!empty($patient['disease_name'])): ?>
+                                (<?= htmlspecialchars($patient['disease_name']) ?>)
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endif; ?>
+                
+                <div class="detail-row">
+                    <div class="detail-label">FAF Stage:</div>
+                    <div class="detail-value">
+                        <?= !is_null($current_stage) ? "Stage $current_stage" : "Not graded" ?>
+                    </div>
+                </div>
+            </div>
+            
+            <a href="index.php?search_patient_id=<?= $patient_id ?>" class="back-button">
+                ← Back to Patient Record
+            </a>
+        </div>
     </div>
 
     <script>
