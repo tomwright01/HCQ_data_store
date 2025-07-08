@@ -724,6 +724,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         const fafImage = document.getElementById('faf-image');
         const imageSection = document.getElementById('image-section');
         const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const imageWrapper = document.querySelector('.image-wrapper');
         let currentZoom = 1;
         const brightnessSlider = document.querySelector('.brightness-slider');
         
@@ -775,6 +776,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 } else if (imageSection.msRequestFullscreen) {
                     imageSection.msRequestFullscreen();
                 }
+                
+                // Center the eye in fullscreen mode
+                setTimeout(() => {
+                    const imgWidth = fafImage.naturalWidth;
+                    const imgHeight = fafImage.naturalHeight;
+                    
+                    // Calculate center coordinates (assuming eye is roughly centered in the image)
+                    const centerX = imgWidth / 2;
+                    const centerY = imgHeight / 2;
+                    
+                    // Calculate the viewport dimensions
+                    const viewportWidth = window.innerWidth;
+                    const viewportHeight = window.innerHeight;
+                    
+                    // Calculate the scale needed to fit the image to the viewport
+                    const scaleX = viewportWidth / imgWidth;
+                    const scaleY = viewportHeight / imgHeight;
+                    const scale = Math.min(scaleX, scaleY);
+                    
+                    // Calculate the translation needed to center the eye
+                    const translateX = (viewportWidth / 2 - centerX * scale) / scale;
+                    const translateY = (viewportHeight / 2 - centerY * scale) / scale;
+                    
+                    // Apply the transformation
+                    imageContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+                    
+                    // Reset current zoom to the calculated scale
+                    currentZoom = scale;
+                }, 100);
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
@@ -789,6 +819,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
                 imageSection.classList.remove('fullscreen');
+                // Reset to normal view when exiting fullscreen
+                imageContainer.style.transform = `scale(${currentZoom})`;
             }
         });
         
