@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS Patients (
     FOREIGN KEY (disease_id) REFERENCES Diseases(disease_id)
 );
 
--- Step 5: Create the Visits table
+/*-- Step 5: Create the Visits table
 CREATE TABLE IF NOT EXISTS Visits (
     visit_id INT AUTO_INCREMENT PRIMARY KEY,
     patient_id INT,
@@ -89,6 +89,26 @@ CREATE TABLE IF NOT EXISTS Visits (
     date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
 );
+*/
+
+----shit is new----
+CREATE TABLE IF NOT EXISTS Tests (
+    test_id INT AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    date_of_test DATE NOT NULL,
+    eye ENUM('OD', 'OS') NOT NULL,
+    report_diagnosis ENUM('normal', 'abnormal', 'no input') DEFAULT 'no input',
+    exclusion ENUM('retinal detachment', 'generalized retinal dysfunction', 'unilateral testing', 'none') DEFAULT 'none',
+    merci_score TINYINT CHECK (merci_score BETWEEN 1 AND 100 OR merci_score IS NULL),
+    merci_diagnosis ENUM('normal', 'abnormal', 'no value') DEFAULT 'no value',
+    error_type ENUM('TN', 'FP', 'none') DEFAULT 'none',
+    faf_grade TINYINT CHECK (faf_grade BETWEEN 1 AND 4 OR faf_grade IS NULL),
+    oct_score DECIMAL(5,2) CHECK (oct_score BETWEEN 0 AND 10 OR oct_score IS NULL),
+    vf_score DECIMAL(5,2) CHECK (vf_score BETWEEN 0 AND 10 OR vf_score IS NULL),
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES Patients(patient_id)
+);
+
 
 -- Create FAF Images table if not exists
 CREATE TABLE IF NOT EXISTS FAF_Images (
