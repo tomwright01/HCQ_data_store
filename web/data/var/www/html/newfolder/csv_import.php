@@ -64,48 +64,78 @@ try {
             // Clean and format data
             $data = array_map('trim', $data);
             $data = array_map(function($v) { 
-                $v = trim($v);
+                $v = trim($v ?? ''); // Ensure we never pass null
                 return ($v === '' || strtolower($v) === 'null' || strtolower($v) === 'no value') ? null : $v; 
             }, $data);
 
             // Process Patient (Subject ID and DoB)
-            $subjectId = $data[0];
-            $dob = DateTime::createFromFormat('n/j/Y', $data[1]);
+            $subjectId = $data[0] ?? '';
+            $dob = DateTime::createFromFormat('n/j/Y', $data[1] ?? '');
             if (!$dob) {
-                throw new Exception("Invalid date format for DoB: " . $data[1]);
+                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL'));
             }
             $dobFormatted = $dob->format('Y-m-d');
 
             // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
-            $patientId = substr($subjectId, 0, 8) . substr($data[1], -2);
+            $patientId = substr($subjectId, 0, 8) . substr($data[1] ?? '', -2);
             
             // Insert or get existing patient
             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
             
             // Process Test data
-            $testDate = DateTime::createFromFormat('n/j/Y', $data[2]);
+            $testDate = DateTime::createFromFormat('n/j/Y', $data[2] ?? '');
             if (!$testDate) {
-                throw new Exception("Invalid date format for test date: " . $data[2]);
+                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
             }
             $testDateFormatted = $testDate->format('Y-m-d');
             
             // Generate test_id (patientId + test date without hyphens)
             $testId = $patientId . str_replace('-', '', $testDateFormatted);
 
-            // Prepare test data
+            // Prepare test data with null checks
+            $eyeValue = $data[3] ?? null;
+            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+
+            $reportDiagnosisValue = $data[4] ?? null;
+            $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
+                ? strtolower($reportDiagnosisValue) 
+                : 'no input';
+
+            $exclusionValue = $data[5] ?? null;
+            $exclusion = ($exclusionValue !== null && in_array(strtolower($exclusionValue), 
+                ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) 
+                ? strtolower($exclusionValue) 
+                : 'none';
+
+            $merciScore = (isset($data[6]) && is_numeric($data[6]) && $data[6] >= 1 && $data[6] <= 100) ? (int)$data[6] : null;
+
+            $merciDiagnosisValue = $data[7] ?? null;
+            $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
+                ? strtolower($merciDiagnosisValue) 
+                : 'no value';
+
+            $errorTypeValue = $data[8] ?? null;
+            $errorType = ($errorTypeValue !== null && in_array(strtoupper($errorTypeValue), ['TN', 'FP'])) 
+                ? strtoupper($errorTypeValue) 
+                : 'none';
+
+            $fafGrade = (isset($data[9]) && is_numeric($data[9]) && $data[9] >= 1 && $data[9] <= 4) ? (int)$data[9] : null;
+            $octScore = isset($data[10]) && is_numeric($data[10]) ? round(floatval($data[10]), 2) : null;
+            $vfScore = isset($data[11]) && is_numeric($data[11]) ? round(floatval($data[11]), 2) : null;
+
             $testData = [
                 'test_id' => $testId,
                 'patient_id' => $patientId,
                 'date_of_test' => $testDateFormatted,
-                'eye' => in_array(strtoupper($data[3]), ['OD', 'OS']) ? strtoupper($data[3]) : null,
-                'report_diagnosis' => in_array(strtolower($data[4]), ['normal', 'abnormal']) ? strtolower($data[4]) : 'no input',
-                'exclusion' => in_array(strtolower($data[5]), ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing']) ? strtolower($data[5]) : 'none',
-                'merci_score' => is_numeric($data[6]) && $data[6] >= 1 && $data[6] <= 100 ? (int)$data[6] : null,
-                'merci_diagnosis' => in_array(strtolower($data[7]), ['normal', 'abnormal']) ? strtolower($data[7]) : 'no value',
-                'error_type' => in_array(strtoupper($data[8]), ['TN', 'FP']) ? strtoupper($data[8]) : 'none',
-                'faf_grade' => is_numeric($data[9]) && $data[9] >= 1 && $data[9] <= 4 ? (int)$data[9] : null,
-                'oct_score' => is_numeric($data[10]) ? round(floatval($data[10]), 2) : null,
-                'vf_score' => is_numeric($data[11]) ? round(floatval($data[11]), 2) : null
+                'eye' => $eye,
+                'report_diagnosis' => $reportDiagnosis,
+                'exclusion' => $exclusion,
+                'merci_score' => $merciScore,
+                'merci_diagnosis' => $merciDiagnosis,
+                'error_type' => $errorType,
+                'faf_grade' => $fafGrade,
+                'oct_score' => $octScore,
+                'vf_score' => $vfScore
             ];
 
             // Insert Test
