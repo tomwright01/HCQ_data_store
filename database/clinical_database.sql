@@ -12,7 +12,7 @@ CREATE TABLE patients (
     INDEX idx_subject (subject_id)
 );
 
--- Tests table (formerly visits)
+-- Tests table
 CREATE TABLE tests (
     test_id VARCHAR(20) PRIMARY KEY,
     patient_id VARCHAR(20) NOT NULL,
@@ -32,5 +32,4 @@ CREATE TABLE tests (
     INDEX idx_patient (patient_id),
     INDEX idx_date (date_of_test)
 );
-
 
