@@ -1,4 +1,8 @@
 <?php
+// Enable error reporting
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 // Database configuration
 $servername = "mariadb";
 $username = "root";
@@ -72,18 +76,25 @@ try {
             }
             $dobFormatted = $dob->format('Y-m-d');
 
+            // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
+            $patientId = substr($subjectId, 0, 8) . substr($data[1], -2);
+            
             // Insert or get existing patient
-            $patientId = getOrCreatePatient($conn, $subjectId, $dobFormatted);
+            $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
             
             // Process Test data
             $testDate = DateTime::createFromFormat('n/j/Y', $data[2]);
             if (!$testDate) {
-                throw new Exception("Invalid date format for DoT: " . $data[2]);
+                throw new Exception("Invalid date format for test date: " . $data[2]);
             }
             $testDateFormatted = $testDate->format('Y-m-d');
+            
+            // Generate test_id (patientId + test date without hyphens)
+            $testId = $patientId . str_replace('-', '', $testDateFormatted);
 
             // Prepare test data
             $testData = [
+                'test_id' => $testId,
                 'patient_id' => $patientId,
                 'date_of_test' => $testDateFormatted,
                 'eye' => in_array(strtoupper($data[3]), ['OD', 'OS']) ? strtoupper($data[3]) : null,
@@ -128,20 +139,20 @@ try {
 }
 
 // Database functions
-function getOrCreatePatient($conn, $subjectId, $dob) {
+function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     // Check if patient exists
-    $stmt = $conn->prepare("SELECT patient_id FROM Patients WHERE subject_id = ?");
-    $stmt->bind_param("s", $subjectId);
+    $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
+    $stmt->bind_param("s", $patientId);
     $stmt->execute();
     $result = $stmt->get_result();
     
     if ($result->num_rows > 0) {
-        return $result->fetch_assoc()['patient_id'];
+        return $patientId; // Return existing ID
     }
     
     // Create new patient
-    $stmt = $conn->prepare("INSERT INTO Patients (subject_id, date_of_birth) VALUES (?, ?)");
-    $stmt->bind_param("ss", $subjectId, $dob);
+    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) VALUES (?, ?, ?)");
+    $stmt->bind_param("sss", $patientId, $subjectId, $dob);
     
     if (!$stmt->execute()) {
         throw new Exception("Patient insert failed: " . $stmt->error);
@@ -150,19 +161,20 @@ function getOrCreatePatient($conn, $subjectId, $dob) {
     global $results;
     $results['patients']++;
     
-    return $conn->insert_id;
+    return $patientId;
 }
 
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
-        INSERT INTO Tests (
-            patient_id, date_of_test, eye, report_diagnosis, exclusion,
+        INSERT INTO tests (
+            test_id, patient_id, date_of_test, eye, report_diagnosis, exclusion,
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
     $stmt->bind_param(
-        "isssssisidd",
+        "ssssssisiddd",
+        $testData['test_id'],
         $testData['patient_id'],
         $testData['date_of_test'],
         $testData['eye'],
