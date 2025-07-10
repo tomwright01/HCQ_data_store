@@ -44,12 +44,12 @@ try {
     // Start transaction
     $conn->begin_transaction();
 
-    // Skip header row if exists
-    fgetcsv($handle);
+    // Skip header row if exists (with fixed fgetcsv parameters)
+    fgetcsv($handle, 0, ",", '"', "\0");
     
     $lineNumber = 1; // Start counting from 1 (header is line 0)
     
-    while (($data = fgetcsv($handle)) !== FALSE) {
+    while (($data = fgetcsv($handle, 0, ",", '"', "\0")) !== FALSE) {
         $lineNumber++;
         
         try {
@@ -147,7 +147,7 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     $result = $stmt->get_result();
     
     if ($result->num_rows > 0) {
-        return $patientId; // Return existing ID
+        return $patientId;
     }
     
     // Create new patient
