@@ -1,5 +1,5 @@
 -- Database creation
-CREATE DATABASE PatientData;
+CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
 -- Patients table with enhanced constraints
