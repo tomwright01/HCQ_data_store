@@ -3,7 +3,7 @@
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
-$dbname = "hospital_eye_reports";
+$dbname = "PatientData";
 
 // CSV file path
 $csvFilePath = "/var/www/html/data/Patient Info Master 1(Retrospective Data).csv";
