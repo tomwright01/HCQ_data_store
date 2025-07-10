@@ -97,8 +97,7 @@ try {
             $eyeValue = $data[4] ?? null;
 
             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
-            die("Final eye value after processing: " . var_export($eye, true));
-
+            
             $reportDiagnosisValue = $data[5] ?? null;
             $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
                 ? strtolower($reportDiagnosisValue) 
@@ -221,7 +220,7 @@ function insertTest($conn, $testData) {
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    
+    die(json_serialise($testData));
     $stmt->bind_param(
         "ssssssisiddd",
         $testData['test_id'],
