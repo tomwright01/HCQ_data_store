@@ -89,15 +89,14 @@ try {
             }
             $testDateFormatted = $testDate->format('Y-m-d');
             
-            // Generate test_id (patientId + test date without hyphens)
-            $testId = $patientId . str_replace('-', '', $testDateFormatted);
+            // Get eye value first
+            $eyeValue = $data[4] ?? null;
+            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : 'UN';
+            
+            // Generate test_id with eye included (format: patientId + date + _ + eye)
+            $testId = $patientId . str_replace('-', '', $testDateFormatted) . '_' . $eye;
 
             // Prepare test data with null checks
-
-            $eyeValue = $data[4] ?? null;
-
-            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
-            
             $reportDiagnosisValue = $data[5] ?? null;
             $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
                 ? strtolower($reportDiagnosisValue) 
@@ -172,25 +171,13 @@ try {
 
 // Database functions
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
-    // Debug: Show incoming parameters
-    //die("DEBUG - getOrCreatePatient() called with:
-    //   Patient ID: $patientId
-    //    Subject ID: $subjectId
-    //    DoB: $dob");
-    
     // Check if patient exists
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
     $stmt->execute();
     $result = $stmt->get_result();
     
-    // Debug: Show query results
-    //die("DEBUG - Patient check results:
-    //    Num rows: " . $result->num_rows . "
-    //    Patient ID from DB: " . ($result->num_rows > 0 ? $result->fetch_assoc()['patient_id'] : 'None'));
-    
     if ($result->num_rows > 0) {
-        die("DEBUG - Returning existing patient ID: $patientId");
         return $patientId;
     }
     
@@ -199,17 +186,12 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     $stmt->bind_param("sss", $patientId, $subjectId, $dob);
     
     if (!$stmt->execute()) {
-        die("DEBUG - Patient insert failed: " . $stmt->error);
         throw new Exception("Patient insert failed: " . $stmt->error);
     }
     
     global $results;
     $results['patients']++;
     
-    //die("DEBUG - Successfully created new patient:
-    //    Patient ID: $patientId
-    //    Subject ID: $subjectId
-    //    DoB: $dob");
     return $patientId;
 }
 
@@ -220,7 +202,7 @@ function insertTest($conn, $testData) {
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    //die(json_encode($testData));
+    
     $stmt->bind_param(
         "ssssssisiddd",
         $testData['test_id'],
@@ -236,7 +218,7 @@ function insertTest($conn, $testData) {
         $testData['oct_score'],
         $testData['vf_score']
     );
-    //die(json_encode($testData));
+    
     if (!$stmt->execute()) {
         throw new Exception("Test insert failed: " . $stmt->error);
     }
