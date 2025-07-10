@@ -40,7 +40,7 @@ if (isset($_POST['import'])) {
         }
 
         h1 {
-            color: #4CAF50;
+            color: rgb(0, 168, 143);
             font-size: 36px;
             margin-bottom: 30px;
             font-weight: bold;
@@ -62,7 +62,7 @@ if (isset($_POST['import'])) {
 
         .form-group button {
             padding: 12px 20px;
-            background-color: #4CAF50;
+            background-color: rgb(0, 168, 143);
             color: white;
             border: none;
             border-radius: 5px;
@@ -73,30 +73,31 @@ if (isset($_POST['import'])) {
         }
 
         .form-group button:hover {
-            background-color: #45a049;
+            background-color: rgb(0, 140, 120);
         }
 
         .result-message {
             margin-top: 20px;
             font-size: 18px;
             font-weight: bold;
-            color: #4CAF50;
+            color: rgb(0, 168, 143);
         }
 
         .back-button {
             display: inline-block;
             padding: 10px 20px;
             margin-top: 20px;
-            background-color: #007BFF;
+            background-color: rgb(0, 168, 143);
             color: white;
             text-decoration: none;
             border-radius: 5px;
             font-size: 18px;
             cursor: pointer;
+            transition: background-color 0.3s ease;
         }
 
         .back-button:hover {
-            background-color: #0056b3;
+            background-color: rgb(0, 140, 120);
         }
 
     </style>
@@ -129,4 +130,3 @@ if (isset($_POST['import'])) {
 
 </body>
 </html>
-
