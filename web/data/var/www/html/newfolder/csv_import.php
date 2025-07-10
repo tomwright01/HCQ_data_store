@@ -3,7 +3,7 @@
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
-$dbname = "PatientData";
+$dbname = "hospital_eye_reports";
 
 // CSV file path
 $csvFilePath = "/var/www/html/data/Patient Info Master 1(Retrospective Data).csv";
@@ -53,8 +53,8 @@ try {
             if (count(array_filter($data)) === 0) continue;
             
             // Validate minimum columns
-            if (count($data) < 11) {
-                throw new Exception("Row has only " . count($data) . " columns (minimum 11 required)");
+            if (count($data) < 12) {
+                throw new Exception("Row has only " . count($data) . " columns (minimum 12 required)");
             }
 
             // Clean and format data
