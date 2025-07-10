@@ -93,35 +93,35 @@ try {
             $testId = $patientId . str_replace('-', '', $testDateFormatted);
 
             // Prepare test data with null checks
-            $eyeValue = $data[3] ?? null;
+            $eyeValue = $data[4] ?? null;
             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
 
-            $reportDiagnosisValue = $data[4] ?? null;
+            $reportDiagnosisValue = $data[5] ?? null;
             $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
                 ? strtolower($reportDiagnosisValue) 
                 : 'no input';
 
-            $exclusionValue = $data[5] ?? null;
+            $exclusionValue = $data[6] ?? null;
             $exclusion = ($exclusionValue !== null && in_array(strtolower($exclusionValue), 
                 ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) 
                 ? strtolower($exclusionValue) 
                 : 'none';
 
-            $merciScore = (isset($data[6]) && is_numeric($data[6]) && $data[6] >= 1 && $data[6] <= 100) ? (int)$data[6] : null;
+            $merciScore = (isset($data[7]) && is_numeric($data[7]) && $data[7] >= 1 && $data[7] <= 100) ? (int)$data[7] : null;
 
-            $merciDiagnosisValue = $data[7] ?? null;
+            $merciDiagnosisValue = $data[8] ?? null;
             $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
                 ? strtolower($merciDiagnosisValue) 
                 : 'no value';
 
-            $errorTypeValue = $data[8] ?? null;
+            $errorTypeValue = $data[9] ?? null;
             $errorType = ($errorTypeValue !== null && in_array(strtoupper($errorTypeValue), ['TN', 'FP'])) 
                 ? strtoupper($errorTypeValue) 
                 : 'none';
 
-            $fafGrade = (isset($data[9]) && is_numeric($data[9]) && $data[9] >= 1 && $data[9] <= 4) ? (int)$data[9] : null;
-            $octScore = isset($data[10]) && is_numeric($data[10]) ? round(floatval($data[10]), 2) : null;
-            $vfScore = isset($data[11]) && is_numeric($data[11]) ? round(floatval($data[11]), 2) : null;
+            $fafGrade = (isset($data[10]) && is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4) ? (int)$data[10] : null;
+            $octScore = isset($data[11]) && is_numeric($data[11]) ? round(floatval($data[11]), 2) : null;
+            $vfScore = isset($data[12]) && is_numeric($data[12]) ? round(floatval($data[12]), 2) : null;
 
             $testData = [
                 'test_id' => $testId,
