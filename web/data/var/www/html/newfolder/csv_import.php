@@ -236,7 +236,7 @@ function insertTest($conn, $testData) {
         $testData['oct_score'],
         $testData['vf_score']
     );
-    die(json_encode($testData));
+    //die(json_encode($testData));
     if (!$stmt->execute()) {
         throw new Exception("Test insert failed: " . $stmt->error);
     }
