@@ -1,7 +1,6 @@
 -- Database creation
-DROP DATABASE IF EXISTS hospital_eye_reports;
-CREATE DATABASE hospital_eye_reports;
-USE hospital_eye_reports;
+CREATE DATABASE PatientData;
+USE PatientData;
 
 -- Patients table with enhanced constraints
 CREATE TABLE patients (
