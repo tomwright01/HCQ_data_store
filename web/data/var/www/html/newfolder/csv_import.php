@@ -220,7 +220,7 @@ function insertTest($conn, $testData) {
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    die(json_serialise($testData));
+    die(json_encode($testData));
     $stmt->bind_param(
         "ssssssisiddd",
         $testData['test_id'],
