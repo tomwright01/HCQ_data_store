@@ -93,9 +93,8 @@ try {
             $testId = $patientId . str_replace('-', '', $testDateFormatted);
 
             // Prepare test data with null checks
-           // First line debug
+
             $eyeValue = $data[4] ?? null;
-            die("Eye Value after null check: " . var_export($eyeValue, true));
 
             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
             die("Final eye value after processing: " . var_export($eye, true));
