@@ -37,7 +37,7 @@ CREATE INDEX idx_test_date ON Tests(date_of_test);
 
 
 
-
+/*
 -- Step 1: Create the database
 CREATE DATABASE IF NOT EXISTS PatientData;
 
