@@ -171,10 +171,10 @@ try {
 // Database functions
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     // Debug: Show incoming parameters
-    die("DEBUG - getOrCreatePatient() called with:
-        Patient ID: $patientId
-        Subject ID: $subjectId
-        DoB: $dob");
+    //die("DEBUG - getOrCreatePatient() called with:
+    //   Patient ID: $patientId
+    //    Subject ID: $subjectId
+    //    DoB: $dob");
     
     // Check if patient exists
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
@@ -183,9 +183,9 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     $result = $stmt->get_result();
     
     // Debug: Show query results
-    die("DEBUG - Patient check results:
-        Num rows: " . $result->num_rows . "
-        Patient ID from DB: " . ($result->num_rows > 0 ? $result->fetch_assoc()['patient_id'] : 'None'));
+    //die("DEBUG - Patient check results:
+    //    Num rows: " . $result->num_rows . "
+    //    Patient ID from DB: " . ($result->num_rows > 0 ? $result->fetch_assoc()['patient_id'] : 'None'));
     
     if ($result->num_rows > 0) {
         die("DEBUG - Returning existing patient ID: $patientId");
