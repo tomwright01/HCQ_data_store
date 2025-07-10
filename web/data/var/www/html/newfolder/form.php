@@ -17,12 +17,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Prepare SQL statement for patient information
     $stmt = $conn->prepare("INSERT INTO patients (
         location, disease_id, year_of_birth, gender, referring_doctor, 
-        rx_OD, rx_OS, procedures_done, dosage, duration, 
-        cumulative_dosage, date_of_discontinuation, extra_notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        rx_OD, rx_OS, procedures_done, dosage, dosage_unit, duration, 
+        cumulative_dosage, date_of_discontinuation, extra_notes,
+        tamoxifen, kidney_disease, liver_disease
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     
     $stmt->bind_param(
-        "siisdddsdiiss", 
+        "siisddsssiisssss", 
         $_POST['location'],
         $_POST['disease_id'],
         $_POST['year_of_birth'],
@@ -32,47 +33,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_POST['rx_OS'],
         $_POST['procedures_done'],
         $_POST['dosage'],
+        $_POST['dosage_unit'],
         $_POST['duration'],
         $_POST['cumulative_dosage'],
         $_POST['date_of_discontinuation'],
-        $_POST['extra_notes']
+        $_POST['extra_notes'],
+        $_POST['tamoxifen'],
+        $_POST['kidney_disease'],
+        $_POST['liver_disease']
     );
     
     $stmt->execute();
     $patient_id = $stmt->insert_id;
     $stmt->close();
     
+    // Handle file uploads
+    $file_fields = ['faf_od', 'faf_os', 'oct_od', 'oct_os', 'vf_od', 'vf_os', 'mferg_od', 'mferg_os'];
+    $file_data = [];
+    
+    foreach ($file_fields as $field) {
+        if (!empty($_FILES[$field]['name'])) {
+            $file_data[$field] = file_get_contents($_FILES[$field]['tmp_name']);
+        } else {
+            $file_data[$field] = null;
+        }
+    }
+    
     // Prepare SQL statement for visit information
     $stmt = $conn->prepare("INSERT INTO visits (
         patient_id, visit_date, visit_notes,
-        faf_test_id_OD, faf_image_number_OD, faf_test_id_OS, faf_image_number_OS,
-        oct_test_id_OD, oct_image_number_OD, oct_test_id_OS, oct_image_number_OS,
-        vf_test_id_OD, vf_image_number_OD, vf_test_id_OS, vf_image_number_OS,
-        mferg_test_id_OD, mferg_image_number_OD, mferg_test_id_OS, mferg_image_number_OS,
+        faf_od, faf_os, oct_od, oct_os,
+        vf_od, vf_os, mferg_od, mferg_os,
         merci_rating_left_eye, merci_rating_right_eye
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     
     $stmt->bind_param(
-        "issiiiiiiiiiiiiiiiiii", 
+        "issssssssssii", 
         $patient_id,
         $_POST['visit_date'],
         $_POST['visit_notes'],
-        $_POST['faf_test_id_OD'],
-        $_POST['faf_image_number_OD'],
-        $_POST['faf_test_id_OS'],
-        $_POST['faf_image_number_OS'],
-        $_POST['oct_test_id_OD'],
-        $_POST['oct_image_number_OD'],
-        $_POST['oct_test_id_OS'],
-        $_POST['oct_image_number_OS'],
-        $_POST['vf_test_id_OD'],
-        $_POST['vf_image_number_OD'],
-        $_POST['vf_test_id_OS'],
-        $_POST['vf_image_number_OS'],
-        $_POST['mferg_test_id_OD'],
-        $_POST['mferg_image_number_OD'],
-        $_POST['mferg_test_id_OS'],
-        $_POST['mferg_image_number_OS'],
+        $file_data['faf_od'],
+        $file_data['faf_os'],
+        $file_data['oct_od'],
+        $file_data['oct_os'],
+        $file_data['vf_od'],
+        $file_data['vf_os'],
+        $file_data['mferg_od'],
+        $file_data['mferg_os'],
         $_POST['merci_rating_left_eye'],
         $_POST['merci_rating_right_eye']
     );
@@ -152,7 +159,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-sizing: border-box;
         }
 
-        input[type="radio"] {
+        textarea {
+            min-height: 100px;
+        }
+
+        input[type="radio"], input[type="checkbox"] {
             width: auto;
             margin-right: 5px;
         }
@@ -174,6 +185,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
             gap: 15px;
             margin-bottom: 20px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+        }
+
+        .dosage-container {
+            display: flex;
+            gap: 10px;
+        }
+
+        .dosage-container input {
+            flex: 1;
+        }
+
+        .dosage-container select {
+            width: 100px;
         }
 
         .submit-btn {
@@ -207,6 +244,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         footer a:hover {
             text-decoration: underline;
         }
+
+        .file-upload {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .file-upload-row {
+            display: flex;
+            gap: 15px;
+        }
+
+        .file-upload-item {
+            flex: 1;
+        }
     </style>
 </head>
 <body>
@@ -217,18 +269,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="form-title">Patient and Visit Information Form</div>
 
         <form action="" method="post" enctype="multipart/form-data">
-            <!-- Patient ID -->
+            <!-- Patient Information -->
             <div class="form-section">
                 <h3>Patient Information</h3>
                 
-                <div class="form-group">
-                    <div>
-                        <label for="patient_id">Patient ID:</label>
-                        <input type="number" name="patient_id" required>
-                    </div>
-                </div>
-
-                <!-- Patient Information -->
                 <div class="form-group">
                     <div>
                         <label for="location">Location:</label>
@@ -240,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
 
                     <div>
-                        <label for="disease_id">Disease:</label>
+                        <label for="disease_id">Primary Diagnosis:</label>
                         <select name="disease_id" required>
                             <option value="1">Lupus</option>
                             <option value="2">Rheumatoid Arthritis</option>
@@ -256,8 +300,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <div>
                         <label for="gender">Gender:</label>
-                        <input type="radio" name="gender" value="m" required> Male
-                        <input type="radio" name="gender" value="f" required> Female
+                        <div>
+                            <input type="radio" name="gender" value="m" required> Male
+                            <input type="radio" name="gender" value="f" required> Female
+                        </div>
                     </div>
 
                     <div>
@@ -278,39 +324,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </div>
                 </div>
 
-                <div class="form-group">
-                    <div>
-                        <label for="procedures_done">Procedures Done:</label>
-                        <textarea name="procedures_done"></textarea>
-                    </div>
-
-                    <div>
-                        <label for="dosage">Dosage:</label>
-                        <input type="number" step="0.01" name="dosage" required>
+                <div class="form-section">
+                    <label>Procedures Done:</label>
+                    <div class="checkbox-group">
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="procedures_done[]" value="None"> None
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="procedures_done[]" value="Cataracts"> Cataracts
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="procedures_done[]" value="Refractive Surgery"> Refractive Surgery
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="procedures_done[]" value="Retinal Repair"> Retinal Repair
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="procedures_done[]" value="Corneal Surgery"> Corneal Surgery
+                        </div>
+                        <div class="checkbox-item">
+                            <input type="checkbox" name="procedures_done[]" value="Glaucoma Surgery"> Glaucoma Surgery
+                        </div>
                     </div>
                 </div>
 
                 <div class="form-group">
+                    <div>
+                        <label for="dosage">Dosage:</label>
+                        <div class="dosage-container">
+                            <input type="number" step="0.01" name="dosage" required>
+                            <select name="dosage_unit" required>
+                                <option value="mg/wk">mg/wk</option>
+                                <option value="mg/day">mg/day</option>
+                                <option value="mg/month">mg/month</option>
+                                <option value="IU/wk">IU/wk</option>
+                            </select>
+                        </div>
+                    </div>
+
                     <div>
                         <label for="duration">Duration (months):</label>
                         <input type="number" name="duration" required>
                     </div>
+                </div>
 
+                <div class="form-group">
                     <div>
                         <label for="cumulative_dosage">Cumulative Dosage:</label>
                         <input type="number" step="0.01" name="cumulative_dosage">
+                    </div>
+
+                    <div>
+                        <label for="date_of_discontinuation">Date of Discontinuation:</label>
+                        <input type="date" name="date_of_discontinuation">
                     </div>
                 </div>
 
                 <div class="form-group">
                     <div>
-                        <label for="date_of_discontinuation">Date of Discontinuation:</label>
-                        <input type="date" name="date_of_discontinuation">
-                    </div>
-
-                    <div>
                         <label for="extra_notes">Extra Notes:</label>
                         <textarea name="extra_notes"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Risk Factors -->
+            <div class="form-section">
+                <h3>Risk Factors</h3>
+                <div class="checkbox-group">
+                    <div class="checkbox-item">
+                        <input type="checkbox" name="tamoxifen" value="1"> Tamoxifen Use
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" name="kidney_disease" value="1"> Kidney Disease
+                    </div>
+                    <div class="checkbox-item">
+                        <input type="checkbox" name="liver_disease" value="1"> Liver Disease
                     </div>
                 </div>
             </div>
@@ -327,111 +416,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     <div>
                         <label for="visit_notes">Visit Notes:</label>
-                        <textarea name="visit_notes"></textarea>
+                        <textarea name="visit_notes" style="min-height: 150px;"></textarea>
                     </div>
                 </div>
             </div>
 
-            <!-- FAF Data -->
+            <!-- File Uploads -->
             <div class="form-section">
-                <h3>FAF Data</h3>
-                <div class="form-group">
-                    <div>
-                        <label for="faf_test_id_OD">FAF Test ID (OD):</label>
-                        <input type="number" name="faf_test_id_OD">
+                <h3>Test Results Upload</h3>
+                
+                <div class="file-upload">
+                    <div class="file-upload-row">
+                        <div class="file-upload-item">
+                            <label for="faf_od">FAF (OD):</label>
+                            <input type="file" name="faf_od" accept="image/*,.pdf">
+                        </div>
+                        <div class="file-upload-item">
+                            <label for="faf_os">FAF (OS):</label>
+                            <input type="file" name="faf_os" accept="image/*,.pdf">
+                        </div>
                     </div>
-
-                    <div>
-                        <label for="faf_image_number_OD">FAF Image Number (OD):</label>
-                        <input type="number" name="faf_image_number_OD">
+                    
+                    <div class="file-upload-row">
+                        <div class="file-upload-item">
+                            <label for="oct_od">OCT (OD):</label>
+                            <input type="file" name="oct_od" accept="image/*,.pdf">
+                        </div>
+                        <div class="file-upload-item">
+                            <label for="oct_os">OCT (OS):</label>
+                            <input type="file" name="oct_os" accept="image/*,.pdf">
+                        </div>
                     </div>
-
-                    <div>
-                        <label for="faf_test_id_OS">FAF Test ID (OS):</label>
-                        <input type="number" name="faf_test_id_OS">
+                    
+                    <div class="file-upload-row">
+                        <div class="file-upload-item">
+                            <label for="vf_od">VF (OD):</label>
+                            <input type="file" name="vf_od" accept="image/*,.pdf">
+                        </div>
+                        <div class="file-upload-item">
+                            <label for="vf_os">VF (OS):</label>
+                            <input type="file" name="vf_os" accept="image/*,.pdf">
+                        </div>
                     </div>
-
-                    <div>
-                        <label for="faf_image_number_OS">FAF Image Number (OS):</label>
-                        <input type="number" name="faf_image_number_OS">
-                    </div>
-                </div>
-            </div>
-
-            <!-- OCT Data -->
-            <div class="form-section">
-                <h3>OCT Data</h3>
-                <div class="form-group">
-                    <div>
-                        <label for="oct_test_id_OD">OCT Test ID (OD):</label>
-                        <input type="number" name="oct_test_id_OD">
-                    </div>
-
-                    <div>
-                        <label for="oct_image_number_OD">OCT Image Number (OD):</label>
-                        <input type="number" name="oct_image_number_OD">
-                    </div>
-
-                    <div>
-                        <label for="oct_test_id_OS">OCT Test ID (OS):</label>
-                        <input type="number" name="oct_test_id_OS">
-                    </div>
-
-                    <div>
-                        <label for="oct_image_number_OS">OCT Image Number (OS):</label>
-                        <input type="number" name="oct_image_number_OS">
-                    </div>
-                </div>
-            </div>
-
-            <!-- VF Data -->
-            <div class="form-section">
-                <h3>VF Data</h3>
-                <div class="form-group">
-                    <div>
-                        <label for="vf_test_id_OD">VF Test ID (OD):</label>
-                        <input type="number" name="vf_test_id_OD">
-                    </div>
-
-                    <div>
-                        <label for="vf_image_number_OD">VF Image Number (OD):</label>
-                        <input type="number" name="vf_image_number_OD">
-                    </div>
-
-                    <div>
-                        <label for="vf_test_id_OS">VF Test ID (OS):</label>
-                        <input type="number" name="vf_test_id_OS">
-                    </div>
-
-                    <div>
-                        <label for="vf_image_number_OS">VF Image Number (OS):</label>
-                        <input type="number" name="vf_image_number_OS">
-                    </div>
-                </div>
-            </div>
-
-            <!-- MFERG Data -->
-            <div class="form-section">
-                <h3>MFERG Data</h3>
-                <div class="form-group">
-                    <div>
-                        <label for="mferg_test_id_OD">MFERG Test ID (OD):</label>
-                        <input type="number" name="mferg_test_id_OD">
-                    </div>
-
-                    <div>
-                        <label for="mferg_image_number_OD">MFERG Image Number (OD):</label>
-                        <input type="number" name="mferg_image_number_OD">
-                    </div>
-
-                    <div>
-                        <label for="mferg_test_id_OS">MFERG Test ID (OS):</label>
-                        <input type="number" name="mferg_test_id_OS">
-                    </div>
-
-                    <div>
-                        <label for="mferg_image_number_OS">MFERG Image Number (OS):</label>
-                        <input type="number" name="mferg_image_number_OS">
+                    
+                    <div class="file-upload-row">
+                        <div class="file-upload-item">
+                            <label for="mferg_od">MFERG (OD):</label>
+                            <input type="file" name="mferg_od" accept="image/*,.pdf">
+                        </div>
+                        <div class="file-upload-item">
+                            <label for="mferg_os">MFERG (OS):</label>
+                            <input type="file" name="mferg_os" accept="image/*,.pdf">
+                        </div>
                     </div>
                 </div>
             </div>
