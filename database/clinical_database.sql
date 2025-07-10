@@ -22,7 +22,7 @@ CREATE TABLE tests (
     exclusion ENUM('none', 'retinal detachment', 'generalized retinal dysfunction', 'unilateral testing') NOT NULL DEFAULT 'none',
     merci_score TINYINT UNSIGNED NOT NULL CHECK (merci_score BETWEEN 1 AND 100),
     merci_diagnosis ENUM('normal', 'abnormal', 'no value') NOT NULL,
-    error_type ENUM('TN', 'FP', 'none') NOT NULL DEFAULT 'none',
+    error_type ENUM('TN', 'FP', 'TP', 'FN' 'none') NOT NULL DEFAULT 'none',
     faf_grade TINYINT UNSIGNED COMMENT 'Fundus Autofluorescence grade (1-4)',
     oct_score DECIMAL(10,2) COMMENT 'Optical Coherence Tomography score',
     vf_score DECIMAL(10,2) COMMENT 'Visual Field score',
