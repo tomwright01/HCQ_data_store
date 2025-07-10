@@ -8,7 +8,7 @@ CREATE TABLE patients (
     dob DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ;
 
 -- Visits table with comprehensive constraints
 CREATE TABLE visits (
@@ -32,5 +32,5 @@ CREATE TABLE visits (
     INDEX idx_date (dot),
     INDEX idx_diagnosis (report_diagnosis),
     INDEX idx_eye (eye)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ;
 
