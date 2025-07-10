@@ -204,10 +204,10 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     global $results;
     $results['patients']++;
     
-    die("DEBUG - Successfully created new patient:
-        Patient ID: $patientId
-        Subject ID: $subjectId
-        DoB: $dob");
+    //die("DEBUG - Successfully created new patient:
+    //    Patient ID: $patientId
+    //    Subject ID: $subjectId
+    //    DoB: $dob");
     return $patientId;
 }
 
