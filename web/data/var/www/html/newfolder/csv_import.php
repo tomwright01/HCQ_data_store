@@ -140,17 +140,17 @@ try {
                 ? strtolower($merciDiagnosisValue) 
                 : 'no value';
 
-            // FIXED: error_type validation now matches database ENUM
+            // FIXED: error_type with NULL handling
             $errorTypeValue = $data[9] ?? null;
             $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'NONE'];
-            $errorType = 'none'; // Default matches database DEFAULT
+            $errorType = null; // Default to NULL
             
-            if ($errorTypeValue !== null) {
+            if ($errorTypeValue !== null && $errorTypeValue !== '') {
                 $upperValue = strtoupper(trim($errorTypeValue));
                 if (in_array($upperValue, $allowedErrorTypes)) {
-                    $errorType = $upperValue;
+                    $errorType = ($upperValue === 'NONE') ? 'none' : $upperValue;
                 } else {
-                    $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeValue}' - using default 'none'";
+                    $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeValue}' - set to NULL";
                 }
             }
 
@@ -236,9 +236,11 @@ function insertTest($conn, $testData) {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
-    // Convert MERCI score values for database
+    // Convert values for database
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
+    
+    $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
     $stmt->bind_param(
         "sssisssisiddd",
@@ -251,7 +253,7 @@ function insertTest($conn, $testData) {
         $testData['exclusion'],
         $merciScoreForDb,
         $testData['merci_diagnosis'],
-        $testData['error_type'],
+        $errorTypeForDb,
         $testData['faf_grade'],
         $testData['oct_score'],
         $testData['vf_score']
