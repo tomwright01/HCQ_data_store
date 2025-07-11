@@ -111,8 +111,11 @@ try {
                 ? strtolower($exclusionValue) 
                 : 'none';
 
-            // Handle MERCI score (set to 'none' if invalid)
-            $merciScore = (isset($data[7]) && is_numeric($data[7]) && $data[7] >= 1 && $data[7] <= 100) ? (int)$data[7] : 'none';
+            // Handle MERCI score (0-100 range, 'none' if invalid)
+            $merciScoreValue = $data[7] ?? null;
+            $merciScore = (isset($merciScoreValue) && is_numeric($merciScoreValue) && $merciScoreValue >= 0 && $merciScoreValue <= 100) 
+                ? (int)$merciScoreValue 
+                : 'none';
 
             $merciDiagnosisValue = $data[8] ?? null;
             $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
@@ -279,4 +282,3 @@ function insertTest($conn, $testData) {
     </div>
 </body>
 </html>
-
