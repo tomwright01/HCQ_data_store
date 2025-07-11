@@ -44,7 +44,7 @@ try {
     // Start transaction
     $conn->begin_transaction();
 
-    // Skip header row if exists (with fixed fgetcsv parameters)
+    // Skip header row if exists
     fgetcsv($handle, 0, ",", '"', "\0");
     
     $lineNumber = 1; // Start counting from 1 (header is line 0)
@@ -64,7 +64,7 @@ try {
             // Clean and format data
             $data = array_map('trim', $data);
             $data = array_map(function($v) { 
-                $v = trim($v ?? ''); // Ensure we never pass null
+                $v = trim($v ?? '');
                 return ($v === '' || strtolower($v) === 'null' || strtolower($v) === 'no value') ? null : $v; 
             }, $data);
 
@@ -76,7 +76,7 @@ try {
             }
             $dobFormatted = $dob->format('Y-m-d');
 
-            // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
+            // Generate patient_id
             $patientId = substr($subjectId, 0, 8) . substr($data[1] ?? '', -2);
             
             // Insert or get existing patient
@@ -89,14 +89,13 @@ try {
             }
             $testDateFormatted = $testDate->format('Y-m-d');
             
-            // Generate test_id (patientId + test date without hyphens + eye if available)
+            // Generate test_id (patientId + date + eye)
             $testId = $patientId . str_replace('-', '', $testDateFormatted);
 
-            // Prepare test data with null checks
+            // Prepare test data
             $eyeValue = $data[4] ?? null;
             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
             
-            // Append eye to test_id if available
             if ($eye) {
                 $testId .= $eye;
             }
@@ -112,7 +111,8 @@ try {
                 ? strtolower($exclusionValue) 
                 : 'none';
 
-            $merciScore = (isset($data[7]) && is_numeric($data[7]) && $data[7] >= 1 && $data[7] <= 100) ? (int)$data[7] : null;
+            // Handle MERCI score (set to 'none' if invalid)
+            $merciScore = (isset($data[7]) && is_numeric($data[7]) && $data[7] >= 1 && $data[7] <= 100) ? (int)$data[7] : 'none';
 
             $merciDiagnosisValue = $data[8] ?? null;
             $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
@@ -175,7 +175,6 @@ try {
 
 // Database functions
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
-    // Check if patient exists
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
     $stmt->execute();
@@ -185,7 +184,6 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
         return $patientId;
     }
     
-    // Create new patient
     $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) VALUES (?, ?, ?)");
     $stmt->bind_param("sss", $patientId, $subjectId, $dob);
     
@@ -207,6 +205,9 @@ function insertTest($conn, $testData) {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
+    // Convert 'none' to NULL for database
+    $merciScoreForDb = ($testData['merci_score'] === 'none') ? NULL : $testData['merci_score'];
+    
     $stmt->bind_param(
         "ssssssisiddd",
         $testData['test_id'],
@@ -215,7 +216,7 @@ function insertTest($conn, $testData) {
         $testData['eye'],
         $testData['report_diagnosis'],
         $testData['exclusion'],
-        $testData['merci_score'],
+        $merciScoreForDb,
         $testData['merci_diagnosis'],
         $testData['error_type'],
         $testData['faf_grade'],
@@ -278,3 +279,4 @@ function insertTest($conn, $testData) {
     </div>
 </body>
 </html>
+
