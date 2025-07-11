@@ -141,7 +141,7 @@ try {
                 : 'no value';
 
             $errorTypeValue = $data[9] ?? null;
-            $errorType = ($errorTypeValue !== null && in_array(strtoupper($errorTypeValue), ['TN', 'FP'])) 
+            $errorType = ($errorTypeValue !== null && in_array(strtoupper($errorTypeValue), ['TN', 'TP', 'FP', 'FN'])) 
                 ? strtoupper($errorTypeValue) 
                 : 'none';
 
