@@ -190,7 +190,7 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     //    Patient ID from DB: " . ($result->num_rows > 0 ? $result->fetch_assoc()['patient_id'] : 'None'));
     
     if ($result->num_rows > 0) {
-        die("DEBUG - Returning existing patient ID: $patientId");
+        //die("DEBUG - Returning existing patient ID: $patientId");
         return $patientId;
     }
     
@@ -222,7 +222,7 @@ function insertTest($conn, $testData) {
     ");
     //die(json_encode($testData));
     $stmt->bind_param(
-        "ssssssisiddd",
+        "ssssssissddd",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['date_of_test'],
