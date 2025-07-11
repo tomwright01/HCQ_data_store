@@ -240,10 +240,11 @@ function insertTest($conn, $testData) {
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
-    $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
+
+    $errorTypeForDb = ($testData['error_type'] === null || $testData['error_type'] === 'none') ? null : $testData['error_type'];    
     
     $stmt->bind_param(
-        "sssisssisiddd",
+        "sssisssiisddd",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['date_of_test'],
