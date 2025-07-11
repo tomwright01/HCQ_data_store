@@ -79,8 +79,8 @@ try {
             }
             $dobFormatted = $dob->format('Y-m-d');
 
-            // Use subject ID directly as patient ID
-            $patientId = $subjectId;
+            // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
+            $patientId = substr($subjectId, 0, 8) . substr($data[1] ?? '', -2);
             
             // Insert or get existing patient
             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
@@ -140,15 +140,15 @@ try {
                 ? strtolower($merciDiagnosisValue) 
                 : 'no value';
 
-            // Handle error_type
+            // FIXED: error_type with NULL handling
             $errorTypeValue = $data[9] ?? null;
-            $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN'];
-            $errorType = null;
+            $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
+            $errorType = null; // Default to NULL
             
             if ($errorTypeValue !== null && $errorTypeValue !== '') {
                 $upperValue = strtoupper(trim($errorTypeValue));
                 if (in_array($upperValue, $allowedErrorTypes)) {
-                    $errorType = $upperValue;
+                    $errorType = ($upperValue === 'NONE') ? 'none' : $upperValue;
                 } else {
                     $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeValue}' - set to NULL";
                 }
@@ -240,10 +240,10 @@ function insertTest($conn, $testData) {
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
-    $errorTypeForDb = $testData['error_type']; // NULL or valid value
+    $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
     $stmt->bind_param(
-        "sssisssiisddd",
+        "sssisssissddd",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['date_of_test'],
@@ -313,4 +313,4 @@ function insertTest($conn, $testData) {
         <p><a href="index.php">Return to Dashboard</a></p>
     </div>
 </body>
-</html>
+</html> 
