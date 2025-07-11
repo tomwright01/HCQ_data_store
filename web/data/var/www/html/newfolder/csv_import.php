@@ -89,14 +89,18 @@ try {
             }
             $testDateFormatted = $testDate->format('Y-m-d');
             
-            // Get eye value first
-            $eyeValue = $data[4] ?? null;
-            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : 'UN';
-            
-            // Generate test_id with eye included (format: patientId + date + _ + eye)
-            $testId = $patientId . str_replace('-', '', $testDateFormatted) . '_' . $eye;
+            // Generate test_id (patientId + test date without hyphens + eye if available)
+            $testId = $patientId . str_replace('-', '', $testDateFormatted);
 
             // Prepare test data with null checks
+            $eyeValue = $data[4] ?? null;
+            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+            
+            // Append eye to test_id if available
+            if ($eye) {
+                $testId .= $eye;
+            }
+
             $reportDiagnosisValue = $data[5] ?? null;
             $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
                 ? strtolower($reportDiagnosisValue) 
