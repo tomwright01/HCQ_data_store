@@ -244,7 +244,7 @@ function insertTest($conn, $testData) {
     $errorTypeForDb = $testData['error_type'];     
     
     $stmt->bind_param(
-        "sssisssisiddd",
+        "sssisssissddd",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['date_of_test'],
