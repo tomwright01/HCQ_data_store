@@ -107,6 +107,12 @@ try {
                 $testId = $baseTestId . $letter;
             }
 
+            // Process Age (column 4/[3])
+            $ageValue = $data[3] ?? null;
+            $age = (isset($ageValue) && is_numeric($ageValue) && $ageValue >= 0 && $ageValue <= 100) 
+                ? (int)round($ageValue) 
+                : null;
+
             $reportDiagnosisValue = $data[5] ?? null;
             $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
                 ? strtolower($reportDiagnosisValue) 
@@ -118,11 +124,16 @@ try {
                 ? strtolower($exclusionValue) 
                 : 'none';
 
-            // Handle MERCI score (0-100 range, 'none' if invalid)
+            // Handle MERCI score (0-100 range or 'unable')
             $merciScoreValue = $data[7] ?? null;
-            $merciScore = (isset($merciScoreValue) && is_numeric($merciScoreValue) && $merciScoreValue >= 0 && $merciScoreValue <= 100) 
-                ? (int)$merciScoreValue 
-                : 'none';
+            $merciScore = null;
+            if (isset($merciScoreValue)) {
+                if (strtolower($merciScoreValue) === 'unable') {
+                    $merciScore = 'unable';
+                } elseif (is_numeric($merciScoreValue) && $merciScoreValue >= 0 && $merciScoreValue <= 100) {
+                    $merciScore = (int)$merciScoreValue;
+                }
+            }
 
             $merciDiagnosisValue = $data[8] ?? null;
             $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
@@ -142,6 +153,7 @@ try {
                 'test_id' => $testId,
                 'patient_id' => $patientId,
                 'date_of_test' => $testDate->format('Y-m-d'),
+                'age' => $age,
                 'eye' => $eye,
                 'report_diagnosis' => $reportDiagnosis,
                 'exclusion' => $exclusion,
@@ -191,7 +203,6 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     $result = $stmt->get_result();
     
     if ($result->num_rows > 0) {
-        //die("DEBUG - Returning existing patient ID: $patientId");
         return $patientId;
     }
     
@@ -211,19 +222,21 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            test_id, patient_id, date_of_test, eye, report_diagnosis, exclusion,
+            test_id, patient_id, date_of_test, age, eye, report_diagnosis, exclusion,
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
-    // Convert 'none' to NULL for database
-    $merciScoreForDb = ($testData['merci_score'] === 'none') ? NULL : $testData['merci_score'];
+    // Convert MERCI score values for database
+    $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
+                      (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
     $stmt->bind_param(
-        "ssssssissddd",
+        "sssisssisiddd",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['date_of_test'],
+        $testData['age'],
         $testData['eye'],
         $testData['report_diagnosis'],
         $testData['exclusion'],
