@@ -142,7 +142,7 @@ try {
 
             // FIXED: error_type with NULL handling
             $errorTypeValue = $data[9] ?? null;
-            $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'NONE'];
+            $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
             $errorType = null; // Default to NULL
             
             if ($errorTypeValue !== null && $errorTypeValue !== '') {
