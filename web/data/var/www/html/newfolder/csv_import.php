@@ -241,7 +241,7 @@ function insertTest($conn, $testData) {
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
 
-    $errorTypeForDb = ($testData['error_type'] === null || $testData['error_type'] === 'none') ? null : $testData['error_type'];    
+    $errorTypeForDb = $testData['error_type'];     
     
     $stmt->bind_param(
         "sssisssiisddd",
