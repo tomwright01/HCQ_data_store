@@ -27,6 +27,9 @@ $results = [
     'errors' => []
 ];
 
+// Initialize test counter for duplicate handling
+$testCounts = [];
+
 try {
     // Verify file exists and is readable
     if (!file_exists($csvFilePath)) {
@@ -44,7 +47,7 @@ try {
     // Start transaction
     $conn->begin_transaction();
 
-    // Skip header row if exists (with fixed fgetcsv parameters)
+    // Skip header row if exists
     fgetcsv($handle, 0, ",", '"', "\0");
     
     $lineNumber = 1; // Start counting from 1 (header is line 0)
@@ -64,7 +67,7 @@ try {
             // Clean and format data
             $data = array_map('trim', $data);
             $data = array_map(function($v) { 
-                $v = trim($v ?? ''); // Ensure we never pass null
+                $v = trim($v ?? '');
                 return ($v === '' || strtolower($v) === 'null' || strtolower($v) === 'no value') ? null : $v; 
             }, $data);
 
@@ -87,17 +90,23 @@ try {
             if (!$testDate) {
                 throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
             }
-            $testDateFormatted = $testDate->format('Y-m-d');
             
-            // Generate test_id (patientId + test date without hyphens)
-            $testId = $patientId . str_replace('-', '', $testDateFormatted);
-
-            // Prepare test data with null checks
-
+            // Generate test_id (date + eye + letter if duplicate)
+            $testDateFormatted = $testDate->format('Ymd'); // Format as YYYYMMDD
             $eyeValue = $data[4] ?? null;
-
             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
-            
+            $baseTestId = $testDateFormatted . ($eye ? $eye : '');
+
+            // Handle duplicates by appending a, b, c, etc.
+            if (!isset($testCounts[$baseTestId])) {
+                $testCounts[$baseTestId] = 0;
+                $testId = $baseTestId;
+            } else {
+                $testCounts[$baseTestId]++;
+                $letter = chr(97 + $testCounts[$baseTestId]); // 97 = 'a' in ASCII
+                $testId = $baseTestId . $letter;
+            }
+
             $reportDiagnosisValue = $data[5] ?? null;
             $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
                 ? strtolower($reportDiagnosisValue) 
@@ -109,7 +118,11 @@ try {
                 ? strtolower($exclusionValue) 
                 : 'none';
 
-            $merciScore = (isset($data[7]) && is_numeric($data[7]) && $data[7] >= 1 && $data[7] <= 100) ? (int)$data[7] : null;
+            // Handle MERCI score (0-100 range, 'none' if invalid)
+            $merciScoreValue = $data[7] ?? null;
+            $merciScore = (isset($merciScoreValue) && is_numeric($merciScoreValue) && $merciScoreValue >= 0 && $merciScoreValue <= 100) 
+                ? (int)$merciScoreValue 
+                : 'none';
 
             $merciDiagnosisValue = $data[8] ?? null;
             $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
@@ -128,7 +141,7 @@ try {
             $testData = [
                 'test_id' => $testId,
                 'patient_id' => $patientId,
-                'date_of_test' => $testDateFormatted,
+                'date_of_test' => $testDate->format('Y-m-d'),
                 'eye' => $eye,
                 'report_diagnosis' => $reportDiagnosis,
                 'exclusion' => $exclusion,
@@ -172,44 +185,26 @@ try {
 
 // Database functions
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
-    // Debug: Show incoming parameters
-    //die("DEBUG - getOrCreatePatient() called with:
-    //   Patient ID: $patientId
-    //    Subject ID: $subjectId
-    //    DoB: $dob");
-    
-    // Check if patient exists
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
     $stmt->execute();
     $result = $stmt->get_result();
-    
-    // Debug: Show query results
-    //die("DEBUG - Patient check results:
-    //    Num rows: " . $result->num_rows . "
-    //    Patient ID from DB: " . ($result->num_rows > 0 ? $result->fetch_assoc()['patient_id'] : 'None'));
     
     if ($result->num_rows > 0) {
         //die("DEBUG - Returning existing patient ID: $patientId");
         return $patientId;
     }
     
-    // Create new patient
     $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) VALUES (?, ?, ?)");
     $stmt->bind_param("sss", $patientId, $subjectId, $dob);
     
     if (!$stmt->execute()) {
-        die("DEBUG - Patient insert failed: " . $stmt->error);
         throw new Exception("Patient insert failed: " . $stmt->error);
     }
     
     global $results;
     $results['patients']++;
     
-    //die("DEBUG - Successfully created new patient:
-    //    Patient ID: $patientId
-    //    Subject ID: $subjectId
-    //    DoB: $dob");
     return $patientId;
 }
 
@@ -220,7 +215,10 @@ function insertTest($conn, $testData) {
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    //die(json_encode($testData));
+    
+    // Convert 'none' to NULL for database
+    $merciScoreForDb = ($testData['merci_score'] === 'none') ? NULL : $testData['merci_score'];
+    
     $stmt->bind_param(
         "ssssssissddd",
         $testData['test_id'],
@@ -229,14 +227,14 @@ function insertTest($conn, $testData) {
         $testData['eye'],
         $testData['report_diagnosis'],
         $testData['exclusion'],
-        $testData['merci_score'],
+        $merciScoreForDb,
         $testData['merci_diagnosis'],
         $testData['error_type'],
         $testData['faf_grade'],
         $testData['oct_score'],
         $testData['vf_score']
     );
-    //die(json_encode($testData));
+    
     if (!$stmt->execute()) {
         throw new Exception("Test insert failed: " . $stmt->error);
     }
