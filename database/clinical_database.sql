@@ -17,6 +17,7 @@ CREATE TABLE tests (
     test_id VARCHAR(20) PRIMARY KEY,
     patient_id VARCHAR(20) NOT NULL,
     date_of_test DATE NOT NULL,
+    age TINYINT UNSIGNED COMMENT 'Patient age at time of test (1-100)',
     eye ENUM('OD', 'OS') NOT NULL COMMENT 'OD=right eye, OS=left eye',
     report_diagnosis ENUM('normal', 'abnormal', 'exclude', 'no input') NOT NULL,
     exclusion ENUM('none', 'retinal detachment', 'generalized retinal dysfunction', 'unilateral testing') NOT NULL DEFAULT 'none',
