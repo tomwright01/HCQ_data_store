@@ -27,6 +27,9 @@ $results = [
     'errors' => []
 ];
 
+// Initialize test counter for duplicate handling
+$testCounts = [];
+
 try {
     // Verify file exists and is readable
     if (!file_exists($csvFilePath)) {
@@ -76,7 +79,7 @@ try {
             }
             $dobFormatted = $dob->format('Y-m-d');
 
-            // Generate patient_id
+            // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
             $patientId = substr($subjectId, 0, 8) . substr($data[1] ?? '', -2);
             
             // Insert or get existing patient
@@ -87,17 +90,21 @@ try {
             if (!$testDate) {
                 throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
             }
-            $testDateFormatted = $testDate->format('Y-m-d');
             
-            // Generate test_id (patientId + date + eye)
-            $testId = $patientId . str_replace('-', '', $testDateFormatted);
-
-            // Prepare test data
+            // Generate test_id (date + eye + letter if duplicate)
+            $testDateFormatted = $testDate->format('Ymd'); // Format as YYYYMMDD
             $eyeValue = $data[4] ?? null;
             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
-            
-            if ($eye) {
-                $testId .= $eye;
+            $baseTestId = $testDateFormatted . ($eye ? $eye : '');
+
+            // Handle duplicates by appending a, b, c, etc.
+            if (!isset($testCounts[$baseTestId])) {
+                $testCounts[$baseTestId] = 0;
+                $testId = $baseTestId;
+            } else {
+                $testCounts[$baseTestId]++;
+                $letter = chr(97 + $testCounts[$baseTestId]); // 97 = 'a' in ASCII
+                $testId = $baseTestId . $letter;
             }
 
             $reportDiagnosisValue = $data[5] ?? null;
@@ -134,7 +141,7 @@ try {
             $testData = [
                 'test_id' => $testId,
                 'patient_id' => $patientId,
-                'date_of_test' => $testDateFormatted,
+                'date_of_test' => $testDate->format('Y-m-d'),
                 'eye' => $eye,
                 'report_diagnosis' => $reportDiagnosis,
                 'exclusion' => $exclusion,
