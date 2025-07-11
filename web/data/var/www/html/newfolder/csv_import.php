@@ -80,7 +80,7 @@ try {
             $dobFormatted = $dob->format('Y-m-d');
 
             // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
-            $patientId = substr($subjectId, 0, 8) . substr($data[1] ?? '', -2);
+            $patientId = $subjectId;
             
             // Insert or get existing patient
             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
