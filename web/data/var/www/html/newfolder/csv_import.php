@@ -79,8 +79,8 @@ try {
             }
             $dobFormatted = $dob->format('Y-m-d');
 
-            // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
-            $patientId = substr($subjectId, 0, 8) . substr($data[1] ?? '', -2);
+            // Use subject ID directly as patient ID
+            $patientId = $subjectId;
             
             // Insert or get existing patient
             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
@@ -140,15 +140,15 @@ try {
                 ? strtolower($merciDiagnosisValue) 
                 : 'no value';
 
-            // FIXED: error_type with NULL handling
+            // Handle error_type
             $errorTypeValue = $data[9] ?? null;
-            $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
-            $errorType = null; // Default to NULL
+            $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN'];
+            $errorType = null;
             
             if ($errorTypeValue !== null && $errorTypeValue !== '') {
                 $upperValue = strtoupper(trim($errorTypeValue));
                 if (in_array($upperValue, $allowedErrorTypes)) {
-                    $errorType = ($upperValue === 'NONE') ? 'none' : $upperValue;
+                    $errorType = $upperValue;
                 } else {
                     $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeValue}' - set to NULL";
                 }
@@ -240,11 +240,10 @@ function insertTest($conn, $testData) {
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
-
-    $errorTypeForDb = $testData['error_type'];     
+    $errorTypeForDb = $testData['error_type']; // NULL or valid value
     
     $stmt->bind_param(
-        "sssisssissddd",
+        "sssisssiisddd",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['date_of_test'],
