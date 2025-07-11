@@ -18,9 +18,9 @@ $result_total_patients = $conn->query($sql_total_patients);
 $row_total_patients = $result_total_patients->fetch_assoc();
 $total_patients = $row_total_patients['total_patients'];
 
-// Query to get age statistics
+// Query to get age statistics from date_of_birth
 $sql_age_stats = "SELECT 
-    FLOOR(DATEDIFF(CURRENT_DATE, date_of_birth)/365.25 AS age 
+    TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) AS age 
     FROM patients";
 $result_age_stats = $conn->query($sql_age_stats);
 
@@ -37,11 +37,7 @@ $percentile_75 = !empty($ages) ? $ages[floor(count($ages)*0.75)] : 0;
 
 // Query to get diagnosis distribution
 $sql_diagnosis = "SELECT 
-    CASE 
-        WHEN merci_diagnosis = 'normal' THEN 'Normal'
-        WHEN merci_diagnosis = 'abnormal' THEN 'Abnormal'
-        ELSE 'No Value'
-    END AS diagnosis,
+    merci_diagnosis AS diagnosis,
     COUNT(*) AS count 
     FROM tests 
     GROUP BY merci_diagnosis";
@@ -96,7 +92,7 @@ if ($search_patient_id) {
         p.subject_id, 
         p.date_of_birth
         FROM tests t
-        LEFT JOIN patients p ON t.patient_id = p.patient_id
+        JOIN patients p ON t.patient_id = p.patient_id
         WHERE p.patient_id = ?";
     
     $stmt = $conn->prepare($sql_patient_data);
@@ -125,8 +121,6 @@ if ($search_patient_id) {
             align-items: center;
             flex-direction: column;
             min-height: 100vh;
-            background-size: cover;
-            background-position: center;
         }
 
         .logo {
