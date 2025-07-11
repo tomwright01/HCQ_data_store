@@ -140,10 +140,19 @@ try {
                 ? strtolower($merciDiagnosisValue) 
                 : 'no value';
 
+            // FIXED: error_type validation now matches database ENUM
             $errorTypeValue = $data[9] ?? null;
-            $errorType = ($errorTypeValue !== null && in_array(strtoupper($errorTypeValue), ['TN', 'FP', 'TP', 'FN'])) 
-                ? strtoupper($errorTypeValue) 
-                : 'none';
+            $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'NONE'];
+            $errorType = 'none'; // Default matches database DEFAULT
+            
+            if ($errorTypeValue !== null) {
+                $upperValue = strtoupper(trim($errorTypeValue));
+                if (in_array($upperValue, $allowedErrorTypes)) {
+                    $errorType = $upperValue;
+                } else {
+                    $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeValue}' - using default 'none'";
+                }
+            }
 
             $fafGrade = (isset($data[10]) && is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4) ? (int)$data[10] : null;
             $octScore = isset($data[11]) && is_numeric($data[11]) ? round(floatval($data[11]), 2) : null;
