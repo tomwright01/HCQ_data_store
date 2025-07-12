@@ -6,7 +6,7 @@ require_once 'includes/functions.php';
 $ref = $_GET['ref'] ?? '';
 $patient_id = $_GET['patient_id'] ?? '';
 $eye = $_GET['eye'] ?? '';
-$test_type = 'FAF'; // Hardcoded since this is the FAF viewer
+$test_type = 'FAF'; // Hardcoded for FAF viewer
 
 // Validate parameters
 if (empty($ref) || empty($patient_id) || !in_array($eye, ['OD', 'OS'])) {
@@ -41,13 +41,21 @@ if (!$image_path) {
 $age = !empty($patient['date_of_birth']) ? 
     date_diff(date_create($patient['date_of_birth']), date_create('today'))->y : 'N/A';
 
-// Get MERCI score
+// Get all diagnostic data directly from database
 $merci_score = $test['merci_score'] ?? 'N/A';
+$report_diagnosis = $test['report_diagnosis'] ?? 'Not specified';
+$exclusion = $test['exclusion'] ?? 'None';
+$merci_diagnosis = $test['merci_diagnosis'] ?? 'Not specified';
+$error_type = $test['error_type'] ?? 'N/A';
+$faf_grade = $test['faf_grade'] ?? 'N/A';
+$oct_score = $test['oct_score'] ?? 'N/A';
+$vf_score = $test['vf_score'] ?? 'N/A';
+$test_date = $test['date_of_test'] ?? 'Unknown';
+
 $current_brightness = 1.0; // Default brightness
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Handle brightness update
     if (isset($_POST['brightness'])) {
         $new_brightness = (float)$_POST['brightness'];
         if ($new_brightness >= 0.1 && $new_brightness <= 3.0) {
@@ -272,7 +280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             justify-content: center;
         }
         
-        .grading-card {
+        .diagnostic-card {
             background-color: var(--light-bg);
             border-radius: 10px;
             padding: 25px;
@@ -280,14 +288,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             box-shadow: var(--card-shadow);
         }
         
-        .grading-card h2 {
+        .diagnostic-card h2 {
             color: var(--primary-color);
             margin-top: 0;
             margin-bottom: 20px;
-        }
-        
-        .visit-details {
-            margin-top: 30px;
         }
         
         .detail-row {
@@ -475,55 +479,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?php endif; ?>
                     </div>
                 </div>
+                
+                <div class="severity-scale">
+                    <div class="scale-item">0-20 - Normal</div>
+                    <div class="scale-item">21-40 - Mild</div>
+                    <div class="scale-item">41-60 - Moderate</div>
+                    <div class="scale-item">61-80 - Significant</div>
+                    <div class="scale-item">81-100 - Severe</div>
+                </div>
             </div>
             
-            <div class="grading-card">
-                <h2>Test Information</h2>
+            <div class="diagnostic-card">
+                <h2>Diagnostic Information</h2>
                 
-                <div class="visit-details">
+                <div class="detail-row">
+                    <div class="detail-label">Test Date:</div>
+                    <div class="detail-value"><?= htmlspecialchars($test_date) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Report Diagnosis:</div>
+                    <div class="detail-value"><?= htmlspecialchars($report_diagnosis) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">MERCI Diagnosis:</div>
+                    <div class="detail-value"><?= htmlspecialchars($merci_diagnosis) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Exclusion:</div>
+                    <div class="detail-value"><?= htmlspecialchars($exclusion) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Error Type:</div>
+                    <div class="detail-value"><?= htmlspecialchars($error_type) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">FAF Grade:</div>
+                    <div class="detail-value"><?= htmlspecialchars($faf_grade) ?></div>
+                </div>
+                
+                <?php if ($oct_score !== 'N/A'): ?>
                     <div class="detail-row">
-                        <div class="detail-label">Test Date:</div>
-                        <div class="detail-value"><?= htmlspecialchars($test['date_of_test']) ?></div>
+                        <div class="detail-label">OCT Score:</div>
+                        <div class="detail-value"><?= htmlspecialchars($oct_score) ?></div>
                     </div>
-                    
+                <?php endif; ?>
+                
+                <?php if ($vf_score !== 'N/A'): ?>
                     <div class="detail-row">
-                        <div class="detail-label">Eye:</div>
-                        <div class="detail-value"><?= htmlspecialchars($eye) ?> (<?= $eye == 'OD' ? 'Right' : 'Left' ?>)</div>
+                        <div class="detail-label">VF Score:</div>
+                        <div class="detail-value"><?= htmlspecialchars($vf_score) ?></div>
                     </div>
-                    
-                    <div class="detail-row">
-                        <div class="detail-label">Report Diagnosis:</div>
-                        <div class="detail-value"><?= htmlspecialchars($test['report_diagnosis']) ?></div>
-                    </div>
-                    
-                    <div class="detail-row">
-                        <div class="detail-label">MERCI Diagnosis:</div>
-                        <div class="detail-value"><?= htmlspecialchars($test['merci_diagnosis']) ?></div>
-                    </div>
-                    
-                    <div class="detail-row">
-                        <div class="detail-label">Exclusion:</div>
-                        <div class="detail-value"><?= htmlspecialchars($test['exclusion']) ?></div>
-                    </div>
-                    
-                    <div class="detail-row">
-                        <div class="detail-label">Image Reference:</div>
-                        <div class="detail-value"><?= htmlspecialchars($ref) ?></div>
-                    </div>
-                    
-                    <?php if (!empty($test['oct_score'])): ?>
-                        <div class="detail-row">
-                            <div class="detail-label">OCT Score:</div>
-                            <div class="detail-value"><?= htmlspecialchars($test['oct_score']) ?></div>
-                        </div>
-                    <?php endif; ?>
-                    
-                    <?php if (!empty($test['vf_score'])): ?>
-                        <div class="detail-row">
-                            <div class="detail-label">VF Score:</div>
-                            <div class="detail-value"><?= htmlspecialchars($test['vf_score']) ?></div>
-                        </div>
-                    <?php endif; ?>
+                <?php endif; ?>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Image Reference:</div>
+                    <div class="detail-value"><?= htmlspecialchars($ref) ?></div>
                 </div>
             </div>
             
