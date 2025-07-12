@@ -2,53 +2,49 @@
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
-// Process import if requested
-if (isset($_POST['import']) && isset($_FILES['image'])) {
-    $target_dir = IMAGE_BASE_DIR;
-    $test_type = $_POST['test_type']; // FAF, OCT, VF, or MFERG
-    $eye = $_POST['eye']; // OD or OS
-    $patient_id = $_POST['patient_id'];
-    $test_date = $_POST['test_date'];
-    
-    // Create filename pattern: patientid_eye_YYYYMMDD.png
-    $filename = $patient_id . '_' . $eye . '_' . $test_date . '.png';
-    $target_file = $target_dir . $test_type . '/' . $filename;
-    
-    // Check if directory exists, create if not
-    if (!file_exists($target_dir . $test_type)) {
-        mkdir($target_dir . $test_type, 0777, true);
-    }
-    
-    // Try to upload the file
-    if (move_uploaded_file($_FILES['image']['tmp_name'], $target_file)) {
-        // Update database with the image reference
-        $field_name = strtolower($test_type) . '_reference_' . strtolower($eye);
+$message = '';
+$messageType = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
+    try {
+        $testType = $_POST['test_type'] ?? '';
+        $eye = $_POST['eye'] ?? '';
+        $patient_id = $_POST['patient_id'] ?? '';
+        $test_date = $_POST['test_date'] ?? '';
         
-        // Check if test record exists for this patient and date
-        $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-        $stmt->bind_param("ss", $patient_id, $test_date);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        if ($result->num_rows > 0) {
-            // Update existing test record
-            $test = $result->fetch_assoc();
-            $stmt = $conn->prepare("UPDATE tests SET $field_name = ? WHERE test_id = ?");
-            $stmt->bind_param("ss", $filename, $test['test_id']);
-        } else {
-            // Create new test record
-            $test_id = $test_date . '_' . $patient_id . '_' . substr(md5(uniqid()), 0, 4);
-            $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test, $field_name) VALUES (?, ?, ?, ?)");
-            $stmt->bind_param("ssss", $test_id, $patient_id, $test_date, $filename);
+        // Validate inputs
+        if (empty($testType) || empty($eye) || empty($patient_id) || empty($test_date)) {
+            throw new Exception("All fields are required");
         }
         
-        if ($stmt->execute()) {
+        if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
+            throw new Exception("Invalid test type");
+        }
+        
+        if (!in_array($eye, ['OD', 'OS'])) {
+            throw new Exception("Invalid eye selection");
+        }
+        
+        if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+            throw new Exception("Please select a valid image file");
+        }
+        
+        // Check file type (PNG only)
+        $fileType = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
+        if ($fileType !== 'png') {
+            throw new Exception("Only PNG images are allowed");
+        }
+        
+        // Process the upload
+        if (importTestImage($testType, $eye, $patient_id, $test_date, $_FILES['image']['tmp_name'])) {
             $message = "Image uploaded and database updated successfully!";
+            $messageType = 'success';
         } else {
-            $message = "Error updating database: " . $conn->error;
+            throw new Exception("Failed to process image upload");
         }
-    } else {
-        $message = "Sorry, there was an error uploading your file.";
+    } catch (Exception $e) {
+        $message = "Error: " . $e->getMessage();
+        $messageType = 'error';
     }
 }
 ?>
@@ -60,64 +56,11 @@ if (isset($_POST['import']) && isset($_FILES['image'])) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Import Medical Images</title>
     <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            background-color: #f7f7f7;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-            color: #333;
-        }
-        .container {
-            background-color: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            width: 100%;
-            max-width: 600px;
-        }
-        h1 {
-            color: rgb(0, 168, 143);
-            font-size: 28px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-        }
-        input, select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            box-sizing: border-box;
-        }
-        button {
-            background-color: rgb(0, 168, 143);
-            color: white;
-            border: none;
-            padding: 12px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            width: 100%;
-            margin-top: 10px;
-        }
-        button:hover {
-            background-color: rgb(0, 140, 120);
-        }
+        /* [Keep all your existing CSS styles] */
         .message {
-            margin-top: 20px;
-            padding: 10px;
+            padding: 15px;
+            margin: 20px 0;
             border-radius: 4px;
-            text-align: center;
         }
         .success {
             background-color: #dff0d8;
@@ -127,25 +70,14 @@ if (isset($_POST['import']) && isset($_FILES['image'])) {
             background-color: #f2dede;
             color: #a94442;
         }
-        .back-link {
-            display: inline-block;
-            margin-top: 15px;
-            color: rgb(0, 168, 143);
-            text-decoration: none;
-        }
-        .back-link:hover {
-            text-decoration: underline;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Import Medical Images</h1>
         
-        <?php if (isset($message)): ?>
-            <div class="message <?= strpos($message, 'error') !== false ? 'error' : 'success' ?>">
-                <?= $message ?>
-            </div>
+        <?php if ($message): ?>
+            <div class="message <?= $messageType ?>"><?= htmlspecialchars($message) ?></div>
         <?php endif; ?>
         
         <form method="POST" enctype="multipart/form-data">
@@ -153,10 +85,9 @@ if (isset($_POST['import']) && isset($_FILES['image'])) {
                 <label for="test_type">Test Type:</label>
                 <select name="test_type" id="test_type" required>
                     <option value="">Select Test Type</option>
-                    <option value="FAF">Fundus Autofluorescence (FAF)</option>
-                    <option value="OCT">Optical Coherence Tomography (OCT)</option>
-                    <option value="VF">Visual Field (VF)</option>
-                    <option value="MFERG">Multifocal ERG (MFERG)</option>
+                    <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                        <option value="<?= $type ?>"><?= $type ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             
@@ -180,7 +111,7 @@ if (isset($_POST['import']) && isset($_FILES['image'])) {
             </div>
             
             <div class="form-group">
-                <label for="image">Image File (PNG):</label>
+                <label for="image">Image File (PNG only):</label>
                 <input type="file" name="image" id="image" accept="image/png" required>
             </div>
             
