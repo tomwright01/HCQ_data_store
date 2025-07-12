@@ -88,6 +88,14 @@ if ($search_patient_id) {
         t.faf_grade,
         t.oct_score,
         t.vf_score,
+        t.faf_reference_od,
+        t.faf_reference_os,
+        t.oct_reference_od,
+        t.oct_reference_os,
+        t.vf_reference_od,
+        t.vf_reference_os,
+        t.mferg_reference_od,
+        t.mferg_reference_os,
         p.patient_id, 
         p.subject_id, 
         p.date_of_birth
@@ -287,6 +295,30 @@ if ($search_patient_id) {
             font-weight: bold;
             margin: 10px 0;
         }
+
+        .image-link {
+            color: rgb(0, 168, 143);
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .image-link:hover {
+            text-decoration: underline;
+        }
+
+        .message {
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
     </style>
 </head>
 <body>
@@ -321,6 +353,7 @@ if ($search_patient_id) {
                         <th>FAF Grade</th>
                         <th>OCT Score</th>
                         <th>VF Score</th>
+                        <th>Images</th>
                     </tr>
                     <?php while ($row = $result_patient->fetch_assoc()): ?>
                         <tr>
@@ -336,6 +369,21 @@ if ($search_patient_id) {
                             <td><?= htmlspecialchars($row["faf_grade"] ?? 'N/A') ?></td>
                             <td><?= htmlspecialchars($row["oct_score"] ?? 'N/A') ?></td>
                             <td><?= htmlspecialchars($row["vf_score"] ?? 'N/A') ?></td>
+                            <td>
+                                <?php 
+                                $imageLinks = [];
+                                if (!empty($row['faf_reference_od'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['faf_reference_od']).'" class="image-link">FAF OD</a>';
+                                if (!empty($row['faf_reference_os'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['faf_reference_os']).'" class="image-link">FAF OS</a>';
+                                if (!empty($row['oct_reference_od'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['oct_reference_od']).'" class="image-link">OCT OD</a>';
+                                if (!empty($row['oct_reference_os'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['oct_reference_os']).'" class="image-link">OCT OS</a>';
+                                if (!empty($row['vf_reference_od'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['vf_reference_od']).'" class="image-link">VF OD</a>';
+                                if (!empty($row['vf_reference_os'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['vf_reference_os']).'" class="image-link">VF OS</a>';
+                                if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['mferg_reference_od']).'" class="image-link">MFERG OD</a>';
+                                if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['mferg_reference_os']).'" class="image-link">MFERG OS</a>';
+                                
+                                echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
+                                ?>
+                            </td>
                         </tr>
                     <?php endwhile; ?>
                 </table>
@@ -345,6 +393,7 @@ if ($search_patient_id) {
         <?php endif; ?>
 
         <h2><a href="form.php" style="color: rgb(0, 168, 143); text-decoration: none; font-weight: bold;">Import New Data</a></h2>
+        <h2><a href="import_images.php" style="color: rgb(0, 168, 143); text-decoration: none; font-weight: bold;">Import Medical Images</a></h2>
     </div>
 
     <div class="stats-section">
