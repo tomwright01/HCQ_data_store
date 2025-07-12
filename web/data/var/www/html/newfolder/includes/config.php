@@ -1,3 +1,5 @@
+
+
 <?php 
 // Database configuration
 define('DB_SERVER', 'mariadb');
@@ -5,9 +7,12 @@ define('DB_USERNAME', 'root');
 define('DB_PASSWORD', 'notgood');
 define('DB_NAME', 'PatientData');
 
-// Image configuration - using your SAMPLE folder structure
-define('IMAGE_BASE_DIR', '/var/www/html/data/'); // Docker container path
-define('IMAGE_BASE_URL', '/data/'); // Web-accessible URL path (corrected to serve images via this path)
+// Image configuration
+define('IMAGE_BASE_DIR', '/var/www/html/data/');
+define('IMAGE_BASE_URL', '/data/');
+
+// Allowed test types
+define('ALLOWED_TEST_TYPES', ['FAF', 'OCT', 'VF', 'MFERG']);
 
 // Create connection
 $conn = new mysqli(DB_SERVER, DB_USERNAME, DB_PASSWORD, DB_NAME);
@@ -17,21 +22,18 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Function to get image path (dynamically checks file system)
+// Function to get image path
 function getDynamicImagePath($filename) {
-    if (empty($filename)) return false;
+    if (empty($filename)) return null;
     
-    $testTypes = ['FAF', 'OCT', 'VF', 'MFERG'];
-    
-    foreach ($testTypes as $type) {
-        $fullPath = IMAGE_BASE_DIR . $type . '/' . $filename;
-        if (file_exists($fullPath)) {
+    foreach (ALLOWED_TEST_TYPES as $type) {
+        $full_path = IMAGE_BASE_DIR . $type . '/' . $filename;
+        if (file_exists($full_path)) {
             return IMAGE_BASE_URL . $type . '/' . rawurlencode($filename);
         }
     }
     
-    return false;
+    return null;
 }
-?>
 
 
