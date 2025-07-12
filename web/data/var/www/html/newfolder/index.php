@@ -300,24 +300,12 @@ if ($search_patient_id) {
             color: rgb(0, 168, 143);
             text-decoration: none;
             font-weight: bold;
+            transition: color 0.3s;
         }
 
         .image-link:hover {
+            color: rgb(0, 140, 120);
             text-decoration: underline;
-        }
-
-        .message {
-            padding: 15px;
-            margin: 20px 0;
-            border-radius: 4px;
-        }
-        .success {
-            background-color: #dff0d8;
-            color: #3c763d;
-        }
-        .error {
-            background-color: #f2dede;
-            color: #a94442;
         }
     </style>
 </head>
@@ -372,14 +360,14 @@ if ($search_patient_id) {
                             <td>
                                 <?php 
                                 $imageLinks = [];
-                                if (!empty($row['faf_reference_od'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['faf_reference_od']).'" class="image-link">FAF OD</a>';
-                                if (!empty($row['faf_reference_os'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['faf_reference_os']).'" class="image-link">FAF OS</a>';
-                                if (!empty($row['oct_reference_od'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['oct_reference_od']).'" class="image-link">OCT OD</a>';
-                                if (!empty($row['oct_reference_os'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['oct_reference_os']).'" class="image-link">OCT OS</a>';
-                                if (!empty($row['vf_reference_od'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['vf_reference_od']).'" class="image-link">VF OD</a>';
-                                if (!empty($row['vf_reference_os'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['vf_reference_os']).'" class="image-link">VF OS</a>';
-                                if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['mferg_reference_od']).'" class="image-link">MFERG OD</a>';
-                                if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="'.htmlspecialchars($row['mferg_reference_os']).'" class="image-link">MFERG OS</a>';
+                                if (!empty($row['faf_reference_od'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_od']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OD" class="image-link">FAF OD</a>';
+                                if (!empty($row['faf_reference_os'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_os']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OS" class="image-link">FAF OS</a>';
+                                if (!empty($row['oct_reference_od'])) $imageLinks[] = '<a href="#" class="image-link">OCT OD</a>';
+                                if (!empty($row['oct_reference_os'])) $imageLinks[] = '<a href="#" class="image-link">OCT OS</a>';
+                                if (!empty($row['vf_reference_od'])) $imageLinks[] = '<a href="#" class="image-link">VF OD</a>';
+                                if (!empty($row['vf_reference_os'])) $imageLinks[] = '<a href="#" class="image-link">VF OS</a>';
+                                if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="#" class="image-link">MFERG OD</a>';
+                                if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="#" class="image-link">MFERG OS</a>';
                                 
                                 echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
                                 ?>
