@@ -344,7 +344,7 @@ if ($search_patient_id) {
             <?php endif; ?>
         <?php endif; ?>
 
-        <h2><a href="import.php" style="color: rgb(0, 168, 143); text-decoration: none; font-weight: bold;">Import New Data</a></h2>
+        <h2><a href="form.php" style="color: rgb(0, 168, 143); text-decoration: none; font-weight: bold;">Import New Data</a></h2>
     </div>
 
     <div class="stats-section">
