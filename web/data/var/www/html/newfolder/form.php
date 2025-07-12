@@ -1,4 +1,8 @@
 <?php
+// Enable error reporting for debugging
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
@@ -12,35 +16,55 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Check if form data has been submitted
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Process Patient Data
-    $subjectId = $_POST['subject_id'];
-    $dob = $_POST['date_of_birth'];
-    
-    // Generate patient_id (using just subject ID)
-    $patientId = $subjectId;
-    
-    // Insert Patient
-    $stmt = $conn->prepare("INSERT INTO patients (
-        patient_id, subject_id, date_of_birth
-    ) VALUES (?, ?, ?)");
-    
-    $stmt->bind_param("sss", $patientId, $subjectId, $dob);
-    
-    if ($stmt->execute()) {
-        // Process Test Data
+// Process form submission
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    try {
+        // Start transaction
+        $conn->begin_transaction();
+        
+        // 1. Process Patient Data
+        $subjectId = trim($_POST['subject_id']);
+        $dob = $_POST['date_of_birth'];
+        
+        // Validate required fields
+        if (empty($subjectId) || empty($dob)) {
+            throw new Exception("Subject ID and Date of Birth are required");
+        }
+        
+        // Use subject ID as patient ID (no concatenation with birth year)
+        $patientId = $subjectId;
+        
+        // Insert Patient
+        $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) VALUES (?, ?, ?)");
+        $stmt->bind_param("sss", $patientId, $subjectId, $dob);
+        
+        if (!$stmt->execute()) {
+            throw new Exception("Error saving patient: " . $stmt->error);
+        }
+        $stmt->close();
+        
+        // 2. Process Test Data
         $testDate = $_POST['date_of_test'];
-        $age = $_POST['age'];
-        $eye = $_POST['eye'];
+        $age = !empty($_POST['age']) ? (int)$_POST['age'] : null;
+        $eye = !empty($_POST['eye']) ? $_POST['eye'] : null;
         $reportDiagnosis = $_POST['report_diagnosis'];
         $exclusion = $_POST['exclusion'];
-        $merciScore = $_POST['merci_score'];
+        
+        // Handle MERCI score (can be number or 'unable')
+        $merciScore = null;
+        if (!empty($_POST['merci_score'])) {
+            if (strtolower($_POST['merci_score']) === 'unable') {
+                $merciScore = 'unable';
+            } elseif (is_numeric($_POST['merci_score']) && $_POST['merci_score'] >= 0 && $_POST['merci_score'] <= 100) {
+                $merciScore = (int)$_POST['merci_score'];
+            }
+        }
+        
         $merciDiagnosis = $_POST['merci_diagnosis'];
-        $errorType = $_POST['error_type'];
-        $fafGrade = $_POST['faf_grade'];
-        $octScore = $_POST['oct_score'];
-        $vfScore = $_POST['vf_score'];
+        $errorType = !empty($_POST['error_type']) ? $_POST['error_type'] : null;
+        $fafGrade = !empty($_POST['faf_grade']) ? (int)$_POST['faf_grade'] : null;
+        $octScore = !empty($_POST['oct_score']) ? round((float)$_POST['oct_score'], 2) : null;
+        $vfScore = !empty($_POST['vf_score']) ? round((float)$_POST['vf_score'], 2) : null;
         
         // Generate test_id (date + eye + random suffix)
         $testDateFormatted = date('Ymd', strtotime($testDate));
@@ -71,16 +95,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vfScore
         );
         
-        if ($stmt->execute()) {
-            echo "<script>alert('Patient and test information successfully saved!');</script>";
-        } else {
-            echo "<script>alert('Error saving test information: " . $stmt->error . "');</script>";
+        if (!$stmt->execute()) {
+            throw new Exception("Error saving test: " . $stmt->error);
         }
-    } else {
-        echo "<script>alert('Error saving patient information: " . $stmt->error . "');</script>";
+        $stmt->close();
+        
+        // Commit transaction
+        $conn->commit();
+        
+        // Success message
+        $successMessage = "Patient and test information successfully saved!";
+    } catch (Exception $e) {
+        // Rollback transaction on error
+        $conn->rollback();
+        $errorMessage = "Error: " . $e->getMessage();
     }
-    
-    $stmt->close();
 }
 ?>
 
@@ -100,7 +129,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             min-height: 100vh;
             box-sizing: border-box;
         }
-
         .form-container {
             background-color: #fff;
             padding: 30px;
@@ -110,20 +138,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             max-width: 800px;
             margin: 20px auto;
         }
-
         h1 {
             text-align: center;
             font-size: 28px;
             color: rgb(0, 168, 143);
             margin-bottom: 20px;
         }
-
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .alert-success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .alert-error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
         label {
             display: block;
             margin: 10px 0 5px;
             font-weight: bold;
         }
-
         input, select, textarea {
             width: 100%;
             padding: 8px;
@@ -132,28 +170,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 4px;
             box-sizing: border-box;
         }
-
         .form-section {
             margin-bottom: 25px;
             padding-bottom: 15px;
             border-bottom: 1px solid #eee;
         }
-
         .form-section h2 {
             color: rgb(0, 168, 143);
             font-size: 20px;
             margin-bottom: 15px;
         }
-
         .form-row {
             display: flex;
             gap: 15px;
         }
-
         .form-group {
             flex: 1;
         }
-
         .submit-btn {
             background-color: rgb(0, 168, 143);
             color: white;
@@ -165,18 +198,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             width: 100%;
             margin-top: 10px;
         }
-
         .submit-btn:hover {
             background-color: rgb(0, 140, 120);
         }
-
         .back-link {
             display: inline-block;
             margin-top: 15px;
             color: rgb(0, 168, 143);
             text-decoration: none;
         }
-
         .back-link:hover {
             text-decoration: underline;
         }
@@ -186,6 +216,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="form-container">
         <h1>Add New Patient and Test Information</h1>
+        
+        <?php if (isset($successMessage)): ?>
+            <div class="alert alert-success"><?= htmlspecialchars($successMessage) ?></div>
+        <?php endif; ?>
+        
+        <?php if (isset($errorMessage)): ?>
+            <div class="alert alert-error"><?= htmlspecialchars($errorMessage) ?></div>
+        <?php endif; ?>
 
         <form action="" method="post">
             <!-- Patient Information -->
@@ -250,7 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-row">
                     <div class="form-group">
                         <label for="merci_score">MERCI Score (0-100 or 'unable'):</label>
-                        <input type="text" name="merci_score">
+                        <input type="text" name="merci_score" placeholder="Enter number or 'unable'">
                     </div>
                     
                     <div class="form-group">
