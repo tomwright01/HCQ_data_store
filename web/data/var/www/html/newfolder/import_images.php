@@ -35,27 +35,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
             throw new Exception("Only PNG images are allowed");
         }
         
-        // Generate unique filename
-        $filename = $testType . '_' . $eye . '_' . $patient_id . '_' . date('Ymd', strtotime($test_date)) . '.png';
-        $uploadPath = 'uploads/' . $filename;
-        
-        // Move uploaded file
-        if (!move_uploaded_file($_FILES['image']['tmp_name'], $uploadPath)) {
-            throw new Exception("Failed to move uploaded file");
+        // Process the upload using our function
+        if (importTestImage($testType, $eye, $patient_id, $test_date, $_FILES['image']['tmp_name'])) {
+            $message = "Image uploaded and database updated successfully!";
+            $messageType = 'success';
+        } else {
+            throw new Exception("Failed to process image upload");
         }
-        
-        // Update database
-        $fieldName = $testType . '_reference_' . strtolower($eye);
-        $sql = "UPDATE tests SET $fieldName = ? WHERE patient_id = ? AND date_of_test = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sss", $filename, $patient_id, $test_date);
-        
-        if (!$stmt->execute()) {
-            throw new Exception("Failed to update database");
-        }
-        
-        $message = "Image uploaded and database updated successfully!";
-        $messageType = 'success';
     } catch (Exception $e) {
         $message = "Error: " . $e->getMessage();
         $messageType = 'error';
@@ -72,66 +58,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
     <style>
         body {
             font-family: 'Arial', sans-serif;
-            background-color: #f7f7f7;
+            margin: 0;
+            padding: 0;
+            background-color: white;
+            color: #333;
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            margin: 0;
-            color: #333;
         }
 
         .container {
             background-color: white;
-            padding: 40px;
+            padding: 30px;
             border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-            text-align: center;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             width: 100%;
             max-width: 600px;
+            border: 1px solid #ddd;
         }
 
         h1 {
             color: rgb(0, 168, 143);
-            font-size: 36px;
-            margin-bottom: 30px;
-            font-weight: bold;
+            font-size: 28px;
+            margin-bottom: 20px;
+            text-align: center;
         }
 
         .form-group {
-            margin-bottom: 20px;
-            text-align: left;
+            margin-bottom: 15px;
         }
 
         .form-group label {
             display: block;
-            margin-bottom: 8px;
+            margin-bottom: 5px;
             font-weight: bold;
-            color: #555;
         }
 
         .form-group input,
         .form-group select {
             width: 100%;
-            padding: 12px;
+            padding: 10px;
             border: 1px solid #ddd;
-            border-radius: 5px;
+            border-radius: 4px;
             font-size: 16px;
         }
 
-        .form-group button {
-            padding: 12px 20px;
+        button[type="submit"] {
             background-color: rgb(0, 168, 143);
             color: white;
             border: none;
-            border-radius: 5px;
-            font-size: 18px;
+            padding: 12px 20px;
+            border-radius: 4px;
             cursor: pointer;
-            transition: background-color 0.3s ease;
+            font-size: 16px;
             width: 100%;
+            margin-top: 10px;
+            transition: background-color 0.3s;
         }
 
-        .form-group button:hover {
+        button[type="submit"]:hover {
             background-color: rgb(0, 140, 120);
         }
 
@@ -139,36 +125,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
             padding: 15px;
             margin: 20px 0;
             border-radius: 4px;
-            font-size: 16px;
+            text-align: center;
         }
-        
+
         .success {
             background-color: #dff0d8;
             color: #3c763d;
             border: 1px solid #d6e9c6;
         }
-        
+
         .error {
             background-color: #f2dede;
             color: #a94442;
             border: 1px solid #ebccd1;
         }
 
-        .back-button {
+        .back-link {
             display: inline-block;
-            padding: 10px 20px;
-            margin-top: 20px;
-            background-color: rgb(0, 168, 143);
-            color: white;
+            margin-top: 15px;
+            color: rgb(0, 168, 143);
             text-decoration: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background-color 0.3s ease;
+            font-weight: bold;
         }
 
-        .back-button:hover {
-            background-color: rgb(0, 140, 120);
+        .back-link:hover {
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -185,10 +166,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
                 <label for="test_type">Test Type:</label>
                 <select name="test_type" id="test_type" required>
                     <option value="">Select Test Type</option>
-                    <option value="faf">Fundus Autofluorescence (FAF)</option>
-                    <option value="oct">Optical Coherence Tomography (OCT)</option>
-                    <option value="vf">Visual Field (VF)</option>
-                    <option value="mferg">Multifocal ERG (MFERG)</option>
+                    <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                        <option value="<?= $type ?>"><?= $type ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             
@@ -216,12 +196,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
                 <input type="file" name="image" id="image" accept="image/png" required>
             </div>
             
-            <div class="form-group">
-                <button type="submit" name="import">Import Image</button>
-            </div>
+            <button type="submit" name="import">Import Image</button>
         </form>
         
-        <a href="index.php" class="back-button">← Back to Dashboard</a>
+        <a href="index.php" class="back-link">← Back to Dashboard</a>
     </div>
 </body>
 </html>
