@@ -3,109 +3,105 @@ require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
 // Increase limits for bulk processing
-set_time_limit(600);
-ini_set('memory_limit', '1024M');
+set_time_limit(300);
+ini_set('memory_limit', '512M');
 
 $message = '';
 $messageType = '';
 
-function processBulkImages($testType, $sourcePath) {
+function processBulkImport($testType, $sourceDir) {
     global $conn;
     
     $results = [
-        'processed' => 0,
         'success' => 0,
         'errors' => [],
-        'warnings' => []
+        'total' => 0
     ];
 
-    // Validate and normalize paths
-    $sourcePath = rtrim($sourcePath, '/') . '/';
-    $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
-    
-    if (!is_dir($sourcePath)) {
-        throw new Exception("Source directory does not exist: " . htmlspecialchars($sourcePath));
+    // Validate and normalize directory path
+    $sourceDir = rtrim($sourceDir, '/') . '/';
+    if (!is_dir($sourceDir)) {
+        throw new Exception("Source directory does not exist: " . htmlspecialchars($sourceDir));
     }
 
-    // Create target directory if needed
+    // Create target directory if it doesn't exist
+    $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
     if (!is_dir($targetDir)) {
         if (!mkdir($targetDir, 0777, true)) {
             throw new Exception("Failed to create target directory: " . htmlspecialchars($targetDir));
         }
     }
 
-    // Recursive directory iterator
+    // Scan for PNG files recursively
     $iterator = new RecursiveIteratorIterator(
-        new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS),
+        new RecursiveDirectoryIterator($sourceDir, FilesystemIterator::SKIP_DOTS),
         RecursiveIteratorIterator::SELF_FIRST
     );
 
     foreach ($iterator as $file) {
         if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
-            $results['processed']++;
+            $results['total']++;
             $filename = $file->getFilename();
-            $sourceFile = $file->getPathname();
-            
+            $sourcePath = $file->getPathname();
+
             try {
                 // Parse filename (patientid_eye_YYYYMMDD.png)
-                if (!preg_match('/^([A-Za-z0-9]+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
-                    throw new Exception("Invalid filename format");
+                if (!preg_match('/^([^_]+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
+                    throw new Exception("Filename doesn't match required pattern");
                 }
 
-                $patientId = $matches[1];
+                $patient_id = $matches[1];
                 $eye = strtoupper($matches[2]);
                 $dateStr = $matches[3];
 
                 // Validate date
-                $testDate = DateTime::createFromFormat('Ymd', $dateStr);
-                if (!$testDate) {
-                    throw new Exception("Invalid date in filename");
+                $test_date = DateTime::createFromFormat('Ymd', $dateStr);
+                if (!$test_date) {
+                    throw new Exception("Invalid date format in filename");
                 }
-                $testDate = $testDate->format('Y-m-d');
+                $test_date = $test_date->format('Y-m-d');
 
                 // Verify patient exists
-                $patient = getPatientById($patientId);
+                $patient = getPatientById($patient_id);
                 if (!$patient) {
-                    throw new Exception("Patient $patientId not found in database");
-                }
-
-                // Prepare target path
-                $targetFile = $targetDir . $filename;
-                
-                // Copy image to target directory
-                if (file_exists($targetFile)) {
-                    $results['warnings'][] = "Skipped existing file: $filename";
-                    continue;
-                }
-
-                if (!copy($sourceFile, $targetFile)) {
-                    throw new Exception("Failed to copy image to target directory");
+                    throw new Exception("Patient $patient_id not found in database");
                 }
 
                 // Prepare database fields
-                $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
-                
-                // Check for existing test record
+                $fieldName = strtolower($testType) . '_reference_' . strtolower($eye);
+                $targetPath = $targetDir . $filename;
+
+                // Check if file already exists in target location
+                if (file_exists($targetPath)) {
+                    throw new Exception("File already exists in target location");
+                }
+
+                // Copy file to target directory
+                if (!copy($sourcePath, $targetPath)) {
+                    throw new Exception("Failed to copy file to target directory");
+                }
+
+                // Check if test record already exists
                 $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-                $stmt->bind_param("ss", $patientId, $testDate);
+                $stmt->bind_param("ss", $patient_id, $test_date);
                 $stmt->execute();
                 $test = $stmt->get_result()->fetch_assoc();
 
-                // Generate test ID if new record
+                // Generate unique test ID if new record
                 $testId = $test ? $test['test_id'] : 
-                    $patientId . '_' . date('Ymd', strtotime($testDate)) . '_' . substr(md5(uniqid()), 0, 4);
+                    date('Ymd', strtotime($test_date)) . '_' . $patient_id . '_' . substr(md5(uniqid()), 0, 4);
 
                 // Update or insert test record
                 if ($test) {
-                    $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
-                    $stmt->bind_param("ss", $filename, $testId);
+                    $stmt = $conn->prepare("UPDATE tests SET $fieldName = ? WHERE test_id = ?");
                 } else {
                     $stmt = $conn->prepare("INSERT INTO tests 
-                        (test_id, patient_id, date_of_test, $imageField) 
+                        (test_id, patient_id, date_of_test, $fieldName) 
                         VALUES (?, ?, ?, ?)");
-                    $stmt->bind_param("ssss", $testId, $patientId, $testDate, $filename);
                 }
-
+                
+                $stmt->bind_param("ssss", $filename, $testId, $patient_id, $test_date);
+                
                 if (!$stmt->execute()) {
                     throw new Exception("Database error: " . $conn->error);
                 }
@@ -115,7 +111,7 @@ function processBulkImages($testType, $sourcePath) {
                 $results['errors'][] = [
                     'file' => $filename,
                     'error' => $e->getMessage(),
-                    'path' => $sourceFile
+                    'path' => $sourcePath
                 ];
             }
         }
@@ -124,59 +120,50 @@ function processBulkImages($testType, $sourcePath) {
     return $results;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_import'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        $testType = $_POST['bulk_test_type'] ?? '';
-        $sourcePath = $_POST['folder_path'] ?? '';
-        
-        if (empty($testType) || empty($sourcePath)) {
-            throw new Exception("Test type and folder path are required");
-        }
-        
-        if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
-            throw new Exception("Invalid test type selected");
-        }
-        
-        $results = processBulkImages($testType, $sourcePath);
-        
-        // Prepare results message
-        $message = "<div class='results-container'>";
-        $message .= "<h3>Bulk Import Results</h3>";
-        $message .= "<div class='stats-grid'>";
-        $message .= "<div class='stat-box total'><span>Files Processed</span><strong>{$results['processed']}</strong></div>";
-        $message .= "<div class='stat-box success'><span>Successful</span><strong>{$results['success']}</strong></div>";
-        $message .= "<div class='stat-box errors'><span>Errors</span><strong>" . count($results['errors']) . "</strong></div>";
-        $message .= "</div>";
-        
-        if (!empty($results['warnings'])) {
-            $message .= "<div class='warning-box'><h4>Warnings:</h4><ul>";
-            foreach (array_slice($results['warnings'], 0, 10) as $warning) {
-                $message .= "<li>" . htmlspecialchars($warning) . "</li>";
+        if (isset($_POST['import'])) {
+            // [Keep existing single file upload code]
+        } elseif (isset($_POST['bulk_import'])) {
+            $testType = $_POST['bulk_test_type'] ?? '';
+            $sourceDir = $_POST['folder_path'] ?? '';
+            
+            if (empty($testType) || empty($sourceDir)) {
+                throw new Exception("Test type and folder path are required");
             }
-            if (count($results['warnings']) > 10) {
-                $message .= "<li>... and " . (count($results['warnings']) - 10) . " more warnings</li>";
+            
+            if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
+                throw new Exception("Invalid test type selected");
             }
-            $message .= "</ul></div>";
+            
+            $results = processBulkImport($testType, $sourceDir);
+            
+            // Prepare detailed results message
+            $message = "<div class='result-header'>";
+            $message .= "<h3>Bulk Import Results</h3>";
+            $message .= "<p>Scanned directory: <code>" . htmlspecialchars($sourceDir) . "</code></p>";
+            $message .= "<div class='result-stats'>";
+            $message .= "<p class='stat-total'>Total files found: <strong>{$results['total']}</strong></p>";
+            $message .= "<p class='stat-success'>Successfully processed: <strong>{$results['success']}</strong></p>";
+            $message .= "<p class='stat-failed'>Failed: <strong>" . count($results['errors']) . "</strong></p>";
+            $message .= "</div></div>";
+            
+            if (!empty($results['errors'])) {
+                $message .= "<div class='error-details'><h4>Error Details:</h4><ul>";
+                foreach (array_slice($results['errors'], 0, 50) as $error) {
+                    $message .= "<li><strong>" . htmlspecialchars($error['file']) . "</strong>: " . 
+                               htmlspecialchars($error['error']) . 
+                               "<br><small>" . htmlspecialchars($error['path']) . "</small></li>";
+                }
+                if (count($results['errors']) > 50) {
+                    $message .= "<li>... and " . (count($results['errors']) - 50) . " more errors</li>";
+                }
+                $message .= "</ul></div>";
+            }
+            
+            $messageType = empty($results['errors']) ? 'success' : 
+                          ($results['success'] > 0 ? 'warning' : 'error');
         }
-        
-        if (!empty($results['errors'])) {
-            $message .= "<div class='error-details'><h4>Error Details:</h4><ul>";
-            foreach (array_slice($results['errors'], 0, 20) as $error) {
-                $message .= "<li><strong>" . htmlspecialchars($error['file']) . "</strong>: " . 
-                           htmlspecialchars($error['error']) . 
-                           "<br><small>" . htmlspecialchars($error['path']) . "</small></li>";
-            }
-            if (count($results['errors']) > 20) {
-                $message .= "<li>... and " . (count($results['errors']) - 20) . " more errors</li>";
-            }
-            $message .= "</ul></div>";
-        }
-        
-        $message .= "</div>";
-        
-        $messageType = empty($results['errors']) ? 'success' : 
-                      ($results['success'] > 0 ? 'warning' : 'error');
-        
     } catch (Exception $e) {
         $message = "<strong>Error:</strong> " . $e->getMessage();
         $messageType = 'error';
@@ -189,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_import'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Automated Image Bulk Importer</title>
+    <title>Medical Image Bulk Importer</title>
     <style>
         :root {
             --primary: #0066cc;
@@ -214,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_import'])) {
             border-radius: 8px;
             box-shadow: 0 0 20px rgba(0,0,0,0.1);
         }
-        h1, h2, h3, h4 {
+        h1, h2, h3 {
             color: var(--primary);
             margin-top: 0;
         }
@@ -231,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_import'])) {
             margin-bottom: 8px;
             font-weight: 600;
         }
-        select, input[type="text"] {
+        select, input[type="text"], input[type="file"] {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
@@ -277,42 +264,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_import'])) {
             background-color: #fff8e1;
             border-color: var(--warning);
         }
-        .results-container {
-            margin-top: 20px;
+        .result-header {
+            margin-bottom: 20px;
         }
-        .stats-grid {
+        .result-stats {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
             gap: 15px;
-            margin: 20px 0;
-        }
-        .stat-box {
-            padding: 15px;
-            border-radius: 4px;
-            text-align: center;
-            background-color: #f8f9fa;
-        }
-        .stat-box span {
-            display: block;
-            font-size: 0.9em;
-            color: #666;
-        }
-        .stat-box strong {
-            font-size: 1.5em;
-            color: var(--dark);
-        }
-        .stat-box.total strong { color: var(--primary); }
-        .stat-box.success strong { color: var(--success); }
-        .stat-box.errors strong { color: var(--danger); }
-        .warning-box {
-            background-color: #fff8e1;
-            padding: 15px;
-            border-radius: 4px;
             margin: 15px 0;
-            border-left: 4px solid var(--warning);
         }
+        .stat-total { color: var(--dark); }
+        .stat-success { color: var(--success); }
+        .stat-failed { color: var(--danger); }
         .error-details {
-            max-height: 500px;
+            max-height: 400px;
             overflow-y: auto;
             background-color: #f9f9f9;
             padding: 15px;
@@ -358,14 +323,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_import'])) {
 </head>
 <body>
     <div class="container">
-        <h1>Automated Image Bulk Importer</h1>
+        <h1>Medical Image Bulk Importer</h1>
         
         <?php if ($message): ?>
             <div class="message <?= $messageType ?>"><?= $message ?></div>
         <?php endif; ?>
 
         <div class="form-section">
-            <h2>Bulk Import Configuration</h2>
+            <h2>Single Image Upload</h2>
+            <form method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="test_type">Test Type:</label>
+                    <select name="test_type" id="test_type" required>
+                        <option value="">Select Test Type</option>
+                        <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                            <option value="<?= $type ?>"><?= $type ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="eye">Eye:</label>
+                    <select name="eye" id="eye" required>
+                        <option value="">Select Eye</option>
+                        <option value="OD">Right Eye (OD)</option>
+                        <option value="OS">Left Eye (OS)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="patient_id">Patient ID:</label>
+                    <input type="text" name="patient_id" id="patient_id" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="test_date">Test Date:</label>
+                    <input type="date" name="test_date" id="test_date" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="image">Image File (PNG only):</label>
+                    <input type="file" name="image" id="image" accept="image/png" required>
+                </div>
+                
+                <button type="submit" name="import">Import Image</button>
+            </form>
+        </div>
+
+        <div class="form-section">
+            <h2>Bulk Import from Folder</h2>
             <form method="POST">
                 <div class="form-group">
                     <label for="bulk_test_type">Test Type:</label>
@@ -378,26 +384,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_import'])) {
                 </div>
                 
                 <div class="form-group">
-                    <label for="folder_path">Source Images Folder:</label>
+                    <label for="folder_path">Source Folder Path:</label>
                     <input type="text" name="folder_path" id="folder_path" required 
                            value="<?= htmlspecialchars(IMAGE_BASE_DIR . 'FAF/') ?>"
                            placeholder="e.g., /var/www/html/data/FAF/">
                 </div>
                 
                 <div class="file-requirements">
-                    <h3>Automatic Processing Requirements</h3>
+                    <h3>File Requirements</h3>
                     <ul>
-                        <li><strong>File Format:</strong> Must be PNG</li>
-                        <li><strong>Naming Pattern:</strong> <code>patientid_eye_YYYYMMDD.png</code></li>
-                        <li><strong>Example:</strong> <code>PT1001_OD_20230115.png</code></li>
-                        <li><strong>Patient ID:</strong> Must exist in database</li>
-                        <li><strong>Eye:</strong> Must be <code>OD</code> (right) or <code>OS</code> (left)</li>
-                        <li><strong>Date:</strong> Must be valid <code>YYYYMMDD</code> format</li>
+                        <li>Files must be in <strong>PNG format</strong></li>
+                        <li>Naming pattern: <code>patientid_eye_YYYYMMDD.png</code></li>
+                        <li>Example: <code>PT1001_OD_20230115.png</code></li>
+                        <li>Patient must exist in database</li>
+                        <li>Eye must be either <strong>OD</strong> (right) or <strong>OS</strong> (left)</li>
+                        <li>Date must be in <strong>YYYYMMDD</strong> format</li>
                     </ul>
                 </div>
                 
                 <button type="submit" name="bulk_import" class="bulk-import-btn">
-                    Process and Import All Images Automatically
+                    Process All PNG Files in Folder
                 </button>
             </form>
         </div>
