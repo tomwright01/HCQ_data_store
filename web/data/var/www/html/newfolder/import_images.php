@@ -2,102 +2,148 @@
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
+// Set higher limits for bulk processing
+ini_set('max_execution_time', 300);
+ini_set('memory_limit', '512M');
+
 $message = '';
 $messageType = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        if (isset($_POST['bulk_import'])) {
-            // Bulk upload from folder
-            $testType = $_POST['bulk_test_type'] ?? '';
-            $folderPath = $_POST['folder_path'] ?? '';
-            
-            if (empty($testType) || empty($folderPath)) {
-                throw new Exception("Test type and folder path are required for bulk import");
-            }
-            
-            if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
-                throw new Exception("Invalid test type");
-            }
-            
-            // Normalize folder path
-            $folderPath = rtrim($folderPath, '/') . '/';
-            
-            // Verify folder exists
-            if (!is_dir($folderPath)) {
-                throw new Exception("Folder does not exist: " . htmlspecialchars($folderPath));
-            }
-            
-            // Process all PNG files in the folder and subfolders
-            $files = new RecursiveIteratorIterator(
-                new RecursiveDirectoryIterator($folderPath),
-                RecursiveIteratorIterator::LEAVES_ONLY
-            );
-            
-            $validFiles = [];
-            foreach ($files as $file) {
-                if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
-                    $validFiles[] = $file->getPathname();
+function processBulkImport($testType, $directory) {
+    global $conn;
+    
+    $results = [
+        'success' => 0,
+        'errors' => [],
+        'total' => 0
+    ];
+
+    // Validate directory
+    if (!is_dir($directory)) {
+        throw new Exception("Directory does not exist: " . htmlspecialchars($directory));
+    }
+
+    // Scan directory recursively for PNG files
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($iterator as $file) {
+        if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
+            $results['total']++;
+            $filename = $file->getFilename();
+            $fullPath = $file->getPathname();
+
+            try {
+                // Parse filename (patientid_eye_YYYYMMDD.png)
+                if (!preg_match('/^(\w+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
+                    throw new Exception("Invalid filename format");
                 }
-            }
-            
-            if (empty($validFiles)) {
-                throw new Exception("No PNG files found in the specified folder");
-            }
-            
-            $successCount = 0;
-            $errorCount = 0;
-            $errorDetails = [];
-            
-            foreach ($validFiles as $file) {
-                $filename = basename($file);
-                
-                // Extract patient_id, eye, and date from filename (format: patientid_eye_YYYYMMDD.png)
-                $pattern = '/^([^_]+)_(OD|OS)_(\d{8})\.png$/i';
-                if (!preg_match($pattern, $filename, $matches)) {
-                    $errorDetails[] = "SKIPPED: Invalid filename format - " . htmlspecialchars($filename);
-                    $errorCount++;
-                    continue;
-                }
-                
+
                 $patient_id = $matches[1];
                 $eye = strtoupper($matches[2]);
                 $dateStr = $matches[3];
-                
+
                 // Validate date
                 $test_date = DateTime::createFromFormat('Ymd', $dateStr);
                 if (!$test_date) {
-                    $errorDetails[] = "SKIPPED: Invalid date in filename - " . htmlspecialchars($filename);
-                    $errorCount++;
-                    continue;
+                    throw new Exception("Invalid date format");
                 }
                 $test_date = $test_date->format('Y-m-d');
-                
-                // Process the file
-                if (importTestImage($testType, $eye, $patient_id, $test_date, $file)) {
-                    $successCount++;
+
+                // Check if patient exists
+                $patient = getPatientById($patient_id);
+                if (!$patient) {
+                    throw new Exception("Patient $patient_id not found");
+                }
+
+                // Prepare database update
+                $fieldName = strtolower($testType) . '_reference_' . strtolower($eye);
+                $testId = date('Ymd', strtotime($test_date)) . '_' . $patient_id . '_' . substr(md5(uniqid()), 0, 4);
+
+                // Check if test exists
+                $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
+                $stmt->bind_param("ss", $patient_id, $test_date);
+                $stmt->execute();
+                $test = $stmt->get_result()->fetch_assoc();
+
+                // Copy file to destination
+                $destDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
+                if (!is_dir($destDir)) {
+                    mkdir($destDir, 0777, true);
+                }
+                $destFile = $destDir . $filename;
+
+                if (!copy($fullPath, $destFile)) {
+                    throw new Exception("Failed to copy file");
+                }
+
+                // Update database
+                if ($test) {
+                    $stmt = $conn->prepare("UPDATE tests SET $fieldName = ? WHERE test_id = ?");
+                    $stmt->bind_param("ss", $filename, $test['test_id']);
                 } else {
-                    $errorDetails[] = "FAILED: Could not process - " . htmlspecialchars($filename);
-                    $errorCount++;
+                    $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test, $fieldName) VALUES (?, ?, ?, ?)");
+                    $stmt->bind_param("ssss", $testId, $patient_id, $test_date, $filename);
                 }
-            }
-            
-            // Prepare result message
-            $message = "<strong>Bulk import completed:</strong><br>";
-            $message .= "<span style='color:green'>✓ $successCount files processed successfully</span><br>";
-            
-            if ($errorCount > 0) {
-                $message .= "<span style='color:red'>✗ $errorCount files failed</span>";
-                $message .= "<div class='error-details'><strong>Error details:</strong><br>" . 
-                           implode("<br>", array_slice($errorDetails, 0, 20));
-                if ($errorCount > 20) {
-                    $message .= "<br>... and " . ($errorCount - 20) . " more errors";
+
+                if (!$stmt->execute()) {
+                    throw new Exception("Database update failed: " . $conn->error);
                 }
-                $message .= "</div>";
+
+                $results['success']++;
+            } catch (Exception $e) {
+                $results['errors'][] = [
+                    'file' => $filename,
+                    'error' => $e->getMessage(),
+                    'path' => $fullPath
+                ];
             }
-            
-            $messageType = $errorCount > 0 ? ($successCount > 0 ? 'warning' : 'error') : 'success';
         }
+    }
+
+    return $results;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_import'])) {
+    try {
+        $testType = $_POST['bulk_test_type'] ?? '';
+        $directory = $_POST['directory_path'] ?? '';
+        
+        if (empty($testType) || empty($directory)) {
+            throw new Exception("Test type and directory path are required");
+        }
+        
+        if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
+            throw new Exception("Invalid test type");
+        }
+        
+        $directory = rtrim($directory, '/') . '/';
+        $results = processBulkImport($testType, $directory);
+        
+        $message = "<h3>Bulk Import Results</h3>";
+        $message .= "<div class='result-summary'>";
+        $message .= "<p>Total files found: <strong>{$results['total']}</strong></p>";
+        $message .= "<p class='text-success'>Successfully processed: <strong>{$results['success']}</strong></p>";
+        $message .= "<p class='text-danger'>Failed: <strong>" . count($results['errors']) . "</strong></p>";
+        $message .= "</div>";
+        
+        if (!empty($results['errors'])) {
+            $message .= "<div class='error-details'><h4>Error Details:</h4><ul>";
+            foreach (array_slice($results['errors'], 0, 50) as $error) {
+                $message .= "<li><strong>{$error['file']}</strong>: {$error['error']}";
+                $message .= "<br><small>{$error['path']}</small></li>";
+            }
+            if (count($results['errors']) > 50) {
+                $message .= "<li>... and " . (count($results['errors']) - 50) . " more errors</li>";
+            }
+            $message .= "</ul></div>";
+        }
+        
+        $messageType = empty($results['errors']) ? 'success' : 
+                      ($results['success'] > 0 ? 'warning' : 'error');
+        
     } catch (Exception $e) {
         $message = "<strong>Error:</strong> " . $e->getMessage();
         $messageType = 'error';
@@ -110,41 +156,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Image Import</title>
+    <title>Advanced Bulk Image Importer</title>
     <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
+        :root {
+            --primary: #0066cc;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
         }
-
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
         .container {
-            background-color: white;
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
             padding: 30px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            max-width: 1000px;
-            margin: 0 auto;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
         }
-
-        h1 {
-            color: #0066cc;
-            text-align: center;
-            margin-bottom: 30px;
+        h1, h2, h3, h4 {
+            color: var(--primary);
         }
-
         .form-group {
             margin-bottom: 20px;
         }
-
         label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
+            margin-bottom: 5px;
+            font-weight: 600;
         }
-
         select, input[type="text"] {
             width: 100%;
             padding: 10px;
@@ -152,90 +197,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 4px;
             font-size: 16px;
         }
-
         .btn {
-            background-color: #0066cc;
+            background-color: var(--primary);
             color: white;
             border: none;
             padding: 12px 20px;
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
-            width: 100%;
-            margin-top: 20px;
-            transition: background-color 0.3s;
+            transition: all 0.3s;
         }
-
         .btn:hover {
             background-color: #0055aa;
+            transform: translateY(-2px);
         }
-
+        .btn:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
         .message {
-            padding: 15px;
+            padding: 20px;
             margin: 20px 0;
             border-radius: 4px;
         }
-
         .success {
             background-color: #e6f7e6;
-            border: 1px solid #a3d8a3;
-            color: #2d662d;
+            border-left: 5px solid var(--success);
         }
-
         .error {
             background-color: #ffebee;
-            border: 1px solid #ffcdd2;
-            color: #c62828;
+            border-left: 5px solid var(--danger);
         }
-
         .warning {
             background-color: #fff8e1;
-            border: 1px solid #ffe0b2;
-            color: #e65100;
+            border-left: 5px solid var(--warning);
         }
-
         .error-details {
-            max-height: 300px;
+            max-height: 500px;
             overflow-y: auto;
             background-color: #f9f9f9;
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 10px;
-            border: 1px solid #eee;
-            font-family: monospace;
-            font-size: 14px;
-        }
-
-        .file-format {
-            background-color: #f0f0f0;
             padding: 15px;
             border-radius: 4px;
             margin-top: 20px;
-            border-left: 4px solid #0066cc;
+            border: 1px solid #eee;
         }
-
+        .error-details ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .error-details li {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        .error-details li:last-child {
+            border-bottom: none;
+        }
+        .text-success { color: var(--success); }
+        .text-danger { color: var(--danger); }
+        .result-summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        .file-format {
+            background-color: #f0f7ff;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border-left: 4px solid var(--primary);
+        }
         code {
             background-color: #e0e0e0;
             padding: 2px 4px;
             border-radius: 3px;
             font-family: monospace;
         }
-
         .progress-container {
-            display: none;
             margin: 20px 0;
+            display: none;
         }
-
         .progress-bar {
             height: 20px;
             background-color: #e0e0e0;
             border-radius: 4px;
             overflow: hidden;
         }
-
         .progress {
             height: 100%;
-            background-color: #0066cc;
+            background-color: var(--primary);
             width: 0%;
             transition: width 0.3s;
         }
@@ -243,8 +293,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="container">
-        <h1>Bulk Image Import Tool</h1>
-
+        <h1>Advanced Bulk Image Importer</h1>
+        
         <?php if ($message): ?>
             <div class="message <?= $messageType ?>"><?= $message ?></div>
         <?php endif; ?>
@@ -261,53 +311,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             
             <div class="form-group">
-                <label for="folder_path">Folder Path:</label>
-                <input type="text" name="folder_path" id="folder_path" required 
+                <label for="directory_path">Directory Path:</label>
+                <input type="text" name="directory_path" id="directory_path" required 
                        value="<?= htmlspecialchars(IMAGE_BASE_DIR) ?>"
-                       placeholder="e.g., /var/www/html/data/FAF/">
+                       placeholder="e.g., /path/to/your/images/">
+                <small>Enter the full path to the directory containing your image files</small>
             </div>
             
             <div class="file-format">
-                <strong>Required File Naming Format:</strong>
-                <p><code>patientid_eye_YYYYMMDD.png</code></p>
-                <p>Examples:</p>
+                <h3>File Requirements</h3>
+                <p><strong>Naming Format:</strong> <code>patientid_eye_YYYYMMDD.png</code></p>
+                <p><strong>Examples:</strong></p>
                 <ul>
-                    <li><code>12345_OD_20230715.png</code> (Patient 12345, Right Eye, July 15 2023)</li>
-                    <li><code>67890_OS_20230820.png</code> (Patient 67890, Left Eye, August 20 2023)</li>
+                    <li><code>PT1001_OD_20230115.png</code> (Patient PT1001, Right Eye, Jan 15 2023)</li>
+                    <li><code>PT1002_OS_20230220.png</code> (Patient PT1002, Left Eye, Feb 20 2023)</li>
                 </ul>
-                <p>The system will automatically process all PNG files in the specified folder that match this format.</p>
-            </div>
-            
-            <div class="progress-container" id="progressContainer">
-                <p>Processing files... <span id="progressText">0%</span></p>
-                <div class="progress-bar">
-                    <div class="progress" id="progressBar"></div>
-                </div>
+                <p><strong>Requirements:</strong></p>
+                <ol>
+                    <li>Files must be in PNG format</li>
+                    <li>Patient must exist in database</li>
+                    <li>Eye must be either OD (right) or OS (left)</li>
+                    <li>Date must be in YYYYMMDD format</li>
+                </ol>
             </div>
             
             <button type="submit" name="bulk_import" class="btn" id="importButton">
-                Process All PNG Files in Folder
+                Start Bulk Import
             </button>
         </form>
     </div>
 
     <script>
         document.getElementById('bulkImportForm').addEventListener('submit', function() {
-            document.getElementById('progressContainer').style.display = 'block';
-            document.getElementById('importButton').disabled = true;
-            document.getElementById('importButton').textContent = 'Processing...';
-            
-            // Simple progress simulation (would be better with AJAX in real implementation)
-            let progress = 0;
-            const progressBar = document.getElementById('progressBar');
-            const progressText = document.getElementById('progressText');
-            
-            const interval = setInterval(() => {
-                progress += 5;
-                if (progress > 90) clearInterval(interval);
-                progressBar.style.width = progress + '%';
-                progressText.textContent = progress + '%';
-            }, 300);
+            const btn = document.getElementById('importButton');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processing...';
         });
     </script>
 </body>
