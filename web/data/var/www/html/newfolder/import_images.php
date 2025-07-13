@@ -57,34 +57,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception("Invalid test type");
             }
             
+            // Normalize folder path
+            $folderPath = rtrim($folderPath, '/') . '/';
+            
+            // Verify folder exists
+            if (!is_dir($folderPath)) {
+                throw new Exception("Folder does not exist: " . htmlspecialchars($folderPath));
+            }
+            
             // Process all PNG files in the folder
-            $files = glob(rtrim($folderPath, '/') . '/*.png');
+            $files = glob($folderPath . '*.png');
+            if (empty($files)) {
+                throw new Exception("No PNG files found in the specified folder");
+            }
+            
             $successCount = 0;
             $errorCount = 0;
+            $errorDetails = [];
             
             foreach ($files as $file) {
-                // Extract patient_id, eye, and date from filename (format: patientid_eye_YYYYMMDD.png)
                 $filename = basename($file);
-                $parts = explode('_', pathinfo($filename, PATHINFO_FILENAME));
                 
-                if (count($parts) < 3) {
+                // Extract patient_id, eye, and date from filename (format: patientid_eye_YYYYMMDD.png)
+                $pattern = '/^([^_]+)_(OD|OS)_(\d{8})\.png$/i';
+                if (!preg_match($pattern, $filename, $matches)) {
+                    $errorDetails[] = "Invalid filename format: " . htmlspecialchars($filename);
                     $errorCount++;
                     continue;
                 }
                 
-                $patient_id = $parts[0];
-                $eye = strtoupper($parts[1]);
-                $dateStr = $parts[2];
-                
-                // Validate eye
-                if (!in_array($eye, ['OD', 'OS'])) {
-                    $errorCount++;
-                    continue;
-                }
+                $patient_id = $matches[1];
+                $eye = strtoupper($matches[2]);
+                $dateStr = $matches[3];
                 
                 // Validate date
                 $test_date = DateTime::createFromFormat('Ymd', $dateStr);
                 if (!$test_date) {
+                    $errorDetails[] = "Invalid date in filename: " . htmlspecialchars($filename);
                     $errorCount++;
                     continue;
                 }
@@ -94,11 +103,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (importTestImage($testType, $eye, $patient_id, $test_date, $file)) {
                     $successCount++;
                 } else {
+                    $errorDetails[] = "Failed to process: " . htmlspecialchars($filename);
                     $errorCount++;
                 }
             }
             
             $message = "Bulk import completed: $successCount files processed successfully, $errorCount files failed.";
+            if ($errorCount > 0) {
+                $message .= "<div class='error-details'><strong>Error details:</strong><br>" . 
+                           implode("<br>", array_slice($errorDetails, 0, 5));
+                if ($errorCount > 5) {
+                    $message .= "<br>... and " . ($errorCount - 5) . " more errors";
+                }
+                $message .= "</div>";
+            }
+            
             $messageType = $errorCount > 0 ? ($successCount > 0 ? 'warning' : 'error') : 'success';
         }
     } catch (Exception $e) {
@@ -236,6 +255,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-size: 20px;
             margin-bottom: 15px;
         }
+
+        .error-details {
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        small.help-text {
+            display: block;
+            margin-top: 5px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        code {
+            background-color: #f0f0f0;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -243,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <h1>Import Medical Images</h1>
 
         <?php if ($message): ?>
-            <div class="message <?= $messageType ?>"><?= htmlspecialchars($message) ?></div>
+            <div class="message <?= $messageType ?>"><?= $message ?></div>
         <?php endif; ?>
 
         <div class="form-section">
@@ -301,10 +345,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <div class="form-group">
-                    <label for="folder_path">Folder Path (containing PNG files):</label>
+                    <label for="folder_path">Folder Path:</label>
                     <input type="text" name="folder_path" id="folder_path" required 
-                           placeholder="e.g., /path/to/images/" value="<?= htmlspecialchars(IMAGE_BASE_DIR) ?>">
-                    <small>Note: Files should be named in format: patientid_eye_YYYYMMDD.png (e.g., 12345_OD_20230715.png)</small>
+                           value="<?= htmlspecialchars(IMAGE_BASE_DIR . 'FAF/') ?>"
+                           placeholder="e.g., /var/www/html/data/FAF/">
+                    <small class="help-text">
+                        Must contain PNG files named like: <code>patientid_eye_YYYYMMDD.png</code><br>
+                        Example: <code>12345_OD_20230715.png</code> (Patient ID: 12345, Right Eye, July 15, 2023)
+                    </small>
                 </div>
                 
                 <button type="submit" name="bulk_import" class="bulk-import-btn">Import All PNG Files in Folder</button>
