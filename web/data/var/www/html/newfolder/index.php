@@ -153,6 +153,58 @@ if ($search_patient_id) {
         h1 {
             font-size: 36px;
             color: rgb(0, 168, 143);
+            margin-bottom: 20px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .action-button {
+            padding: 12px 25px;
+            font-size: 16px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .action-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .import-button {
+            background-color: rgb(76, 175, 80);
+        }
+        
+        .import-button:hover {
+            background-color: rgb(69, 160, 73);
+        }
+        
+        .image-button {
+            background-color: rgb(33, 150, 243);
+        }
+        
+        .image-button:hover {
+            background-color: rgb(30, 136, 229);
+        }
+        
+        .form-button {
+            background-color: rgb(0, 168, 143);
+        }
+        
+        .form-button:hover {
+            background-color: rgb(0, 140, 120);
         }
 
         .search-form {
@@ -315,6 +367,12 @@ if ($search_patient_id) {
 
     <div class="content">
         <h1>Kensington Health Data Portal</h1>
+        
+        <div class="action-buttons">
+            <a href="form.php" class="action-button form-button">Manual Data Entry</a>
+            <a href="csv_import.php" class="action-button import-button">Upload Patient Data (CSV)</a>
+            <a href="import_images.php" class="action-button image-button">Import Medical Images</a>
+        </div>
 
         <div class="search-form">
             <form method="POST" action="index.php">
@@ -379,9 +437,6 @@ if ($search_patient_id) {
                 <p>No tests found for Patient ID: <?= htmlspecialchars($search_patient_id) ?></p>
             <?php endif; ?>
         <?php endif; ?>
-
-        <h2><a href="form.php" style="color: rgb(0, 168, 143); text-decoration: none; font-weight: bold;">Import New Data</a></h2>
-        <h2><a href="import_images.php" style="color: rgb(0, 168, 143); text-decoration: none; font-weight: bold;">Import Medical Images</a></h2>
     </div>
 
     <div class="stats-section">
