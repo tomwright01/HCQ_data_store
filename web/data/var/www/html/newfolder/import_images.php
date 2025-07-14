@@ -16,32 +16,27 @@ function processBulkImages($testType, $sourcePath) {
     $results = [
         'processed' => 0,
         'success' => 0,
-        'errors' => [],
-        'warnings' => []
+        'errors' => []
     ];
 
-    // Normalize and validate paths
-    $sourcePath = rtrim(realpath($sourcePath), '/') . '/';
+    // Validate and normalize paths
+    $sourcePath = rtrim($sourcePath, '/') . '/';
     $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
     
     if (!is_dir($sourcePath)) {
-        throw new Exception("Source directory does not exist or is inaccessible: " . htmlspecialchars($sourcePath));
+        throw new Exception("Source directory does not exist: " . htmlspecialchars($sourcePath));
     }
 
-    // Ensure target directory exists
+    // Create target directory if needed
     if (!is_dir($targetDir) && !mkdir($targetDir, 0777, true)) {
         throw new Exception("Failed to create target directory: " . htmlspecialchars($targetDir));
     }
 
-    // Recursive directory scanner with error handling
-    try {
-        $iterator = new RecursiveIteratorIterator(
-            new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS | FilesystemIterator::FOLLOW_SYMLINKS),
-            RecursiveIteratorIterator::CHILD_FIRST
-        );
-    } catch (Exception $e) {
-        throw new Exception("Failed to scan directory: " . $e->getMessage());
-    }
+    // Recursive directory iterator
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
 
     foreach ($iterator as $file) {
         if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
@@ -50,19 +45,19 @@ function processBulkImages($testType, $sourcePath) {
             $sourceFile = $file->getPathname();
             
             try {
-                // Parse filename with strict validation
-                if (!preg_match('/^([A-Za-z0-9-]+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
-                    throw new Exception("Filename must follow pattern: patientid_eye_YYYYMMDD.png");
+                // Parse filename (patientid_eye_YYYYMMDD.png)
+                if (!preg_match('/^([A-Za-z0-9]+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
+                    throw new Exception("Invalid filename format");
                 }
 
                 $patientId = $matches[1];
                 $eye = strtoupper($matches[2]);
                 $dateStr = $matches[3];
 
-                // Validate and format date
+                // Validate date
                 $testDate = DateTime::createFromFormat('Ymd', $dateStr);
-                if (!$testDate || $testDate->format('Ymd') !== $dateStr) {
-                    throw new Exception("Invalid or malformed date in filename");
+                if (!$testDate) {
+                    throw new Exception("Invalid date in filename");
                 }
                 $testDate = $testDate->format('Y-m-d');
 
@@ -71,25 +66,40 @@ function processBulkImages($testType, $sourcePath) {
                     throw new Exception("Patient $patientId not found in database");
                 }
 
-                // Prepare target path and handle duplicates
+                // Prepare target path and overwrite if exists
                 $targetFile = $targetDir . $filename;
-                if (file_exists($targetFile)) {
-                    $results['warnings'][] = "Skipped existing file: $filename";
-                    continue;
-                }
-
-                // Copy with error handling
-                if (!@copy($sourceFile, $targetFile)) {
-                    $error = error_get_last();
-                    throw new Exception("File copy failed: " . ($error['message'] ?? 'Unknown error'));
-                }
-
-                // Database operations
-                $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
-                $testId = generateTestId($patientId, $testDate);
                 
-                if (!updateOrCreateTestRecord($testId, $patientId, $testDate, $imageField, $filename)) {
-                    throw new Exception("Database operation failed");
+                // Overwrite existing file
+                if (!copy($sourceFile, $targetFile)) {
+                    throw new Exception("Failed to copy image to target directory");
+                }
+
+                // Prepare database fields
+                $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
+                
+                // Check for existing test record
+                $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
+                $stmt->bind_param("ss", $patientId, $testDate);
+                $stmt->execute();
+                $test = $stmt->get_result()->fetch_assoc();
+
+                // Generate test ID if new record
+                $testId = $test ? $test['test_id'] : 
+                    $patientId . '_' . date('Ymd', strtotime($testDate)) . '_' . substr(md5(uniqid()), 0, 4);
+
+                // Update or insert test record (overwrites existing)
+                if ($test) {
+                    $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
+                    $stmt->bind_param("ss", $filename, $testId);
+                } else {
+                    $stmt = $conn->prepare("INSERT INTO tests 
+                        (test_id, patient_id, date_of_test, $imageField) 
+                        VALUES (?, ?, ?, ?)");
+                    $stmt->bind_param("ssss", $testId, $patientId, $testDate, $filename);
+                }
+
+                if (!$stmt->execute()) {
+                    throw new Exception("Database error: " . $conn->error);
                 }
 
                 $results['success']++;
@@ -104,33 +114,6 @@ function processBulkImages($testType, $sourcePath) {
     }
 
     return $results;
-}
-
-function generateTestId($patientId, $testDate) {
-    return $patientId . '_' . date('Ymd', strtotime($testDate)) . '_' . substr(md5(uniqid()), 0, 6);
-}
-
-function updateOrCreateTestRecord($testId, $patientId, $testDate, $fieldName, $filename) {
-    global $conn;
-    
-    // Check for existing test
-    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-    $stmt->bind_param("ss", $patientId, $testDate);
-    $stmt->execute();
-    $existingTest = $stmt->get_result()->fetch_assoc();
-    
-    // Prepare appropriate query
-    if ($existingTest) {
-        $query = "UPDATE tests SET $fieldName = ? WHERE test_id = ?";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("ss", $filename, $existingTest['test_id']);
-    } else {
-        $query = "INSERT INTO tests (test_id, patient_id, date_of_test, $fieldName) VALUES (?, ?, ?, ?)";
-        $stmt = $conn->prepare($query);
-        $stmt->bind_param("ssss", $testId, $patientId, $testDate, $filename);
-    }
-    
-    return $stmt->execute();
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -188,25 +171,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             $results = processBulkImages($testType, $sourcePath);
             
-            // Prepare comprehensive results message
-            $message = "<div class='results-summary'>";
+            // Prepare results message
+            $message = "<div class='results-container'>";
             $message .= "<h3>Bulk Import Results</h3>";
             $message .= "<div class='stats-grid'>";
             $message .= "<div class='stat-box'><span>Files Processed</span><strong>{$results['processed']}</strong></div>";
             $message .= "<div class='stat-box success'><span>Successful</span><strong>{$results['success']}</strong></div>";
             $message .= "<div class='stat-box error'><span>Errors</span><strong>" . count($results['errors']) . "</strong></div>";
             $message .= "</div>";
-            
-            if (!empty($results['warnings'])) {
-                $message .= "<div class='warning-section'><h4>Warnings:</h4><ul>";
-                foreach (array_slice($results['warnings'], 0, 10) as $warning) {
-                    $message .= "<li>" . htmlspecialchars($warning) . "</li>";
-                }
-                if (count($results['warnings']) > 10) {
-                    $message .= "<li>... and " . (count($results['warnings']) - 10) . " more warnings</li>";
-                }
-                $message .= "</ul></div>";
-            }
             
             if (!empty($results['errors'])) {
                 $message .= "<div class='error-section'><h4>Errors:</h4><ul>";
@@ -241,7 +213,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Medical Image Importer</title>
     <style>
         :root {
-            --primary: #0066cc;
+            --primary: rgb(0, 168, 143);
+            --primary-dark: rgb(0, 140, 120);
+            --primary-light: rgba(0, 168, 143, 0.1);
             --success: #28a745;
             --danger: #dc3545;
             --warning: #ffc107;
@@ -251,26 +225,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Arial', sans-serif;
             line-height: 1.6;
             color: var(--dark);
-            background-color: var(--light);
-            padding: 20px;
+            background-color: white;
+            padding: 0;
             margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
         
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
+            width: 100%;
+            max-width: 900px;
             background: white;
             padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            border: 1px solid #ddd;
+            margin: 20px;
         }
         
         h1, h2, h3, h4 {
             color: var(--primary);
             margin-top: 0;
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 20px;
+            text-align: center;
         }
         
         .form-section {
@@ -280,13 +266,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .form-group {
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         
         label {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
+            margin-bottom: 5px;
+            font-weight: bold;
         }
         
         select, input[type="text"], input[type="date"], input[type="file"] {
@@ -306,56 +292,57 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             border-radius: 4px;
             cursor: pointer;
             font-size: 16px;
-            transition: all 0.3s;
+            transition: background-color 0.3s;
             width: 100%;
             margin-top: 10px;
         }
         
         button[type="submit"]:hover {
-            background-color: #0055aa;
-            transform: translateY(-2px);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            background-color: var(--primary-dark);
         }
         
         .bulk-import-btn {
-            background-color: var(--success);
+            background-color: var(--primary);
         }
         
         .bulk-import-btn:hover {
-            background-color: #218838;
+            background-color: var(--primary-dark);
         }
         
         .message {
-            padding: 20px;
+            padding: 15px;
             margin: 20px 0;
             border-radius: 4px;
-            border-left: 5px solid;
+            text-align: center;
         }
         
         .success {
             background-color: #e6f7e6;
-            border-color: var(--success);
+            color: #3c763d;
+            border: 1px solid #d6e9c6;
         }
         
         .error {
-            background-color: #ffebee;
-            border-color: var(--danger);
+            background-color: #f2dede;
+            color: #a94442;
+            border: 1px solid #ebccd1;
         }
         
         .warning {
-            background-color: #fff8e1;
-            border-color: var(--warning);
+            background-color: #fcf8e3;
+            color: #8a6d3b;
+            border: 1px solid #faebcc;
         }
         
-        .results-summary {
+        .results-container {
             margin-top: 20px;
         }
         
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(3, 1fr);
             gap: 15px;
-            margin: 20px 0;
+            margin: 15px 0;
         }
         
         .stat-box {
@@ -369,65 +356,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             display: block;
             font-size: 0.9em;
             color: var(--gray);
-            margin-bottom: 5px;
         }
         
         .stat-box strong {
-            font-size: 1.8em;
+            font-size: 1.5em;
             font-weight: 600;
-        }
-        
-        .stat-box.success {
-            background-color: rgba(40, 167, 69, 0.1);
         }
         
         .stat-box.success strong {
             color: var(--success);
         }
         
-        .stat-box.error {
-            background-color: rgba(220, 53, 69, 0.1);
-        }
-        
         .stat-box.error strong {
             color: var(--danger);
         }
         
-        .warning-section, .error-section {
-            margin: 20px 0;
-            padding: 15px;
-            border-radius: 4px;
-        }
-        
-        .warning-section {
-            background-color: #fff8e1;
-            border-left: 4px solid var(--warning);
-        }
-        
         .error-section {
-            background-color: #f8f9fa;
-            border-left: 4px solid var(--danger);
-            max-height: 500px;
+            max-height: 300px;
             overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+            border: 1px solid #ddd;
+            text-align: left;
         }
         
-        .error-section ul, .warning-section ul {
+        .error-section ul {
             list-style-type: none;
             padding: 0;
             margin: 0;
         }
         
-        .error-section li, .warning-section li {
+        .error-section li {
             padding: 10px;
             border-bottom: 1px solid #eee;
         }
         
-        .error-section li:last-child, .warning-section li:last-child {
+        .error-section li:last-child {
             border-bottom: none;
         }
         
         .requirements-box {
-            background-color: #f0f7ff;
+            background-color: var(--primary-light);
             padding: 15px;
             border-radius: 4px;
             margin: 20px 0;
@@ -439,26 +410,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             padding: 2px 4px;
             border-radius: 3px;
             font-family: monospace;
-            font-size: 0.9em;
         }
         
         .back-link {
             display: inline-block;
-            margin-top: 20px;
+            margin-top: 15px;
             color: var(--primary);
             text-decoration: none;
-            font-weight: 600;
-            transition: color 0.3s;
+            font-weight: bold;
         }
         
         .back-link:hover {
-            color: #0055aa;
             text-decoration: underline;
         }
         
         @media (max-width: 768px) {
             .container {
-                padding: 15px;
+                padding: 20px;
+                margin: 10px;
             }
             
             .stats-grid {
@@ -537,15 +506,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <div class="requirements-box">
-                    <h3>Bulk Import Requirements</h3>
+                    <h3>File Requirements for Bulk Import</h3>
                     <ul>
                         <li>All files must be in <strong>PNG format</strong></li>
-                        <li>File naming pattern: <code>patientid_eye_YYYYMMDD.png</code></li>
-                        <li>Example: <code>PT1001_OD_20230115.png</code></li>
+                        <li>Files must be named: <code>patientid_eye_YYYYMMDD.png</code></li>
+                        <li>Example: <code>12345_OD_20230715.png</code></li>
                         <li>Patient ID must exist in the database</li>
-                        <li>Eye must be either <code>OD</code> (right) or <code>OS</code> (left)</li>
-                        <li>Date must be in valid <code>YYYYMMDD</code> format</li>
-                        <li>System will process all matching files in the specified folder and subfolders</li>
+                        <li>Eye must be either <strong>OD</strong> (right) or <strong>OS</strong> (left)</li>
+                        <li>Date must be in <strong>YYYYMMDD</strong> format</li>
                     </ul>
                 </div>
                 
