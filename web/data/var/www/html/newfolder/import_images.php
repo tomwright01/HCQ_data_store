@@ -32,85 +32,106 @@ function processBulkImages($testType, $sourcePath) {
         throw new Exception("Failed to create target directory: " . htmlspecialchars($targetDir));
     }
 
-    // Recursive directory iterator
+    // Get all PNG files recursively
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS),
         RecursiveIteratorIterator::SELF_FIRST
     );
 
-    foreach ($iterator as $file) {
-        if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
-            $results['processed']++;
-            $filename = $file->getFilename();
-            $sourceFile = $file->getPathname();
-            
-            try {
-                // Parse filename (patientid_eye_YYYYMMDD.png)
-                if (!preg_match('/^([A-Za-z0-9]+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
-                    throw new Exception("Invalid filename format");
-                }
+    // Start transaction for bulk processing
+    $conn->begin_transaction();
 
-                $patientId = $matches[1];
-                $eye = strtoupper($matches[2]);
-                $dateStr = $matches[3];
-
-                // Validate date
-                $testDate = DateTime::createFromFormat('Ymd', $dateStr);
-                if (!$testDate) {
-                    throw new Exception("Invalid date in filename");
-                }
-                $testDate = $testDate->format('Y-m-d');
-
-                // Verify patient exists
-                if (!getPatientById($patientId)) {
-                    throw new Exception("Patient $patientId not found in database");
-                }
-
-                // Prepare target path and overwrite if exists
-                $targetFile = $targetDir . $filename;
+    try {
+        foreach ($iterator as $file) {
+            if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
+                $results['processed']++;
+                $filename = $file->getFilename();
+                $sourceFile = $file->getPathname();
                 
-                // Overwrite existing file
-                if (!copy($sourceFile, $targetFile)) {
-                    throw new Exception("Failed to copy image to target directory");
+                try {
+                    // Parse filename (patientid_eye_YYYYMMDD.png)
+                    if (!preg_match('/^([A-Za-z0-9]+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
+                        throw new Exception("Invalid filename format - must be patientid_eye_YYYYMMDD.png");
+                    }
+
+                    $patientId = $matches[1];
+                    $eye = strtoupper($matches[2]);
+                    $dateStr = $matches[3];
+
+                    // Validate date
+                    $testDate = DateTime::createFromFormat('Ymd', $dateStr);
+                    if (!$testDate) {
+                        throw new Exception("Invalid date in filename (must be YYYYMMDD)");
+                    }
+                    $testDate = $testDate->format('Y-m-d');
+
+                    // Verify patient exists
+                    $patient = getPatientById($patientId);
+                    if (!$patient) {
+                        throw new Exception("Patient $patientId not found in database");
+                    }
+
+                    // Prepare target path
+                    $targetFile = $targetDir . $filename;
+                    
+                    // Copy image to target directory (overwrite if exists)
+                    if (!copy($sourceFile, $targetFile)) {
+                        throw new Exception("Failed to copy image to target directory");
+                    }
+
+                    // Prepare database field name based on test type
+                    $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
+                    
+                    // Check for existing test record
+                    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ? AND eye = ?");
+                    $stmt->bind_param("sss", $patientId, $testDate, $eye);
+                    $stmt->execute();
+                    $testResult = $stmt->get_result();
+                    $testExists = $testResult->num_rows > 0;
+                    $testId = $testExists ? $testResult->fetch_assoc()['test_id'] : null;
+
+                    // Generate test ID if new record
+                    if (!$testExists) {
+                        $testId = $patientId . '_' . str_replace('-', '', $testDate) . '_' . $eye;
+                    }
+
+                    // Update or insert test record
+                    if ($testExists) {
+                        $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
+                        $stmt->bind_param("ss", $filename, $testId);
+                    } else {
+                        $stmt = $conn->prepare("INSERT INTO tests 
+                            (test_id, patient_id, date_of_test, eye, $imageField) 
+                            VALUES (?, ?, ?, ?, ?)");
+                        $stmt->bind_param("sssss", $testId, $patientId, $testDate, $eye, $filename);
+                    }
+
+                    if (!$stmt->execute()) {
+                        throw new Exception("Database error: " . $conn->error);
+                    }
+
+                    $results['success']++;
+                } catch (Exception $e) {
+                    $results['errors'][] = [
+                        'file' => $filename,
+                        'error' => $e->getMessage(),
+                        'path' => $sourceFile
+                    ];
                 }
-
-                // Prepare database fields
-                $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
-                
-                // Check for existing test record
-                $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-                $stmt->bind_param("ss", $patientId, $testDate);
-                $stmt->execute();
-                $test = $stmt->get_result()->fetch_assoc();
-
-                // Generate test ID if new record
-                $testId = $test ? $test['test_id'] : 
-                    $patientId . '_' . date('Ymd', strtotime($testDate)) . '_' . substr(md5(uniqid()), 0, 4);
-
-                // Update or insert test record (overwrites existing)
-                if ($test) {
-                    $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
-                    $stmt->bind_param("ss", $filename, $testId);
-                } else {
-                    $stmt = $conn->prepare("INSERT INTO tests 
-                        (test_id, patient_id, date_of_test, $imageField) 
-                        VALUES (?, ?, ?, ?)");
-                    $stmt->bind_param("ssss", $testId, $patientId, $testDate, $filename);
-                }
-
-                if (!$stmt->execute()) {
-                    throw new Exception("Database error: " . $conn->error);
-                }
-
-                $results['success']++;
-            } catch (Exception $e) {
-                $results['errors'][] = [
-                    'file' => $filename,
-                    'error' => $e->getMessage(),
-                    'path' => $sourceFile
-                ];
             }
         }
+
+        // Commit transaction if no critical errors
+        if (count($results['errors']) < 50) { // Allow some failures without rollback
+            $conn->commit();
+        } else {
+            $conn->rollback();
+            throw new Exception("Too many errors (" . count($results['errors']) . "), transaction rolled back");
+        }
+        
+    } catch (Exception $e) {
+        $conn->rollback();
+        throw $e;
     }
 
     return $results;
@@ -118,45 +139,7 @@ function processBulkImages($testType, $sourcePath) {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        if (isset($_POST['import'])) {
-            // Single file upload processing
-            $testType = $_POST['test_type'] ?? '';
-            $eye = $_POST['eye'] ?? '';
-            $patientId = $_POST['patient_id'] ?? '';
-            $testDate = $_POST['test_date'] ?? '';
-            
-            // Validate all fields
-            if (empty($testType) || empty($eye) || empty($patientId) || empty($testDate)) {
-                throw new Exception("All fields are required");
-            }
-            
-            if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
-                throw new Exception("Invalid test type selected");
-            }
-            
-            if (!in_array($eye, ['OD', 'OS'])) {
-                throw new Exception("Eye must be either OD (right) or OS (left)");
-            }
-            
-            if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-                throw new Exception("Please select a valid image file");
-            }
-            
-            // Validate file type
-            $fileInfo = new finfo(FILEINFO_MIME_TYPE);
-            $mime = $fileInfo->file($_FILES['image']['tmp_name']);
-            if ($mime !== 'image/png') {
-                throw new Exception("Only PNG images are allowed (detected: $mime)");
-            }
-            
-            // Process the upload
-            if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
-                $message = "Image uploaded and database updated successfully!";
-                $messageType = 'success';
-            } else {
-                throw new Exception("Failed to process image upload");
-            }
-        } elseif (isset($_POST['bulk_import'])) {
+        if (isset($_POST['bulk_import'])) {
             // Bulk import processing
             $testType = $_POST['bulk_test_type'] ?? '';
             $sourcePath = $_POST['folder_path'] ?? '';
@@ -210,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Medical Image Importer</title>
+    <title>Medical Image Bulk Importer</title>
     <style>
         :root {
             --primary: rgb(0, 168, 143);
@@ -275,7 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             font-weight: bold;
         }
         
-        select, input[type="text"], input[type="date"], input[type="file"] {
+        select, input[type="text"] {
             width: 100%;
             padding: 10px;
             border: 1px solid #ddd;
@@ -298,14 +281,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         button[type="submit"]:hover {
-            background-color: var(--primary-dark);
-        }
-        
-        .bulk-import-btn {
-            background-color: var(--primary);
-        }
-        
-        .bulk-import-btn:hover {
             background-color: var(--primary-dark);
         }
         
@@ -438,52 +413,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="container">
-        <h1>Medical Image Importer</h1>
+        <h1>Medical Image Bulk Importer</h1>
         
         <?php if ($message): ?>
             <div class="message <?= $messageType ?>"><?= $message ?></div>
         <?php endif; ?>
-
-        <div class="form-section">
-            <h2>Single Image Upload</h2>
-            <form method="POST" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="test_type">Test Type:</label>
-                    <select name="test_type" id="test_type" required>
-                        <option value="">Select Test Type</option>
-                        <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
-                            <option value="<?= $type ?>"><?= $type ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="eye">Eye:</label>
-                    <select name="eye" id="eye" required>
-                        <option value="">Select Eye</option>
-                        <option value="OD">Right Eye (OD)</option>
-                        <option value="OS">Left Eye (OS)</option>
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="patient_id">Patient ID:</label>
-                    <input type="text" name="patient_id" id="patient_id" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="test_date">Test Date:</label>
-                    <input type="date" name="test_date" id="test_date" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="image">Image File (PNG only):</label>
-                    <input type="file" name="image" id="image" accept="image/png" required>
-                </div>
-                
-                <button type="submit" name="import">Upload Image</button>
-            </form>
-        </div>
 
         <div class="form-section">
             <h2>Bulk Import from Folder</h2>
@@ -514,10 +448,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <li>Patient ID must exist in the database</li>
                         <li>Eye must be either <strong>OD</strong> (right) or <strong>OS</strong> (left)</li>
                         <li>Date must be in <strong>YYYYMMDD</strong> format</li>
+                        <li>Will process all matching files in the folder and subfolders</li>
                     </ul>
                 </div>
                 
-                <button type="submit" name="bulk_import" class="bulk-import-btn">
+                <button type="submit" name="bulk_import">
                     Process All Images in Folder
                 </button>
             </form>
