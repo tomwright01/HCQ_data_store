@@ -3,18 +3,8 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-$servername = "mariadb";
-$username = "root";
-$password = "notgood";
-$dbname = "PatientData";
-
-// Create database connection
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-// Check connection
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
 
 // Process form submission
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -31,7 +21,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             throw new Exception("Subject ID and Date of Birth are required");
         }
         
-        // Use subject ID as patient ID (no concatenation with birth year)
+        // Use subject ID as patient ID
         $patientId = $subjectId;
         
         // Insert Patient
@@ -99,6 +89,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             throw new Exception("Error saving test: " . $stmt->error);
         }
         $stmt->close();
+        
+        // 3. Process Image Uploads if provided
+        foreach (ALLOWED_TEST_TYPES as $testType => $dir) {
+            $eyeField = 'image_' . strtolower($testType) . '_eye';
+            $fileField = 'image_' . strtolower($testType);
+            
+            if (isset($_POST[$eyeField]) && isset($_FILES[$fileField]) && $_FILES[$fileField]['error'] === UPLOAD_ERR_OK) {
+                $eyeValue = $_POST[$eyeField];
+                $tempFilePath = $_FILES[$fileField]['tmp_name'];
+                
+                if (!importTestImage($testType, $eyeValue, $patientId, $testDate, $tempFilePath)) {
+                    throw new Exception("Failed to import $testType image for eye $eyeValue");
+                }
+            }
+        }
         
         // Commit transaction
         $conn->commit();
@@ -187,6 +192,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         .form-group {
             flex: 1;
         }
+        .image-upload-group {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px dashed #ccc;
+        }
         .submit-btn {
             background-color: rgb(0, 168, 143);
             color: white;
@@ -225,7 +237,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="alert alert-error"><?= htmlspecialchars($errorMessage) ?></div>
         <?php endif; ?>
 
-        <form action="" method="post">
+        <form action="" method="post" enctype="multipart/form-data">
             <!-- Patient Information -->
             <div class="form-section">
                 <h2>Patient Information</h2>
@@ -329,6 +341,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <input type="number" step="0.01" name="vf_score">
                     </div>
                 </div>
+            </div>
+
+            <!-- Image Upload Section -->
+            <div class="form-section">
+                <h2>Image Uploads</h2>
+                
+                <?php foreach (ALLOWED_TEST_TYPES as $testType => $dir): ?>
+                    <div class="image-upload-group">
+                        <h3><?= $testType ?> Image</h3>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="image_<?= strtolower($testType) ?>_eye">Eye:</label>
+                                <select name="image_<?= strtolower($testType) ?>_eye">
+                                    <option value="">Select Eye</option>
+                                    <option value="OD">OD (Right Eye)</option>
+                                    <option value="OS">OS (Left Eye)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="image_<?= strtolower($testType) ?>">Image File (PNG):</label>
+                                <input type="file" name="image_<?= strtolower($testType) ?>" accept="image/png">
+                            </div>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
             </div>
 
             <button type="submit" class="submit-btn">Submit Data</button>
