@@ -32,27 +32,31 @@ function processBulkImages($testType, $sourcePath) {
         throw new Exception("Failed to create target directory: " . htmlspecialchars($targetDir));
     }
 
-    // Get all PNG files recursively
+    // Get all files recursively
     $files = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS),
         RecursiveIteratorIterator::SELF_FIRST
     );
 
     foreach ($files as $file) {
-        if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
+        $extension = strtolower($file->getExtension());
+        
+        // Process PNG files for all test types except VF, or PDF for VF
+        if ($file->isFile() && ($extension === 'png' || ($testType === 'VF' && $extension === 'pdf'))) {
             $results['processed']++;
             $filename = $file->getFilename();
             $sourceFile = $file->getPathname();
             
             try {
-                // Parse filename (patientid_eye_YYYYMMDD.png)
-                if (!preg_match('/^(\d+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
-                    throw new Exception("Invalid filename format - must be patientid_eye_YYYYMMDD.png");
+                // Parse filename (patientid_eye_YYYYMMDD.ext)
+                if (!preg_match('/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i', $filename, $matches)) {
+                    throw new Exception("Invalid filename format - must be patientid_eye_YYYYMMDD.ext");
                 }
 
                 $patientId = $matches[1];
                 $eye = strtoupper($matches[2]);
                 $dateStr = $matches[3];
+                $fileExt = strtolower($matches[4]);
 
                 // Validate date
                 $testDate = DateTime::createFromFormat('Ymd', $dateStr);
@@ -66,12 +70,53 @@ function processBulkImages($testType, $sourcePath) {
                     throw new Exception("Patient $patientId not found in database");
                 }
 
-                // Prepare target path
-                $targetFile = $targetDir . $filename;
-                
-                // Copy file to target directory (overwrite if exists)
-                if (!copy($sourceFile, $targetFile)) {
-                    throw new Exception("Failed to copy image to target directory");
+                // Special handling for VF PDFs
+                if ($testType === 'VF' && $fileExt === 'pdf') {
+                    $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
+                    if (!mkdir($tempDir)) {
+                        throw new Exception("Failed to create temp directory for anonymization");
+                    }
+
+                    // Run the anonymization script
+                    $output = [];
+                    $returnVar = 0;
+                    $command = sprintf(
+                        '/bin/bash %s %s %s',
+                        escapeshellarg('Resources/anonymiseHVF/anonymize.sh'),
+                        escapeshellarg($sourceFile),
+                        escapeshellarg($tempDir)
+                    );
+                    exec($command, $output, $returnVar);
+
+                    if ($returnVar !== 0) {
+                        throw new Exception("Failed to anonymize PDF: " . implode("\n", $output));
+                    }
+
+                    // Get the anonymized file
+                    $anonFile = $tempDir . '/' . $filename;
+                    if (!file_exists($anonFile)) {
+                        throw new Exception("Anonymized file not found in output directory");
+                    }
+
+                    // Prepare target path
+                    $targetFile = $targetDir . $filename;
+                    
+                    // Copy anonymized file to target directory
+                    if (!copy($anonFile, $targetFile)) {
+                        throw new Exception("Failed to copy anonymized PDF to target directory");
+                    }
+
+                    // Clean up temp files
+                    array_map('unlink', glob("$tempDir/*"));
+                    rmdir($tempDir);
+                } else {
+                    // Normal PNG processing
+                    $targetFile = $targetDir . $filename;
+                    
+                    // Copy file to target directory (overwrite if exists)
+                    if (!copy($sourceFile, $targetFile)) {
+                        throw new Exception("Failed to copy image to target directory");
+                    }
                 }
 
                 // Prepare database fields
@@ -145,16 +190,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Validate file type
             $fileInfo = new finfo(FILEINFO_MIME_TYPE);
             $mime = $fileInfo->file($_FILES['image']['tmp_name']);
-            if ($mime !== 'image/png') {
-                throw new Exception("Only PNG images are allowed (detected: $mime)");
+            
+            // Allow PNG for all tests or PDF for VF
+            if (!($mime === 'image/png' || ($testType === 'VF' && $mime === 'application/pdf'))) {
+                throw new Exception("For VF tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
             }
             
-            // Process the upload
-            if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
-                $message = "Image uploaded and database updated successfully!";
-                $messageType = 'success';
+            // Special handling for VF PDFs
+            if ($testType === 'VF' && $mime === 'application/pdf') {
+                $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
+                if (!mkdir($tempDir)) {
+                    throw new Exception("Failed to create temp directory for anonymization");
+                }
+
+                // Generate filename
+                $filename = $patientId . '_' . $eye . '_' . date('Ymd', strtotime($testDate)) . '.pdf';
+                $tempFile = $tempDir . '/' . $filename;
+                
+                // First move the uploaded file
+                if (!move_uploaded_file($_FILES['image']['tmp_name'], $tempFile)) {
+                    throw new Exception("Failed to process uploaded PDF");
+                }
+
+                // Run the anonymization script
+                $output = [];
+                $returnVar = 0;
+                $command = sprintf(
+                    '/bin/bash %s %s %s',
+                    escapeshellarg('Resources/anonymiseHVF/anonymize.sh'),
+                    escapeshellarg($tempFile),
+                    escapeshellarg($tempDir)
+                );
+                exec($command, $output, $returnVar);
+
+                if ($returnVar !== 0) {
+                    throw new Exception("Failed to anonymize PDF: " . implode("\n", $output));
+                }
+
+                // Get the anonymized file
+                $anonFile = $tempDir . '/' . $filename;
+                if (!file_exists($anonFile)) {
+                    throw new Exception("Anonymized file not found in output directory");
+                }
+
+                // Process the upload with the anonymized file
+                if (importTestImage($testType, $eye, $patientId, $testDate, $anonFile)) {
+                    $message = "PDF uploaded, anonymized, and database updated successfully!";
+                    $messageType = 'success';
+                } else {
+                    throw new Exception("Failed to process anonymized PDF upload");
+                }
+
+                // Clean up temp files
+                array_map('unlink', glob("$tempDir/*"));
+                rmdir($tempDir);
             } else {
-                throw new Exception("Failed to process image upload");
+                // Normal PNG processing
+                if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
+                    $message = "Image uploaded and database updated successfully!";
+                    $messageType = 'success';
+                } else {
+                    throw new Exception("Failed to process image upload");
+                }
             }
         } elseif (isset($_POST['bulk_import'])) {
             // Bulk import processing
@@ -445,7 +542,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
 
         <div class="form-section">
-            <h2>Single Image Upload</h2>
+            <h2>Single File Upload</h2>
             <form method="POST" enctype="multipart/form-data">
                 <div class="form-group">
                     <label for="test_type">Test Type:</label>
@@ -477,11 +574,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <div class="form-group">
-                    <label for="image">Image File (PNG only):</label>
-                    <input type="file" name="image" id="image" accept="image/png" required>
+                    <label for="image">File (PNG for all tests except VF, PDF for VF):</label>
+                    <input type="file" name="image" id="image" accept="image/png,.pdf" required>
                 </div>
                 
-                <button type="submit" name="import">Upload Image</button>
+                <button type="submit" name="import">Upload File</button>
             </form>
         </div>
 
@@ -508,9 +605,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="requirements-box">
                     <h3>File Requirements for Bulk Import</h3>
                     <ul>
-                        <li>All files must be in <strong>PNG format</strong></li>
-                        <li>Files must be named: <code>patientid_eye_YYYYMMDD.png</code></li>
-                        <li>Example: <code>12345_OD_20230715.png</code></li>
+                        <li>For <strong>VF tests</strong>: PDF files named <code>patientid_eye_YYYYMMDD.pdf</code></li>
+                        <li>For other tests: PNG files named <code>patientid_eye_YYYYMMDD.png</code></li>
+                        <li>Example: <code>12345_OD_20230715.pdf</code> (VF) or <code>12345_OD_20230715.png</code></li>
                         <li>Patient ID must exist in the database</li>
                         <li>Eye must be either <strong>OD</strong> (right) or <strong>OS</strong> (left)</li>
                         <li>Date must be in <strong>YYYYMMDD</strong> format</li>
@@ -518,7 +615,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <button type="submit" name="bulk_import" class="bulk-import-btn">
-                    Process All Images in Folder
+                    Process All Files in Folder
                 </button>
             </form>
         </div>
