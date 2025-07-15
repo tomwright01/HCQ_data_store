@@ -420,13 +420,13 @@ if ($search_patient_id) {
                                 $imageLinks = [];
                                 if (!empty($row['faf_reference_od'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_od']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OD" class="image-link">FAF OD</a>';
                                 if (!empty($row['faf_reference_os'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_os']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OS" class="image-link">FAF OS</a>';
-                                if (!empty($row['oct_reference_od'])) $imageLinks[] = '<a href="#" class="image-link">OCT OD</a>';
-                                if (!empty($row['oct_reference_os'])) $imageLinks[] = '<a href="#" class="image-link">OCT OS</a>';
-                                if (!empty($row['vf_reference_od'])) $imageLinks[] = '<a href="#" class="image-link">VF OD</a>';
-                                if (!empty($row['vf_reference_os'])) $imageLinks[] = '<a href="#" class="image-link">VF OS</a>';
-                                if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="#" class="image-link">MFERG OD</a>';
-                                if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="#" class="image-link">MFERG OS</a>';
-                                
+                                if (!empty($row['oct_reference_od'])) $imageLinks[] = '<a href="view_oct.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">OCT OD</a>';
+                                if (!empty($row['oct_reference_os'])) $imageLinks[] = '<a href="view_oct.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">OCT OS</a>';
+                                if (!empty($row['vf_reference_od'])) $imageLinks[] = '<a href="view_vf.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">VF OD</a>';
+                                if (!empty($row['vf_reference_os'])) $imageLinks[] = '<a href="view_vf.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">VF OS</a>';
+                                if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="view_mferg.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">MFERG OD</a>';
+                                if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="view_mferg.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">MFERG OS</a>';
+    
                                 echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
                                 ?>
                             </td>
