@@ -32,13 +32,13 @@ function processBulkImages($testType, $sourcePath) {
         throw new Exception("Failed to create target directory: " . htmlspecialchars($targetDir));
     }
 
-    // Recursive directory iterator
-    $iterator = new RecursiveIteratorIterator(
+    // Get all PNG files recursively
+    $files = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($sourcePath, FilesystemIterator::SKIP_DOTS),
         RecursiveIteratorIterator::SELF_FIRST
     );
 
-    foreach ($iterator as $file) {
+    foreach ($files as $file) {
         if ($file->isFile() && strtolower($file->getExtension()) === 'png') {
             $results['processed']++;
             $filename = $file->getFilename();
@@ -47,7 +47,7 @@ function processBulkImages($testType, $sourcePath) {
             try {
                 // Parse filename (patientid_eye_YYYYMMDD.png)
                 if (!preg_match('/^(\d+)_(OD|OS)_(\d{8})\.png$/i', $filename, $matches)) {
-                    throw new Exception("Invalid filename format");
+                    throw new Exception("Invalid filename format - must be patientid_eye_YYYYMMDD.png");
                 }
 
                 $patientId = $matches[1];
@@ -57,7 +57,7 @@ function processBulkImages($testType, $sourcePath) {
                 // Validate date
                 $testDate = DateTime::createFromFormat('Ymd', $dateStr);
                 if (!$testDate) {
-                    throw new Exception("Invalid date in filename");
+                    throw new Exception("Invalid date in filename (must be YYYYMMDD)");
                 }
                 $testDate = $testDate->format('Y-m-d');
 
@@ -66,10 +66,10 @@ function processBulkImages($testType, $sourcePath) {
                     throw new Exception("Patient $patientId not found in database");
                 }
 
-                // Prepare target path and overwrite if exists
+                // Prepare target path
                 $targetFile = $targetDir . $filename;
                 
-                // Overwrite existing file
+                // Copy file to target directory (overwrite if exists)
                 if (!copy($sourceFile, $targetFile)) {
                     throw new Exception("Failed to copy image to target directory");
                 }
@@ -87,7 +87,7 @@ function processBulkImages($testType, $sourcePath) {
                 $testId = $test ? $test['test_id'] : 
                     $patientId . '_' . date('Ymd', strtotime($testDate)) . '_' . substr(md5(uniqid()), 0, 4);
 
-                // Update or insert test record (overwrites existing)
+                // Update or insert test record
                 if ($test) {
                     $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
                     $stmt->bind_param("ss", $filename, $testId);
