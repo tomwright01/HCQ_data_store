@@ -82,7 +82,7 @@ function processBulkImages($testType, $sourcePath) {
                     $returnVar = 0;
                     $command = sprintf(
                         '/bin/bash %s %s %s',
-                        escapeshellarg('Resources/anonymiseHVF/anonymize.sh'),
+                        escapeshellarg('Resources/anonymiseHVF/anonymiseHVF.sh'),
                         escapeshellarg($sourceFile),
                         escapeshellarg($tempDir)
                     );
@@ -217,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $returnVar = 0;
                 $command = sprintf(
                     '/bin/bash %s %s %s',
-                    escapeshellarg('Resources/anonymiseHVF/anonymize.sh'),
+                    escapeshellarg('Resources/anonymiseHVF/anonymiseHVF.sh'),
                     escapeshellarg($tempFile),
                     escapeshellarg($tempDir)
                 );
