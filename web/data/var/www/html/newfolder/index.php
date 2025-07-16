@@ -184,11 +184,11 @@ if ($search_patient_id) {
         }
         
         .import-button {
-            background-color: rgb(76, 175, 80);
+            background-color: rgb(70, 130, 180);
         }
         
         .import-button:hover {
-            background-color: rgb(69, 160, 73);
+            background-color: rgb(60, 110, 160);
         }
         
         .image-button {
@@ -207,11 +207,11 @@ if ($search_patient_id) {
             background-color: rgb(0, 140, 120);
         }
         .export-button {
-            background-color: rgb(156, 39, 176);
+            background-color: rgb(0, 119, 182);
         }
 
         .export-button:hover {
-            background-color: rgb(142, 36, 170);
+            background-color: rgb(0, 95, 150);
         }
 
         .search-form {
