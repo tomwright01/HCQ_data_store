@@ -1,7 +1,4 @@
 <?php
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
-
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
@@ -20,7 +17,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         $patientId = $subjectId;
         
-        $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) VALUES (?, ?, ?)");
+        // Insert or update patient
+        $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) 
+                              VALUES (?, ?, ?)
+                              ON DUPLICATE KEY UPDATE 
+                              subject_id = VALUES(subject_id),
+                              date_of_birth = VALUES(date_of_birth)");
         $stmt->bind_param("sss", $patientId, $subjectId, $dob);
         
         if (!$stmt->execute()) {
@@ -30,9 +32,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         
         // Process Test Data for each eye
         foreach (['OD', 'OS'] as $eye) {
-            if (!isset($_POST["eye_data_$eye"])) continue; // Skip if eye not submitted
+            if (!isset($_POST["eye_data_$eye"])) continue;
             
             $eyeData = $_POST["eye_data_$eye"];
+            
+            // Skip if no date (indicates eye not being submitted)
+            if (empty($eyeData['date_of_test'])) continue;
+            
             $testDate = $eyeData['date_of_test'];
             $age = !empty($eyeData['age']) ? (int)$eyeData['age'] : null;
             $reportDiagnosis = $eyeData['report_diagnosis'];
@@ -54,16 +60,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $octScore = !empty($eyeData['oct_score']) ? round((float)$eyeData['oct_score'], 2) : null;
             $vfScore = !empty($eyeData['vf_score']) ? round((float)$eyeData['vf_score'], 2) : null;
             
-            // Generate test_id
-            $testDateFormatted = date('Ymd', strtotime($testDate));
-            $randomSuffix = substr(md5(uniqid()), 0, 2);
-            $testId = $testDateFormatted . $eye . $randomSuffix;
+            // Generate test_id with timestamp for uniqueness
+            $testId = date('YmdHis') . '_' . $eye . '_' . substr(md5(uniqid()), 0, 4);
             
-            // Insert Test
+            // Insert or update test data
             $stmt = $conn->prepare("INSERT INTO tests (
                 test_id, patient_id, date_of_test, age, eye, report_diagnosis, exclusion,
                 merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                age = VALUES(age),
+                report_diagnosis = VALUES(report_diagnosis),
+                exclusion = VALUES(exclusion),
+                merci_score = VALUES(merci_score),
+                merci_diagnosis = VALUES(merci_diagnosis),
+                error_type = VALUES(error_type),
+                faf_grade = VALUES(faf_grade),
+                oct_score = VALUES(oct_score),
+                vf_score = VALUES(vf_score)");
             
             $stmt->bind_param(
                 "sssisssisiddd",
@@ -102,7 +116,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
         
         $conn->commit();
-        $successMessage = "Patient and test information successfully saved!";
+        $successMessage = "Data successfully saved!";
     } catch (Exception $e) {
         $conn->rollback();
         $errorMessage = "Error: " . $e->getMessage();
@@ -115,7 +129,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Patient and Test Information</title>
+    <title>Patient Data Entry</title>
     <style>
         :root {
             --primary: #2CA25F;
@@ -172,6 +186,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             background-color: #FFEBEE;
             color: #C62828;
             border-left: 4px solid #F44336;
+        }
+        
+        .duplicate-warning {
+            background-color: #FFF3CD;
+            color: #856404;
+            border-left: 4px solid #FFC107;
+            padding: 10px;
+            margin-bottom: 15px;
+            display: none;
         }
         
         /* Eye Tabs */
@@ -308,9 +331,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </style>
 </head>
 <body>
-
     <div class="form-container">
-        <h1>Add New Patient and Test Information</h1>
+        <h1>Patient Data Entry</h1>
         
         <?php if (isset($successMessage)): ?>
             <div class="alert alert-success"><?= htmlspecialchars($successMessage) ?></div>
@@ -320,19 +342,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="alert alert-error"><?= htmlspecialchars($errorMessage) ?></div>
         <?php endif; ?>
 
-        <form action="" method="post" enctype="multipart/form-data">
+        <div id="duplicate-warning" class="duplicate-warning">
+            Note: This patient already has data for the selected date/eye. Submitting will update the existing record.
+        </div>
+
+        <form action="" method="post" enctype="multipart/form-data" id="patient-form">
             <!-- Patient Information -->
             <div class="form-section">
                 <h2>Patient Information</h2>
                 
                 <div class="form-group">
                     <label for="subject_id">Subject ID:</label>
-                    <input type="text" name="subject_id" required>
+                    <input type="text" name="subject_id" id="subject_id" required>
                 </div>
                 
                 <div class="form-group">
                     <label for="date_of_birth">Date of Birth:</label>
-                    <input type="date" name="date_of_birth" required>
+                    <input type="date" name="date_of_birth" id="date_of_birth" required>
                 </div>
             </div>
 
@@ -434,7 +460,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             <h3><?= $testType ?> Image</h3>
                             <div class="form-group">
                                 <label for="image_<?= strtolower($testType) ?>_od">Image File (PNG):</label>
-                                <input type="file" name="image_<?= strtolower($testType) ?>_od" accept="image/png">
+                                <input type="file" name="image_<?= strtolower($testType) ?>_od" id="image_<?= strtolower($testType) ?>_od" accept="image/png">
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -533,7 +559,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                             <h3><?= $testType ?> Image</h3>
                             <div class="form-group">
                                 <label for="image_<?= strtolower($testType) ?>_os">Image File (PNG):</label>
-                                <input type="file" name="image_<?= strtolower($testType) ?>_os" accept="image/png">
+                                <input type="file" name="image_<?= strtolower($testType) ?>_os" id="image_<?= strtolower($testType) ?>_os" accept="image/png">
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -558,12 +584,44 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 tab.classList.add('active');
                 const eye = tab.dataset.eye;
                 document.getElementById(`${eye}-content`).classList.add('active');
+                
+                // Check for duplicates
+                checkForDuplicates();
             });
         });
 
-        // Optional: Copy common data between eyes
+        // Duplicate checking function
+        async function checkForDuplicates() {
+            const patientId = document.getElementById('subject_id').value;
+            const activeTab = document.querySelector('.eye-tab.active').dataset.eye;
+            const testDate = document.getElementById(`${activeTab}_date_of_test`).value;
+            
+            if (!patientId || !testDate) return;
+            
+            try {
+                const response = await fetch(`includes/check_duplicate.php?patient=${patientId}&date=${testDate}&eye=${activeTab.toUpperCase()}`);
+                const data = await response.json();
+                
+                document.getElementById('duplicate-warning').style.display = data.exists ? 'block' : 'none';
+            } catch (error) {
+                console.error('Error checking for duplicates:', error);
+            }
+        }
+
+        // Event listeners for duplicate checking
+        document.getElementById('subject_id').addEventListener('blur', checkForDuplicates);
+        document.getElementById('od_date_of_test').addEventListener('change', checkForDuplicates);
+        document.getElementById('os_date_of_test').addEventListener('change', checkForDuplicates);
+        
+        // Optional: Copy date between eyes when changed
         document.getElementById('od_date_of_test').addEventListener('change', function() {
             document.getElementById('os_date_of_test').value = this.value;
+            checkForDuplicates();
+        });
+        
+        document.getElementById('os_date_of_test').addEventListener('change', function() {
+            document.getElementById('od_date_of_test').value = this.value;
+            checkForDuplicates();
         });
     </script>
 </body>
