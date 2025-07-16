@@ -17,6 +17,12 @@ define('ALLOWED_TEST_TYPES', [
     'MFERG' => 'MFERG'
 ]);
 
+define('MAX_FILE_SIZE', 10 * 1024 * 1024); // 10MB
+define('ALLOWED_IMAGE_TYPES', [
+    'image/png' => 'png',
+    'application/pdf' => 'pdf'
+]);
+
 // Create connection
 $conn = new mysqli(DB_SERVER, DB_USERNAME, DB_PASSWORD, DB_NAME);
 
