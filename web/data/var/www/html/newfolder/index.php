@@ -206,6 +206,13 @@ if ($search_patient_id) {
         .form-button:hover {
             background-color: rgb(0, 140, 120);
         }
+        .export-button {
+            background-color: rgb(156, 39, 176);
+        }
+
+        .export-button:hover {
+            background-color: rgb(142, 36, 170);
+        }
 
         .search-form {
             margin: 20px;
@@ -372,6 +379,7 @@ if ($search_patient_id) {
             <a href="form.php" class="action-button form-button">Manual Data Entry</a>
             <a href="csv_import.php" class="action-button import-button">Upload Patient Data (CSV)</a>
             <a href="import_images.php" class="action-button image-button">Import Medical Images</a>
+            <a href="export_csv.php" class="action-button export-button">Export to CSV</a>
         </div>
 
         <div class="search-form">
