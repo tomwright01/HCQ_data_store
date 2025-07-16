@@ -123,7 +123,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -197,7 +196,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             display: none;
         }
         
-        /* Eye Tabs */
         .eye-tabs {
             display: flex;
             margin-bottom: 20px;
@@ -237,7 +235,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             display: block;
         }
         
-        /* Form Styles */
         label {
             display: block;
             margin: 10px 0 5px;
@@ -313,7 +310,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             text-decoration: underline;
         }
         
-        /* Responsive */
         @media (max-width: 768px) {
             .form-row {
                 flex-direction: column;
@@ -377,7 +373,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="form-row">
                         <div class="form-group">
                             <label for="od_date_of_test">Test Date:</label>
-                            <input type="date" name="eye_data_OD[date_of_test]" id="od_date_of_test">
+                            <input type="date" name="eye_data_OD[date_of_test]" id="od_date_of_test" required>
                         </div>
                         
                         <div class="form-group">
@@ -388,7 +384,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     
                     <div class="form-group">
                         <label for="od_report_diagnosis">Report Diagnosis:</label>
-                        <select name="eye_data_OD[report_diagnosis]" id="od_report_diagnosis">
+                        <select name="eye_data_OD[report_diagnosis]" id="od_report_diagnosis" required>
                             <option value="normal">Normal</option>
                             <option value="abnormal">Abnormal</option>
                             <option value="no input">No Input</option>
@@ -397,7 +393,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     
                     <div class="form-group">
                         <label for="od_exclusion">Exclusion:</label>
-                        <select name="eye_data_OD[exclusion]" id="od_exclusion">
+                        <select name="eye_data_OD[exclusion]" id="od_exclusion" required>
                             <option value="none">None</option>
                             <option value="retinal detachment">Retinal Detachment</option>
                             <option value="generalized retinal dysfunction">Generalized Retinal Dysfunction</option>
@@ -455,15 +451,37 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="form-section">
                     <h2>Right Eye (OD) Image Uploads</h2>
                     
-                    <?php foreach (ALLOWED_TEST_TYPES as $testType => $dir): ?>
-                        <div class="image-upload-group">
-                            <h3><?= $testType ?> Image</h3>
-                            <div class="form-group">
-                                <label for="image_<?= strtolower($testType) ?>_od">Image File (PNG):</label>
-                                <input type="file" name="image_<?= strtolower($testType) ?>_od" id="image_<?= strtolower($testType) ?>_od" accept="image/png">
-                            </div>
+                    <div class="image-upload-group">
+                        <h3>FAF Image</h3>
+                        <div class="form-group">
+                            <label for="image_faf_od">FAF File (PNG):</label>
+                            <input type="file" name="image_faf_od" id="image_faf_od" accept="image/png">
                         </div>
-                    <?php endforeach; ?>
+                    </div>
+                    
+                    <div class="image-upload-group">
+                        <h3>OCT Image</h3>
+                        <div class="form-group">
+                            <label for="image_oct_od">OCT File (PNG):</label>
+                            <input type="file" name="image_oct_od" id="image_oct_od" accept="image/png">
+                        </div>
+                    </div>
+                    
+                    <div class="image-upload-group">
+                        <h3>VF Image</h3>
+                        <div class="form-group">
+                            <label for="image_vf_od">VF File (PDF):</label>
+                            <input type="file" name="image_vf_od" id="image_vf_od" accept=".pdf">
+                        </div>
+                    </div>
+                    
+                    <div class="image-upload-group">
+                        <h3>MFERG Image</h3>
+                        <div class="form-group">
+                            <label for="image_mferg_od">MFERG File (PNG):</label>
+                            <input type="file" name="image_mferg_od" id="image_mferg_od" accept="image/png">
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -476,7 +494,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     <div class="form-row">
                         <div class="form-group">
                             <label for="os_date_of_test">Test Date:</label>
-                            <input type="date" name="eye_data_OS[date_of_test]" id="os_date_of_test">
+                            <input type="date" name="eye_data_OS[date_of_test]" id="os_date_of_test" required>
                         </div>
                         
                         <div class="form-group">
@@ -487,7 +505,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     
                     <div class="form-group">
                         <label for="os_report_diagnosis">Report Diagnosis:</label>
-                        <select name="eye_data_OS[report_diagnosis]" id="os_report_diagnosis">
+                        <select name="eye_data_OS[report_diagnosis]" id="os_report_diagnosis" required>
                             <option value="normal">Normal</option>
                             <option value="abnormal">Abnormal</option>
                             <option value="no input">No Input</option>
@@ -496,7 +514,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                     
                     <div class="form-group">
                         <label for="os_exclusion">Exclusion:</label>
-                        <select name="eye_data_OS[exclusion]" id="os_exclusion">
+                        <select name="eye_data_OS[exclusion]" id="os_exclusion" required>
                             <option value="none">None</option>
                             <option value="retinal detachment">Retinal Detachment</option>
                             <option value="generalized retinal dysfunction">Generalized Retinal Dysfunction</option>
@@ -554,15 +572,37 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 <div class="form-section">
                     <h2>Left Eye (OS) Image Uploads</h2>
                     
-                    <?php foreach (ALLOWED_TEST_TYPES as $testType => $dir): ?>
-                        <div class="image-upload-group">
-                            <h3><?= $testType ?> Image</h3>
-                            <div class="form-group">
-                                <label for="image_<?= strtolower($testType) ?>_os">Image File (PNG):</label>
-                                <input type="file" name="image_<?= strtolower($testType) ?>_os" id="image_<?= strtolower($testType) ?>_os" accept="image/png">
-                            </div>
+                    <div class="image-upload-group">
+                        <h3>FAF Image</h3>
+                        <div class="form-group">
+                            <label for="image_faf_os">FAF File (PNG):</label>
+                            <input type="file" name="image_faf_os" id="image_faf_os" accept="image/png">
                         </div>
-                    <?php endforeach; ?>
+                    </div>
+                    
+                    <div class="image-upload-group">
+                        <h3>OCT Image</h3>
+                        <div class="form-group">
+                            <label for="image_oct_os">OCT File (PNG):</label>
+                            <input type="file" name="image_oct_os" id="image_oct_os" accept="image/png">
+                        </div>
+                    </div>
+                    
+                    <div class="image-upload-group">
+                        <h3>VF Image</h3>
+                        <div class="form-group">
+                            <label for="image_vf_os">VF File (PDF):</label>
+                            <input type="file" name="image_vf_os" id="image_vf_os" accept=".pdf">
+                        </div>
+                    </div>
+                    
+                    <div class="image-upload-group">
+                        <h3>MFERG Image</h3>
+                        <div class="form-group">
+                            <label for="image_mferg_os">MFERG File (PNG):</label>
+                            <input type="file" name="image_mferg_os" id="image_mferg_os" accept="image/png">
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -576,16 +616,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Tab switching functionality
         document.querySelectorAll('.eye-tab').forEach(tab => {
             tab.addEventListener('click', () => {
-                // Remove active class from all tabs and content
                 document.querySelectorAll('.eye-tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.eye-content').forEach(c => c.classList.remove('active'));
                 
-                // Add active class to clicked tab and corresponding content
                 tab.classList.add('active');
                 const eye = tab.dataset.eye;
                 document.getElementById(`${eye}-content`).classList.add('active');
-                
-                // Check for duplicates
                 checkForDuplicates();
             });
         });
@@ -608,17 +644,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             }
         }
 
-        // Event listeners for duplicate checking
+        // Event listeners
         document.getElementById('subject_id').addEventListener('blur', checkForDuplicates);
-        document.getElementById('od_date_of_test').addEventListener('change', checkForDuplicates);
-        document.getElementById('os_date_of_test').addEventListener('change', checkForDuplicates);
-        
-        // Optional: Copy date between eyes when changed
         document.getElementById('od_date_of_test').addEventListener('change', function() {
             document.getElementById('os_date_of_test').value = this.value;
             checkForDuplicates();
         });
-        
         document.getElementById('os_date_of_test').addEventListener('change', function() {
             document.getElementById('od_date_of_test').value = this.value;
             checkForDuplicates();
