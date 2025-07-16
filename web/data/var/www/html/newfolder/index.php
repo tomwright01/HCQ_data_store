@@ -184,34 +184,34 @@ if ($search_patient_id) {
         }
         
         .import-button {
-            background-color: rgb(70, 130, 180);
+            background-color: rgb(102, 194, 164);
         }
         
         .import-button:hover {
-            background-color: rgb(60, 110, 160);
+            background-color: rgb(92, 174, 154);
         }
         
         .image-button {
-            background-color: rgb(33, 150, 243);
+            background-color: rgb(178, 226, 226);
         }
         
         .image-button:hover {
-            background-color: rgb(30, 136, 229);
+            background-color: rgb(158, 206, 206);
         }
         
         .form-button {
-            background-color: rgb(0, 168, 143);
+            background-color: rgb(44, 162, 95);
         }
         
         .form-button:hover {
             background-color: rgb(0, 140, 120);
         }
         .export-button {
-            background-color: rgb(0, 119, 182);
+            background-color: rgb(0, 109, 44);
         }
 
         .export-button:hover {
-            background-color: rgb(0, 95, 150);
+            background-color: rgb(0, 89, 34);
         }
 
         .search-form {
