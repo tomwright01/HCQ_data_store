@@ -2,9 +2,7 @@
 require_once 'config.php';
 
 /**
- * Get patient data by patient_id
- * @param string $patient_id
- * @return array|null Patient data or null if not found
+ * Get patient data by ID
  */
 function getPatientById($patient_id) {
     global $conn;
@@ -15,36 +13,7 @@ function getPatientById($patient_id) {
 }
 
 /**
- * Get test data with image URLs
- * @param string $test_id
- * @return array Test data with image URLs
- */
-function getTestWithImages($test_id) {
-    global $conn;
-    $stmt = $conn->prepare("SELECT * FROM tests WHERE test_id = ?");
-    $stmt->bind_param("s", $test_id);
-    $stmt->execute();
-    $test = $stmt->get_result()->fetch_assoc();
-    
-    if ($test) {
-        // Add image URLs for all test types
-        foreach (ALLOWED_TEST_TYPES as $type => $dir) {
-            $test[strtolower($type).'_od_url'] = getDynamicImagePath($test[strtolower($type).'_reference_od']);
-            $test[strtolower($type).'_os_url'] = getDynamicImagePath($test[strtolower($type).'_reference_os']);
-        }
-    }
-    
-    return $test;
-}
-
-/**
  * Import an image and update database
- * @param string $testType One of ALLOWED_TEST_TYPES
- * @param string $eye 'OD' or 'OS'
- * @param string $patient_id
- * @param string $test_date (YYYY-MM-DD)
- * @param string $tempFilePath Temporary upload path
- * @return bool True on success
  */
 function importTestImage($testType, $eye, $patient_id, $test_date, $tempFilePath) {
     global $conn;
@@ -54,19 +23,35 @@ function importTestImage($testType, $eye, $patient_id, $test_date, $tempFilePath
         return false;
     }
     
-    $targetDir = getTestTypeDirectory($testType);
+    // Validate file
+    $fileInfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mimeType = finfo_file($fileInfo, $tempFilePath);
+    finfo_close($fileInfo);
+    
+    $allowedTypes = $testType === 'VF' ? ['application/pdf'] : ['image/png'];
+    if (!in_array($mimeType, array_keys(ALLOWED_IMAGE_TYPES))) {
+        return false;
+    }
+    
+    if (filesize($tempFilePath) > MAX_FILE_SIZE) {
+        return false;
+    }
+    
+    $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
     if (!file_exists($targetDir)) {
         mkdir($targetDir, 0777, true);
     }
     
-    // Generate filename: patientid_eye_YYYYMMDD.png
-    $filename = sprintf('%s_%s_%s.png', 
+    // Generate filename
+    $extension = ALLOWED_IMAGE_TYPES[$mimeType];
+    $filename = sprintf('%s_%s_%s.%s', 
         $patient_id, 
         $eye, 
-        date('Ymd', strtotime($test_date))
+        date('Ymd', strtotime($test_date)),
+        $extension
     );
     
-    $targetFile = $targetDir . '/' . $filename;
+    $targetFile = $targetDir . $filename;
     
     // Move uploaded file
     if (!move_uploaded_file($tempFilePath, $targetFile)) {
@@ -74,26 +59,48 @@ function importTestImage($testType, $eye, $patient_id, $test_date, $tempFilePath
     }
     
     // Update database
-    $fieldName = strtolower($testType) . '_reference_' . strtolower($eye);
+    $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
     $testDate = date('Y-m-d', strtotime($test_date));
     
-    // Check if test exists
-    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-    $stmt->bind_param("ss", $patient_id, $testDate);
+    // Check for existing test
+    $stmt = $conn->prepare("SELECT test_id FROM tests 
+                          WHERE patient_id = ? 
+                          AND date_of_test = ? 
+                          AND eye = ?");
+    $stmt->bind_param("sss", $patient_id, $testDate, $eye);
     $stmt->execute();
     $result = $stmt->get_result();
     
     if ($result->num_rows > 0) {
         // Update existing test
         $test = $result->fetch_assoc();
-        $stmt = $conn->prepare("UPDATE tests SET $fieldName = ? WHERE test_id = ?");
+        $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
         $stmt->bind_param("ss", $filename, $test['test_id']);
     } else {
         // Create new test
-        $testId = date('Ymd', strtotime($testDate)) . '_' . $patient_id . '_' . substr(md5(uniqid()), 0, 4);
-        $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test, $fieldName) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("ssss", $testId, $patient_id, $testDate, $filename);
+        $testId = date('YmdHis') . '_' . $eye . '_' . substr(md5(uniqid()), 0, 4);
+        $stmt = $conn->prepare("INSERT INTO tests 
+                              (test_id, patient_id, date_of_test, eye, $imageField) 
+                              VALUES (?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssss", $testId, $patient_id, $testDate, $eye, $filename);
     }
     
     return $stmt->execute();
 }
+
+/**
+ * Check for duplicate tests
+ */
+function checkDuplicateTest($patient_id, $test_date, $eye) {
+    global $conn;
+    
+    $stmt = $conn->prepare("SELECT 1 FROM tests 
+                          WHERE patient_id = ? 
+                          AND date_of_test = ? 
+                          AND eye = ?");
+    $stmt->bind_param("sss", $patient_id, $test_date, $eye);
+    $stmt->execute();
+    
+    return $stmt->get_result()->num_rows > 0;
+}
+?>
