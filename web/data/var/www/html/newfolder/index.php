@@ -71,12 +71,25 @@ while ($row = $result_exclusion->fetch_assoc()) {
     $exclusion_data[$row['exclusion']] = $row['count'];
 }
 
+// Query to get location distribution
+$sql_location = "SELECT 
+    location, 
+    COUNT(*) AS count 
+    FROM tests 
+    GROUP BY location";
+$result_location = $conn->query($sql_location);
+$location_data = [];
+while ($row = $result_location->fetch_assoc()) {
+    $location_data[$row['location']] = $row['count'];
+}
+
 // Patient search functionality
 $search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient_id'] : '';
 
 if ($search_patient_id) {
     $sql_patient_data = "SELECT 
         t.test_id, 
+        t.location AS test_location,
         t.date_of_test, 
         t.age,
         t.eye,
@@ -98,7 +111,8 @@ if ($search_patient_id) {
         t.mferg_reference_os,
         p.patient_id, 
         p.subject_id, 
-        p.date_of_birth
+        p.date_of_birth,
+        p.location AS patient_location
         FROM tests t
         JOIN patients p ON t.patient_id = p.patient_id
         WHERE p.patient_id = ?";
@@ -396,6 +410,8 @@ if ($search_patient_id) {
                 <table>
                     <tr>
                         <th>Test ID</th>
+                        <th>Test Location</th>
+                        <th>Patient Location</th>
                         <th>Date</th>
                         <th>Age</th>
                         <th>Eye</th>
@@ -412,6 +428,8 @@ if ($search_patient_id) {
                     <?php while ($row = $result_patient->fetch_assoc()): ?>
                         <tr>
                             <td><?= htmlspecialchars($row["test_id"]) ?></td>
+                            <td><?= htmlspecialchars($row["test_location"] ?? 'KH') ?></td>
+                            <td><?= htmlspecialchars($row["patient_location"] ?? 'KH') ?></td>
                             <td><?= htmlspecialchars($row["date_of_test"]) ?></td>
                             <td><?= htmlspecialchars($row["age"] ?? 'N/A') ?></td>
                             <td><?= htmlspecialchars($row["eye"] ?? 'N/A') ?></td>
@@ -434,7 +452,7 @@ if ($search_patient_id) {
                                 if (!empty($row['vf_reference_os'])) $imageLinks[] = '<a href="view_vf.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">VF OS</a>';
                                 if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="view_mferg.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">MFERG OD</a>';
                                 if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="view_mferg.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">MFERG OS</a>';
-    
+
                                 echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
                                 ?>
                             </td>
@@ -459,8 +477,8 @@ if ($search_patient_id) {
         </div>
 
         <div class="chart-container">
-            <h3 class="chart-title">Exclusion Reasons</h3>
-            <canvas id="exclusionChart"></canvas>
+            <h3 class="chart-title">Location Distribution</h3>
+            <canvas id="locationChart"></canvas>
         </div>
     </div>
 
@@ -560,17 +578,22 @@ if ($search_patient_id) {
             }
         });
 
-        // Exclusion Reasons Chart
-        var exclusionCtx = document.getElementById('exclusionChart').getContext('2d');
-        var exclusionChart = new Chart(exclusionCtx, {
+        // Location Distribution Chart
+        var locationCtx = document.getElementById('locationChart').getContext('2d');
+        var locationChart = new Chart(locationCtx, {
             type: 'bar',
             data: {
-                labels: <?= json_encode(array_keys($exclusion_data)) ?>,
+                labels: <?= json_encode(array_keys($location_data)) ?>,
                 datasets: [{
-                    label: 'Count',
-                    data: <?= json_encode(array_values($exclusion_data)) ?>,
-                    backgroundColor: 'rgb(0, 168, 143)',
-                    borderColor: 'rgb(0, 140, 120)',
+                    label: 'Tests by Location',
+                    data: <?= json_encode(array_values($location_data)) ?>,
+                    backgroundColor: [
+                        'rgb(0, 168, 143)',
+                        'rgb(44, 162, 95)',
+                        'rgb(102, 194, 164)',
+                        'rgb(178, 226, 226)'
+                    ],
+                    borderColor: '#fff',
                     borderWidth: 1
                 }]
             },
