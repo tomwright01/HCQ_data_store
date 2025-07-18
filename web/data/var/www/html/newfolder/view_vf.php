@@ -31,10 +31,33 @@ if (!$test) {
     die("Test data not found for this VF image reference.");
 }
 
-// Get image path using the config function
-$image_path = getDynamicImagePath($ref);
-if (!$image_path) {
-    die("VF image not found in the system.");
+// Get original PDF path
+$original_pdf_path = getDynamicImagePath($ref);
+if (!$original_pdf_path) {
+    die("VF PDF report not found in the system.");
+}
+
+// Create anonymized version
+$anon_dir = 'anon_vf_reports';
+if (!file_exists($anon_dir)) {
+    mkdir($anon_dir, 0755, true);
+}
+
+$anon_pdf_path = $anon_dir . '/' . basename($original_pdf_path);
+
+// Run anonymization script if file doesn't exist or original is newer
+if (!file_exists($anon_pdf_path) || filemtime($original_pdf_path) > filemtime($anon_pdf_path)) {
+    // Build command for anonymization script
+    $command = escapeshellcmd("Resources/anonymiseHVF/anonymize_vf.sh") . 
+               " " . escapeshellarg($original_pdf_path) . 
+               " " . escapeshellarg($anon_dir);
+    
+    // Execute command
+    $output = shell_exec($command);
+    
+    if (!file_exists($anon_pdf_path)) {
+        die("Failed to create anonymized PDF version.");
+    }
 }
 
 // Calculate patient age
@@ -71,6 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VF Viewer - Patient <?= htmlspecialchars($patient_id) ?></title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
     <style>
         :root {
             --primary-color: #00a88f;
@@ -150,6 +174,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             gap: 5px;
         }
         
+        .page-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
         .brightness-control {
             display: flex;
             align-items: center;
@@ -160,27 +190,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             width: 100px;
         }
         
-        .image-wrapper {
-            max-width: 100%;
-            max-height: 100%;
-            overflow: hidden;
-            transition: transform 0.3s ease;
-        }
-        
-        .image-container {
-            transition: transform 0.3s ease;
-            transform-origin: center center;
+        .pdf-container {
+            width: 100%;
+            height: 100%;
             display: flex;
             align-items: center;
             justify-content: center;
+            overflow: auto;
         }
         
-        .image-container img {
+        #pdf-canvas {
             max-width: 100%;
             max-height: 100%;
-            object-fit: contain;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+        }
+        
+        .page-info {
+            color: white;
+            font-size: 14px;
+            margin: 0 10px;
         }
         
         .info-section {
@@ -381,7 +409,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             z-index: 1000;
         }
         
-        .image-section.fullscreen .image-wrapper {
+        .image-section.fullscreen .pdf-container {
             width: 100%;
             height: 100%;
         }
@@ -412,7 +440,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="container">
-        <!-- Image Section with Controls -->
+        <!-- PDF Viewer Section -->
         <div class="image-section" id="image-section">
             <div class="image-controls">
                 <div class="control-group zoom-controls">
@@ -420,8 +448,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <button class="control-btn zoom-reset">1:1</button>
                     <button class="control-btn zoom-in">+</button>
                 </div>
-                <div class="control-group">
-                    <button class="control-btn" id="center-eye-btn">👁️</button>
+                <div class="control-group page-controls">
+                    <button class="control-btn" id="prev-page">←</button>
+                    <span class="page-info">Page <span id="page-num">1</span>/<span id="page-count">0</span></span>
+                    <button class="control-btn" id="next-page">→</button>
                 </div>
                 <form method="POST" class="control-group brightness-control">
                     <button type="button" class="control-btn brightness-down">-</button>
@@ -432,11 +462,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </form>
             </div>
             
-            <div class="image-wrapper">
-                <div class="image-container" id="image-container">
-                    <img src="<?= htmlspecialchars($image_path) ?>" alt="VF Image" id="vf-image"
-                         style="filter: brightness(<?= $current_brightness ?>);">
-                </div>
+            <div class="pdf-container" id="pdf-container">
+                <canvas id="pdf-canvas"></canvas>
             </div>
             
             <button class="fullscreen-btn" id="fullscreen-btn">Fullscreen</button>
@@ -549,42 +576,115 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
-        // Image Zoom and Brightness Controls
-        const imageContainer = document.getElementById('image-container');
-        const vfImage = document.getElementById('vf-image');
-        const imageSection = document.getElementById('image-section');
-        const fullscreenBtn = document.getElementById('fullscreen-btn');
-        const imageWrapper = document.querySelector('.image-wrapper');
-        let currentZoom = 1;
-        const brightnessSlider = document.querySelector('.brightness-slider');
+        // PDF.js configuration
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
         
-        // Zoom functionality
-        document.querySelector('.zoom-in').addEventListener('click', () => {
-            currentZoom = Math.min(currentZoom + 0.1, 3);
-            updateZoom();
-        });
+        let pdfDoc = null,
+            pageNum = 1,
+            pageRendering = false,
+            pageNumPending = null,
+            scale = 1.0,
+            currentBrightness = <?= $current_brightness ?>,
+            canvas = document.getElementById('pdf-canvas'),
+            ctx = canvas.getContext('2d'),
+            imageSection = document.getElementById('image-section');
         
-        document.querySelector('.zoom-out').addEventListener('click', () => {
-            currentZoom = Math.max(currentZoom - 0.1, 0.1);
-            updateZoom();
-        });
-        
-        document.querySelector('.zoom-reset').addEventListener('click', () => {
-            currentZoom = 1;
-            updateZoom();
-        });
-        
-        function updateZoom() {
-            imageContainer.style.transform = `scale(${currentZoom})`;
+        // Load the PDF
+        function loadPDF(url) {
+            pdfjsLib.getDocument(url).promise.then(function(pdfDoc_) {
+                pdfDoc = pdfDoc_;
+                document.getElementById('page-count').textContent = pdfDoc.numPages;
+                
+                // Initial render
+                renderPage(1);
+            }).catch(function(error) {
+                console.error('Error loading PDF:', error);
+                alert('Error loading PDF document');
+            });
         }
         
+        // Render a page
+        function renderPage(num) {
+            pageRendering = true;
+            pdfDoc.getPage(num).then(function(page) {
+                const viewport = page.getViewport({ scale: scale });
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                
+                const renderTask = page.render(renderContext);
+                
+                renderTask.promise.then(function() {
+                    pageRendering = false;
+                    if (pageNumPending !== null) {
+                        renderPage(pageNumPending);
+                        pageNumPending = null;
+                    }
+                    
+                    // Apply brightness after rendering
+                    applyBrightness();
+                });
+            });
+            
+            document.getElementById('page-num').textContent = num;
+        }
+        
+        // Apply brightness filter
+        function applyBrightness() {
+            canvas.style.filter = `brightness(${currentBrightness})`;
+        }
+        
+        // Queue rendering of new page
+        function queueRenderPage(num) {
+            if (pageRendering) {
+                pageNumPending = num;
+            } else {
+                renderPage(num);
+            }
+        }
+        
+        // Navigation controls
+        document.getElementById('prev-page').addEventListener('click', function() {
+            if (pageNum <= 1) return;
+            pageNum--;
+            queueRenderPage(pageNum);
+        });
+        
+        document.getElementById('next-page').addEventListener('click', function() {
+            if (pageNum >= pdfDoc.numPages) return;
+            pageNum++;
+            queueRenderPage(pageNum);
+        });
+        
+        // Zoom controls
+        document.querySelector('.zoom-out').addEventListener('click', function() {
+            scale = Math.max(scale - 0.25, 0.5);
+            renderPage(pageNum);
+        });
+        
+        document.querySelector('.zoom-reset').addEventListener('click', function() {
+            scale = 1.0;
+            renderPage(pageNum);
+        });
+        
+        document.querySelector('.zoom-in').addEventListener('click', function() {
+            scale = Math.min(scale + 0.25, 3.0);
+            renderPage(pageNum);
+        });
+        
         // Brightness controls
-        document.querySelector('.brightness-up').addEventListener('click', () => {
+        const brightnessSlider = document.querySelector('.brightness-slider');
+        
+        document.querySelector('.brightness-up').addEventListener('click', function() {
             brightnessSlider.value = parseFloat(brightnessSlider.value) + 0.1;
             updatePreviewBrightness();
         });
         
-        document.querySelector('.brightness-down').addEventListener('click', () => {
+        document.querySelector('.brightness-down').addEventListener('click', function() {
             brightnessSlider.value = parseFloat(brightnessSlider.value) - 0.1;
             updatePreviewBrightness();
         });
@@ -592,61 +692,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         brightnessSlider.addEventListener('input', updatePreviewBrightness);
         
         function updatePreviewBrightness() {
-            vfImage.style.filter = `brightness(${brightnessSlider.value})`;
-        }
-        
-        // Center eye functionality
-        document.getElementById('center-eye-btn').addEventListener('click', centerEye);
-        
-        function centerEye() {
-            const imgWidth = vfImage.naturalWidth;
-            const imgHeight = vfImage.naturalHeight;
-            
-            // Calculate center coordinates (assuming eye is roughly centered in the image)
-            const centerX = imgWidth / 2;
-            const centerY = imgHeight / 2;
-            
-            // Calculate the viewport dimensions
-            const viewportWidth = imageWrapper.clientWidth;
-            const viewportHeight = imageWrapper.clientHeight;
-            
-            // Calculate the scale needed to fit the image to the viewport
-            const scaleX = viewportWidth / imgWidth;
-            const scaleY = viewportHeight / imgHeight;
-            const scale = Math.min(scaleX, scaleY);
-            
-            // Calculate the translation needed to center the eye
-            const translateX = (viewportWidth / 2 - centerX * scale) / scale;
-            const translateY = (viewportHeight / 2 - centerY * scale) / scale;
-            
-            // Apply the transformation
-            imageContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
-            
-            // Update current zoom level
-            currentZoom = scale;
+            currentBrightness = brightnessSlider.value;
+            applyBrightness();
         }
         
         // Fullscreen functionality
-        fullscreenBtn.addEventListener('click', () => {
+        document.getElementById('fullscreen-btn').addEventListener('click', function() {
             if (!document.fullscreenElement) {
                 imageSection.classList.add('fullscreen');
                 if (imageSection.requestFullscreen) {
                     imageSection.requestFullscreen();
-                } else if (imageSection.webkitRequestFullscreen) {
-                    imageSection.webkitRequestFullscreen();
-                } else if (imageSection.msRequestFullscreen) {
-                    imageSection.msRequestFullscreen();
                 }
-                
-                // Center the eye in fullscreen mode
-                setTimeout(centerEye, 100);
+                // Center the PDF in fullscreen mode
+                setTimeout(() => {
+                    scale = Math.min(
+                        window.innerWidth / canvas.width,
+                        window.innerHeight / canvas.height
+                    ) * 0.9;
+                    renderPage(pageNum);
+                }, 100);
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                } else if (document.msExitFullscreen) {
-                    document.msExitFullscreen();
                 }
             }
         });
@@ -654,28 +721,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
                 imageSection.classList.remove('fullscreen');
-                // Reset to normal view when exiting fullscreen
-                imageContainer.style.transform = `scale(${currentZoom})`;
+                // Reset zoom when exiting fullscreen
+                scale = 1.0;
+                renderPage(pageNum);
             }
         });
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.key === '+') {
-                currentZoom = Math.min(currentZoom + 0.1, 3);
-                updateZoom();
-            } else if (e.key === '-') {
-                currentZoom = Math.max(currentZoom - 0.1, 0.1);
-                updateZoom();
+            if (e.key === '+' || e.key === '=') {
+                scale = Math.min(scale + 0.25, 3.0);
+                renderPage(pageNum);
+                e.preventDefault();
+            } else if (e.key === '-' || e.key === '_') {
+                scale = Math.max(scale - 0.25, 0.5);
+                renderPage(pageNum);
+                e.preventDefault();
             } else if (e.key === '0') {
-                currentZoom = 1;
-                updateZoom();
+                scale = 1.0;
+                renderPage(pageNum);
+                e.preventDefault();
+            } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+                if (pageNum > 1) {
+                    pageNum--;
+                    queueRenderPage(pageNum);
+                }
+                e.preventDefault();
+            } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
+                if (pageNum < pdfDoc.numPages) {
+                    pageNum++;
+                    queueRenderPage(pageNum);
+                }
+                e.preventDefault();
             } else if (e.key === 'f') {
                 fullscreenBtn.click();
-            } else if (e.key === 'c') {
-                centerEye();
+                e.preventDefault();
             }
         });
+        
+        // Initialize PDF viewer with the anonymized PDF
+        loadPDF('<?= htmlspecialchars($anon_pdf_path) ?>');
     </script>
 </body>
 </html>
