@@ -2,20 +2,23 @@
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
--- Patients table
+-- Patients table with location
 CREATE TABLE patients (
     patient_id VARCHAR(20) PRIMARY KEY,
     subject_id VARCHAR(50) NOT NULL,
+    location ENUM('KH', 'Montreal', 'Dal', 'Ivey') DEFAULT 'KH',
     date_of_birth DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_subject (subject_id)
+    INDEX idx_subject (subject_id),
+    INDEX idx_location (location)
 );
 
--- Tests table with all image reference fields
+-- Tests table with location and all image reference fields
 CREATE TABLE tests (
     test_id VARCHAR(20) PRIMARY KEY,
     patient_id VARCHAR(20) NOT NULL,
+    location ENUM('KH', 'Montreal', 'Dal', 'Ivey') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
     age TINYINT UNSIGNED NULL COMMENT 'Patient age at time of test (0-100)',
     eye ENUM('OD', 'OS') NULL COMMENT 'OD=right eye, OS=left eye',
@@ -43,6 +46,7 @@ CREATE TABLE tests (
     FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
     INDEX idx_patient (patient_id),
     INDEX idx_date (date_of_test),
+    INDEX idx_location (location),
     
     -- Indexes for image reference fields
     INDEX idx_faf_od (faf_reference_od),
