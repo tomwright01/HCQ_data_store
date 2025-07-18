@@ -78,12 +78,23 @@ try {
                 throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL'));
             }
             $dobFormatted = $dob->format('Y-m-d');
+            
+            // Process Location (last column)
+            $location = strtoupper(trim(end($data)));
+            $validLocations = ['KH', 'MONTREAL', 'DAL', 'IVEY'];
+            if (!in_array($location, $validLocations)) {
+                $location = 'KH'; // Default to KH if invalid
+            }
+            // Standardize location names
+            $location = ($location === 'MONTREAL') ? 'Montreal' : 
+                       ($location === 'DAL') ? 'Dal' : 
+                       ($location === 'IVEY') ? 'Ivey' : 'KH';
 
             // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
             $patientId = $subjectId;
             
-            // Insert or get existing patient
-            $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
+            // Insert or get existing patient with location
+            $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location);
             
             // Process Test data
             $testDate = DateTime::createFromFormat('n/j/Y', $data[2] ?? '');
@@ -140,7 +151,6 @@ try {
                 ? strtolower($merciDiagnosisValue) 
                 : 'no value';
 
-            // FIXED: error_type with NULL handling
             $errorTypeValue = $data[9] ?? null;
             $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
             $errorType = null; // Default to NULL
@@ -161,6 +171,7 @@ try {
             $testData = [
                 'test_id' => $testId,
                 'patient_id' => $patientId,
+                'location' => $location,
                 'date_of_test' => $testDate->format('Y-m-d'),
                 'age' => $age,
                 'eye' => $eye,
@@ -205,18 +216,22 @@ try {
 }
 
 // Database functions
-function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
+function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location) {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
     $stmt->execute();
     $result = $stmt->get_result();
     
     if ($result->num_rows > 0) {
+        // Update location if patient exists
+        $updateStmt = $conn->prepare("UPDATE patients SET location = ? WHERE patient_id = ?");
+        $updateStmt->bind_param("ss", $location, $patientId);
+        $updateStmt->execute();
         return $patientId;
     }
     
-    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) VALUES (?, ?, ?)");
-    $stmt->bind_param("sss", $patientId, $subjectId, $dob);
+    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, location, date_of_birth) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("ssss", $patientId, $subjectId, $location, $dob);
     
     if (!$stmt->execute()) {
         throw new Exception("Patient insert failed: " . $stmt->error);
@@ -231,9 +246,9 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            test_id, patient_id, date_of_test, age, eye, report_diagnosis, exclusion,
+            test_id, patient_id, location, date_of_test, age, eye, report_diagnosis, exclusion,
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
     // Convert values for database
@@ -243,9 +258,10 @@ function insertTest($conn, $testData) {
     $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
     $stmt->bind_param(
-        "sssisssissddd",
+        "ssssisssissddd",
         $testData['test_id'],
         $testData['patient_id'],
+        $testData['location'],
         $testData['date_of_test'],
         $testData['age'],
         $testData['eye'],
@@ -298,6 +314,10 @@ function insertTest($conn, $testData) {
                     <th>Tests Imported</th>
                     <td><?= $results['tests'] ?></td>
                 </tr>
+                <tr>
+                    <th>Location Tagging</th>
+                    <td>Enabled (KH, Montreal, Dal, Ivey)</td>
+                </tr>
             </table>
             
             <?php if (!empty($results['errors'])): ?>
@@ -313,4 +333,4 @@ function insertTest($conn, $testData) {
         <p><a href="index.php">Return to Dashboard</a></p>
     </div>
 </body>
-</html> 
+</html>
