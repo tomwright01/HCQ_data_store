@@ -3,9 +3,10 @@ require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
 // Get parameters from URL
-$ref = isset($_GET['ref']) ? $_GET['ref'] : '';
-$patient_id = isset($_GET['patient_id']) ? (int)$_GET['patient_id'] : 0;
-$eye = isset($_GET['eye']) ? $_GET['eye'] : '';
+$ref = $_GET['ref'] ?? '';
+$patient_id = $_GET['patient_id'] ?? '';
+$eye = $_GET['eye'] ?? '';
+$test_type = 'VF'; // Hardcoded for VF viewer
 
 // Validate parameters
 if (empty($ref) || empty($patient_id) || !in_array($eye, ['OD', 'OS'])) {
@@ -18,89 +19,49 @@ if (!$patient) {
     die("Patient not found.");
 }
 
-// Get visit data containing this VF reference
-$stmt = $conn->prepare("SELECT * FROM Visits 
-                       WHERE patient_id = ? 
-                       AND (vf_reference_OD = ? OR vf_reference_OS = ?)");
-$stmt->bind_param("iss", $patient_id, $ref, $ref);
+// Get test data containing this image reference
+$fieldName = strtolower($test_type) . '_reference_' . strtolower($eye);
+$sql = "SELECT * FROM tests WHERE patient_id = ? AND $fieldName = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("ss", $patient_id, $ref);
 $stmt->execute();
-$visit = $stmt->get_result()->fetch_assoc();
+$test = $stmt->get_result()->fetch_assoc();
 
-if (!$visit) {
-    die("Visit data not found for this VF report.");
+if (!$test) {
+    die("Test data not found for this VF image reference.");
 }
 
-// Get PDF path
-$pdf_path = getDynamicImagePath($ref, 'vf');
-if (!$pdf_path) {
-    die("VF PDF report not found in the system.");
+// Get image path using the config function
+$image_path = getDynamicImagePath($ref);
+if (!$image_path) {
+    die("VF image not found in the system.");
 }
 
 // Calculate patient age
-$current_year = date('Y');
-$age = $current_year - $patient['year_of_birth'];
+$age = !empty($patient['date_of_birth']) ? 
+    date_diff(date_create($patient['date_of_birth']), date_create('today'))->y : 'N/A';
 
-// Get VF grading data from database
-$grading_data = [
-    'stage' => null,
-    'reliability' => null,
-    'defect_pattern' => null,
-    'glaucoma_hemifield' => null,
-    'md' => null,
-    'psd' => null,
-    'vfi' => null
-];
+// Get all diagnostic data directly from database
+$merci_score = $test['merci_score'] ?? 'N/A';
+$report_diagnosis = $test['report_diagnosis'] ?? 'Not specified';
+$exclusion = $test['exclusion'] ?? 'None';
+$merci_diagnosis = $test['merci_diagnosis'] ?? 'Not specified';
+$error_type = $test['error_type'] ?? 'N/A';
+$faf_grade = $test['faf_grade'] ?? 'N/A';
+$oct_score = $test['oct_score'] ?? 'N/A';
+$vf_score = $test['vf_score'] ?? 'N/A';
+$test_date = $test['date_of_test'] ?? 'Unknown';
 
-foreach ($grading_data as $key => $value) {
-    $stmt = $conn->prepare("SELECT score_value FROM Grading 
-                           WHERE visit_id = ? 
-                           AND test_type = 'vf' 
-                           AND eye_side = ? 
-                           AND score_type = ?");
-    $stmt->bind_param("iss", $visit['visit_id'], $eye, $key);
-    $stmt->execute();
-    $result = $stmt->get_result()->fetch_assoc();
-    if ($result) {
-        $grading_data[$key] = $result['score_value'];
-    }
-}
+$current_brightness = 1.0; // Default brightness
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    foreach ($_POST as $field => $value) {
-        if (array_key_exists($field, $grading_data)) {
-            // Check if grading exists
-            $stmt = $conn->prepare("SELECT grading_id FROM Grading 
-                                   WHERE visit_id = ? 
-                                   AND test_type = 'vf' 
-                                   AND eye_side = ? 
-                                   AND score_type = ?");
-            $stmt->bind_param("iss", $visit['visit_id'], $eye, $field);
-            $stmt->execute();
-            $existing = $stmt->get_result()->fetch_assoc();
-            
-            if ($existing) {
-                // Update existing
-                $stmt = $conn->prepare("UPDATE Grading SET score_value = ? 
-                                       WHERE grading_id = ?");
-                $stmt->bind_param("si", $value, $existing['grading_id']);
-            } else {
-                // Insert new
-                $stmt = $conn->prepare("INSERT INTO Grading 
-                                      (visit_id, test_type, eye_side, score_type, score_value) 
-                                      VALUES (?, 'vf', ?, ?, ?)");
-                $stmt->bind_param("isss", $visit['visit_id'], $eye, $field, $value);
-            }
-            
-            if ($stmt->execute()) {
-                $grading_data[$field] = $value;
-            }
+    if (isset($_POST['brightness'])) {
+        $new_brightness = (float)$_POST['brightness'];
+        if ($new_brightness >= 0.1 && $new_brightness <= 3.0) {
+            $current_brightness = $new_brightness;
         }
     }
-    
-    // Refresh to show updated data
-    header("Location: view_vf.php?ref=$ref&patient_id=$patient_id&eye=$eye");
-    exit();
 }
 ?>
 
@@ -109,15 +70,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VF Report Viewer - Patient <?= $patient_id ?></title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <title>VF Viewer - Patient <?= htmlspecialchars($patient_id) ?></title>
     <style>
+        :root {
+            --primary-color: #00a88f;
+            --primary-dark: #008774;
+            --text-color: #333;
+            --bg-color: #fff;
+            --light-bg: #f5f5f5;
+            --border-color: #e0e0e0;
+            --meta-bg: #f0f0f0;
+            --card-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f5f5f5;
-            color: #333;
+            background-color: var(--light-bg);
+            color: var(--text-color);
         }
         
         .container {
@@ -125,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             height: 100vh;
         }
         
-        .pdf-section {
+        .image-section {
             flex: 1;
             padding: 20px;
             background-color: #000;
@@ -137,7 +108,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             position: relative;
         }
         
-        .pdf-controls {
+        .image-controls {
             position: absolute;
             top: 20px;
             right: 20px;
@@ -157,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .control-btn {
-            background: #4CAF50;
+            background: var(--primary-color);
             color: white;
             border: none;
             border-radius: 4px;
@@ -171,7 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .control-btn:hover {
-            background: #3d8b40;
+            background: var(--primary-dark);
         }
         
         .zoom-controls {
@@ -179,46 +150,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             gap: 5px;
         }
         
-        .page-controls {
+        .brightness-control {
             display: flex;
             align-items: center;
             gap: 8px;
         }
         
-        .page-info {
-            color: white;
-            font-size: 14px;
+        .brightness-slider {
+            width: 100px;
         }
         
-        .pdf-container {
-            width: 100%;
-            height: 100%;
+        .image-wrapper {
+            max-width: 100%;
+            max-height: 100%;
+            overflow: hidden;
+            transition: transform 0.3s ease;
+        }
+        
+        .image-container {
+            transition: transform 0.3s ease;
+            transform-origin: center center;
             display: flex;
             align-items: center;
             justify-content: center;
         }
         
-        #pdf-canvas {
+        .image-container img {
             max-width: 100%;
             max-height: 100%;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
+            object-fit: contain;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
         }
         
         .info-section {
             flex: 1;
             padding: 30px;
-            background-color: white;
+            background-color: var(--bg-color);
             overflow-y: auto;
         }
         
         .patient-header {
-            border-bottom: 2px solid #4CAF50;
+            border-bottom: 2px solid var(--primary-color);
             padding-bottom: 15px;
             margin-bottom: 20px;
         }
         
         .patient-header h1 {
-            color: #4CAF50;
+            color: var(--primary-color);
             margin: 0;
             display: flex;
             align-items: center;
@@ -232,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .meta-item {
-            background-color: #f0f0f0;
+            background-color: var(--meta-bg);
             padding: 8px 15px;
             border-radius: 20px;
             font-size: 14px;
@@ -242,112 +221,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .meta-item i {
             margin-right: 8px;
-            color: #4CAF50;
+            color: var(--primary-color);
         }
         
-        .grading-section {
-            margin: 25px 0;
-        }
-        
-        .grading-card {
-            background-color: #f9f9f9;
+        .score-card {
+            background-color: var(--light-bg);
             border-radius: 10px;
             padding: 25px;
-            margin-bottom: 25px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin: 25px 0;
+            box-shadow: var(--card-shadow);
         }
         
-        .grading-card h2 {
-            color: #4CAF50;
-            margin-top: 0;
+        .score-value {
+            font-size: 72px;
+            font-weight: bold;
+            color: var(--primary-color);
+            text-align: center;
+            margin: 20px 0;
+            line-height: 1;
+        }
+        
+        .score-label {
+            text-align: center;
+            font-size: 18px;
+            color: #666;
             margin-bottom: 20px;
         }
         
-        .grading-form {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 20px;
-        }
-        
-        .form-group {
-            margin-bottom: 15px;
-        }
-        
-        .form-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #555;
-        }
-        
-        .form-group select, 
-        .form-group input[type="text"],
-        .form-group input[type="number"] {
+        .progress-container {
             width: 100%;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        
-        .checkbox-group {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        
-        .checkbox-item {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-        
-        .checkbox-item input {
-            margin: 0;
-        }
-        
-        .numeric-value {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .numeric-value input {
-            width: 80px;
-        }
-        
-        .save-btn {
-            padding: 10px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
+            background-color: var(--border-color);
             border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-top: 20px;
-            transition: background-color 0.3s;
+            margin: 20px 0;
+            height: 25px;
         }
         
-        .save-btn:hover {
-            background-color: #3d8b40;
+        .progress-bar {
+            height: 100%;
+            background-color: var(--primary-color);
+            border-radius: 5px;
+            width: <?= $merci_score !== 'N/A' ? ($merci_score / 100 * 100) : 0 ?>%;
+            transition: width 0.3s ease;
+            position: relative;
         }
         
-        .save-confirmation {
-            color: #4CAF50;
-            font-size: 14px;
-            margin-top: 10px;
-            display: none;
+        .progress-marker {
+            position: absolute;
+            right: -8px;
+            top: -5px;
+            background-color: #333;
+            color: white;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         
-        .visit-details {
-            margin-top: 30px;
+        .diagnostic-card {
+            background-color: var(--light-bg);
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            box-shadow: var(--card-shadow);
+        }
+        
+        .diagnostic-card h2 {
+            color: var(--primary-color);
+            margin-top: 0;
+            margin-bottom: 20px;
         }
         
         .detail-row {
             display: flex;
             margin-bottom: 12px;
             padding-bottom: 12px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border-color);
         }
         
         .detail-label {
@@ -366,7 +317,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             padding: 12px 25px;
             margin-top: 25px;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
             text-decoration: none;
             border-radius: 5px;
@@ -375,35 +326,83 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .back-button:hover {
-            background-color: #3d8b40;
+            background-color: var(--primary-dark);
         }
         
         .eye-indicator {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
             display: inline-flex;
             align-items: center;
             padding: 5px 15px;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
             border-radius: 20px;
             font-size: 14px;
+            margin-left: 15px;
             text-transform: uppercase;
         }
         
-        @media (max-width: 1200px) {
+        .severity-scale {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 15px;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .scale-item {
+            text-align: center;
+            flex: 1;
+        }
+        
+        .fullscreen-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 168, 143, 0.7);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 10;
+        }
+        
+        .fullscreen-btn:hover {
+            background: rgba(0, 168, 143, 0.9);
+        }
+        
+        .image-section.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1000;
+        }
+        
+        .image-section.fullscreen .image-wrapper {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .image-section.fullscreen .fullscreen-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+        }
+        
+        @media (max-width: 768px) {
             .container {
                 flex-direction: column;
                 height: auto;
             }
             
-            .pdf-section {
-                height: 60vh;
+            .image-section {
+                height: 50vh;
             }
             
-            .pdf-controls {
+            .image-controls {
                 top: 10px;
                 right: 10px;
                 padding: 5px;
@@ -413,24 +412,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="container">
-        <!-- PDF Viewer Section -->
-        <div class="pdf-section">
-            <div class="pdf-controls">
-                <div class="control-group page-controls">
-                    <button class="control-btn" id="prev-page">←</button>
-                    <span class="page-info">Page <span id="page-num">1</span>/<span id="page-count">0</span></span>
-                    <button class="control-btn" id="next-page">→</button>
-                </div>
+        <!-- Image Section with Controls -->
+        <div class="image-section" id="image-section">
+            <div class="image-controls">
                 <div class="control-group zoom-controls">
-                    <button class="control-btn" id="zoom-out">-</button>
-                    <button class="control-btn" id="zoom-reset">100%</button>
-                    <button class="control-btn" id="zoom-in">+</button>
+                    <button class="control-btn zoom-out">-</button>
+                    <button class="control-btn zoom-reset">1:1</button>
+                    <button class="control-btn zoom-in">+</button>
+                </div>
+                <div class="control-group">
+                    <button class="control-btn" id="center-eye-btn">👁️</button>
+                </div>
+                <form method="POST" class="control-group brightness-control">
+                    <button type="button" class="control-btn brightness-down">-</button>
+                    <input type="range" class="brightness-slider" name="brightness" min="0.1" max="3.0" step="0.1" 
+                           value="<?= $current_brightness ?>">
+                    <button type="button" class="control-btn brightness-up">+</button>
+                    <button type="submit" class="control-btn" style="margin-left: 5px;">✓</button>
+                </form>
+            </div>
+            
+            <div class="image-wrapper">
+                <div class="image-container" id="image-container">
+                    <img src="<?= htmlspecialchars($image_path) ?>" alt="VF Image" id="vf-image"
+                         style="filter: brightness(<?= $current_brightness ?>);">
                 </div>
             </div>
             
-            <div class="pdf-container">
-                <canvas id="pdf-canvas"></canvas>
-            </div>
+            <button class="fullscreen-btn" id="fullscreen-btn">Fullscreen</button>
             
             <div class="eye-indicator">
                 <?= $eye ?> (<?= $eye == 'OD' ? 'Right Eye' : 'Left Eye' ?>)
@@ -442,161 +451,95 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="patient-header">
                 <h1>
                     Patient <?= htmlspecialchars($patient_id) ?>
-                    <?php if (!empty($patient['disease_name'])): ?>
-                        <span style="font-size: 18px; margin-left: 15px; color: #666;">
-                            (<?= htmlspecialchars($patient['disease_name']) ?>)
-                        </span>
-                    <?php endif; ?>
+                    <span class="eye-indicator">
+                        <?= $eye ?> (<?= $eye == 'OD' ? 'Right Eye' : 'Left Eye' ?>)
+                    </span>
                 </h1>
                 <div class="patient-meta">
                     <div class="meta-item">
                         <i>👤</i> <?= $age ?> years
                     </div>
-                    <div class="meta-item">
-                        <i>⚥</i> <?= $patient['gender'] == 'm' ? 'Male' : 'Female' ?>
-                    </div>
-                    <div class="meta-item">
-                        <i>📍</i> <?= htmlspecialchars($patient['location']) ?>
-                    </div>
-                    <?php if (!empty($patient['referring_doctor'])): ?>
+                    <?php if (!empty($patient['subject_id'])): ?>
                         <div class="meta-item">
-                            <i>👨‍⚕️</i> Dr. <?= htmlspecialchars($patient['referring_doctor']) ?>
+                            <i>🆔</i> <?= htmlspecialchars($patient['subject_id']) ?>
                         </div>
                     <?php endif; ?>
                 </div>
             </div>
             
-            <form method="POST" class="grading-form">
-                <!-- VF Stage Grading -->
-                <div class="grading-card">
-                    <h2>VF Stage Classification</h2>
-                    <div class="form-group">
-                        <label>VF Stage:</label>
-                        <select name="stage">
-                            <option value="0" <?= $grading_data['stage'] == 0 ? 'selected' : '' ?>>0 - Normal</option>
-                            <option value="1" <?= $grading_data['stage'] == 1 ? 'selected' : '' ?>>1 - Mild defects (1-3 points)</option>
-                            <option value="2" <?= $grading_data['stage'] == 2 ? 'selected' : '' ?>>2 - Moderate defects (4-6 points)</option>
-                            <option value="3" <?= $grading_data['stage'] == 3 ? 'selected' : '' ?>>3 - Severe defects (7-9 points)</option>
-                            <option value="4" <?= $grading_data['stage'] == 4 ? 'selected' : '' ?>>4 - Very severe (10+ points or central loss)</option>
-                        </select>
+            <div class="score-card">
+                <h2>MERCI Score</h2>
+                <div class="score-value"><?= $merci_score !== 'N/A' ? htmlspecialchars($merci_score) : 'N/A' ?></div>
+                <div class="score-label">out of 100</div>
+                
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <?php if ($merci_score !== 'N/A'): ?>
+                            <div class="progress-marker"><?= $merci_score ?></div>
+                        <?php endif; ?>
                     </div>
                 </div>
                 
-                <!-- Reliability Indicators -->
-                <div class="grading-card">
-                    <h2>Reliability Indicators</h2>
-                    <div class="form-group">
-                        <label>Fixation Losses:</label>
-                        <select name="reliability">
-                            <option value="0" <?= $grading_data['reliability'] == 0 ? 'selected' : '' ?>>0 - Excellent (&lt;15%)</option>
-                            <option value="1" <?= $grading_data['reliability'] == 1 ? 'selected' : '' ?>>1 - Good (15-25%)</option>
-                            <option value="2" <?= $grading_data['reliability'] == 2 ? 'selected' : '' ?>>2 - Fair (25-33%)</option>
-                            <option value="3" <?= $grading_data['reliability'] == 3 ? 'selected' : '' ?>>3 - Poor (&gt;33%)</option>
-                        </select>
-                    </div>
+                <div class="severity-scale">
+                    <div class="scale-item">0-20 - Normal</div>
+                    <div class="scale-item">21-40 - Mild</div>
+                    <div class="scale-item">41-60 - Moderate</div>
+                    <div class="scale-item">61-80 - Significant</div>
+                    <div class="scale-item">81-100 - Severe</div>
                 </div>
-                
-                <!-- Defect Patterns -->
-                <div class="grading-card">
-                    <h2>Defect Patterns</h2>
-                    <div class="form-group">
-                        <label>Pattern Type:</label>
-                        <div class="checkbox-group">
-                            <label class="checkbox-item">
-                                <input type="checkbox" name="defect_pattern[]" value="nasal_step" <?= strpos($grading_data['defect_pattern'] ?? '', 'nasal_step') !== false ? 'checked' : '' ?>>
-                                Nasal Step
-                            </label>
-                            <label class="checkbox-item">
-                                <input type="checkbox" name="defect_pattern[]" value="arcuate" <?= strpos($grading_data['defect_pattern'] ?? '', 'arcuate') !== false ? 'checked' : '' ?>>
-                                Arcuate
-                            </label>
-                            <label class="checkbox-item">
-                                <input type="checkbox" name="defect_pattern[]" value="altitudinal" <?= strpos($grading_data['defect_pattern'] ?? '', 'altitudinal') !== false ? 'checked' : '' ?>>
-                                Altitudinal
-                            </label>
-                            <label class="checkbox-item">
-                                <input type="checkbox" name="defect_pattern[]" value="central" <?= strpos($grading_data['defect_pattern'] ?? '', 'central') !== false ? 'checked' : '' ?>>
-                                Central
-                            </label>
-                            <label class="checkbox-item">
-                                <input type="checkbox" name="defect_pattern[]" value="generalized" <?= strpos($grading_data['defect_pattern'] ?? '', 'generalized') !== false ? 'checked' : '' ?>>
-                                Generalized
-                            </label>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Glaucoma Hemifield Test -->
-                <div class="grading-card">
-                    <h2>Glaucoma Hemifield Test</h2>
-                    <div class="form-group">
-                        <label>Result:</label>
-                        <select name="glaucoma_hemifield">
-                            <option value="0" <?= $grading_data['glaucoma_hemifield'] == 0 ? 'selected' : '' ?>>0 - Within normal limits</option>
-                            <option value="1" <?= $grading_data['glaucoma_hemifield'] == 1 ? 'selected' : '' ?>>1 - Borderline</option>
-                            <option value="2" <?= $grading_data['glaucoma_hemifield'] == 2 ? 'selected' : '' ?>>2 - Outside normal limits</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <!-- Numeric Values -->
-                <div class="grading-card">
-                    <h2>Numeric Values</h2>
-                    <div class="form-group">
-                        <label>MD (dB):</label>
-                        <div class="numeric-value">
-                            <input type="number" step="0.01" name="md" value="<?= htmlspecialchars($grading_data['md'] ?? '') ?>">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>PSD (dB):</label>
-                        <div class="numeric-value">
-                            <input type="number" step="0.01" name="psd" value="<?= htmlspecialchars($grading_data['psd'] ?? '') ?>">
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>VFI (%):</label>
-                        <div class="numeric-value">
-                            <input type="number" step="1" name="vfi" value="<?= htmlspecialchars($grading_data['vfi'] ?? '') ?>">
-                        </div>
-                    </div>
-                </div>
-                
-                <button type="submit" class="save-btn">Save All Gradings</button>
-                <div class="save-confirmation">Gradings updated successfully!</div>
-            </form>
+            </div>
             
-            <div class="visit-details">
-                <h2>Visit Information</h2>
+            <div class="diagnostic-card">
+                <h2>Diagnostic Information</h2>
                 
                 <div class="detail-row">
-                    <div class="detail-label">Visit Date:</div>
-                    <div class="detail-value"><?= htmlspecialchars($visit['visit_date']) ?></div>
+                    <div class="detail-label">Test Date:</div>
+                    <div class="detail-value"><?= htmlspecialchars($test_date) ?></div>
                 </div>
                 
-                <?php if (!empty($visit['visit_notes'])): ?>
+                <div class="detail-row">
+                    <div class="detail-label">Report Diagnosis:</div>
+                    <div class="detail-value"><?= htmlspecialchars($report_diagnosis) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">MERCI Diagnosis:</div>
+                    <div class="detail-value"><?= htmlspecialchars($merci_diagnosis) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Exclusion:</div>
+                    <div class="detail-value"><?= htmlspecialchars($exclusion) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Error Type:</div>
+                    <div class="detail-value"><?= htmlspecialchars($error_type) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">VF Score:</div>
+                    <div class="detail-value"><?= htmlspecialchars($vf_score) ?></div>
+                </div>
+                
+                <?php if ($faf_grade !== 'N/A'): ?>
                     <div class="detail-row">
-                        <div class="detail-label">Clinical Notes:</div>
-                        <div class="detail-value"><?= nl2br(htmlspecialchars($visit['visit_notes'])) ?></div>
+                        <div class="detail-label">FAF Grade:</div>
+                        <div class="detail-value"><?= htmlspecialchars($faf_grade) ?></div>
+                    </div>
+                <?php endif; ?>
+                
+                <?php if ($oct_score !== 'N/A'): ?>
+                    <div class="detail-row">
+                        <div class="detail-label">OCT Score:</div>
+                        <div class="detail-value"><?= htmlspecialchars($oct_score) ?></div>
                     </div>
                 <?php endif; ?>
                 
                 <div class="detail-row">
-                    <div class="detail-label">Report Reference:</div>
+                    <div class="detail-label">Image Reference:</div>
                     <div class="detail-value"><?= htmlspecialchars($ref) ?></div>
                 </div>
-                
-                <?php if (!empty($patient['disease_id'])): ?>
-                    <div class="detail-row">
-                        <div class="detail-label">Disease Code:</div>
-                        <div class="detail-value">
-                            <?= htmlspecialchars($patient['disease_id']) ?>
-                            <?php if (!empty($patient['disease_name'])): ?>
-                                (<?= htmlspecialchars($patient['disease_name']) ?>)
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
             </div>
             
             <a href="index.php?search_patient_id=<?= $patient_id ?>" class="back-button">
@@ -606,148 +549,133 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
-        // PDF.js configuration
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js';
+        // Image Zoom and Brightness Controls
+        const imageContainer = document.getElementById('image-container');
+        const vfImage = document.getElementById('vf-image');
+        const imageSection = document.getElementById('image-section');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const imageWrapper = document.querySelector('.image-wrapper');
+        let currentZoom = 1;
+        const brightnessSlider = document.querySelector('.brightness-slider');
         
-        let pdfDoc = null,
-            pageNum = 1,
-            pageRendering = false,
-            pageNumPending = null,
-            scale = 1.0,
-            canvas = document.getElementById('pdf-canvas'),
-            ctx = canvas.getContext('2d');
+        // Zoom functionality
+        document.querySelector('.zoom-in').addEventListener('click', () => {
+            currentZoom = Math.min(currentZoom + 0.1, 3);
+            updateZoom();
+        });
         
-        // Load the PDF
-        function loadPDF(url) {
-            pdfjsLib.getDocument(url).promise.then(function(pdfDoc_) {
-                pdfDoc = pdfDoc_;
-                document.getElementById('page-count').textContent = pdfDoc.numPages;
-                
-                // Initial render
-                renderPage(1);
-            }).catch(function(error) {
-                console.error('Error loading PDF:', error);
-                alert('Error loading PDF document');
-            });
+        document.querySelector('.zoom-out').addEventListener('click', () => {
+            currentZoom = Math.max(currentZoom - 0.1, 0.1);
+            updateZoom();
+        });
+        
+        document.querySelector('.zoom-reset').addEventListener('click', () => {
+            currentZoom = 1;
+            updateZoom();
+        });
+        
+        function updateZoom() {
+            imageContainer.style.transform = `scale(${currentZoom})`;
         }
         
-        // Render a page
-        function renderPage(num) {
-            pageRendering = true;
-            pdfDoc.getPage(num).then(function(page) {
-                const viewport = page.getViewport({ scale: scale });
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-                
-                const renderContext = {
-                    canvasContext: ctx,
-                    viewport: viewport
-                };
-                
-                const renderTask = page.render(renderContext);
-                
-                renderTask.promise.then(function() {
-                    pageRendering = false;
-                    if (pageNumPending !== null) {
-                        renderPage(pageNumPending);
-                        pageNumPending = null;
-                    }
-                });
-            });
+        // Brightness controls
+        document.querySelector('.brightness-up').addEventListener('click', () => {
+            brightnessSlider.value = parseFloat(brightnessSlider.value) + 0.1;
+            updatePreviewBrightness();
+        });
+        
+        document.querySelector('.brightness-down').addEventListener('click', () => {
+            brightnessSlider.value = parseFloat(brightnessSlider.value) - 0.1;
+            updatePreviewBrightness();
+        });
+        
+        brightnessSlider.addEventListener('input', updatePreviewBrightness);
+        
+        function updatePreviewBrightness() {
+            vfImage.style.filter = `brightness(${brightnessSlider.value})`;
+        }
+        
+        // Center eye functionality
+        document.getElementById('center-eye-btn').addEventListener('click', centerEye);
+        
+        function centerEye() {
+            const imgWidth = vfImage.naturalWidth;
+            const imgHeight = vfImage.naturalHeight;
             
-            document.getElementById('page-num').textContent = num;
+            // Calculate center coordinates (assuming eye is roughly centered in the image)
+            const centerX = imgWidth / 2;
+            const centerY = imgHeight / 2;
+            
+            // Calculate the viewport dimensions
+            const viewportWidth = imageWrapper.clientWidth;
+            const viewportHeight = imageWrapper.clientHeight;
+            
+            // Calculate the scale needed to fit the image to the viewport
+            const scaleX = viewportWidth / imgWidth;
+            const scaleY = viewportHeight / imgHeight;
+            const scale = Math.min(scaleX, scaleY);
+            
+            // Calculate the translation needed to center the eye
+            const translateX = (viewportWidth / 2 - centerX * scale) / scale;
+            const translateY = (viewportHeight / 2 - centerY * scale) / scale;
+            
+            // Apply the transformation
+            imageContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+            
+            // Update current zoom level
+            currentZoom = scale;
         }
         
-        // Queue rendering of new page
-        function queueRenderPage(num) {
-            if (pageRendering) {
-                pageNumPending = num;
+        // Fullscreen functionality
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                imageSection.classList.add('fullscreen');
+                if (imageSection.requestFullscreen) {
+                    imageSection.requestFullscreen();
+                } else if (imageSection.webkitRequestFullscreen) {
+                    imageSection.webkitRequestFullscreen();
+                } else if (imageSection.msRequestFullscreen) {
+                    imageSection.msRequestFullscreen();
+                }
+                
+                // Center the eye in fullscreen mode
+                setTimeout(centerEye, 100);
             } else {
-                renderPage(num);
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
             }
-        }
-        
-        // Navigation controls
-        document.getElementById('prev-page').addEventListener('click', function() {
-            if (pageNum <= 1) return;
-            pageNum--;
-            queueRenderPage(pageNum);
         });
         
-        document.getElementById('next-page').addEventListener('click', function() {
-            if (pageNum >= pdfDoc.numPages) return;
-            pageNum++;
-            queueRenderPage(pageNum);
-        });
-        
-        // Zoom controls
-        document.getElementById('zoom-out').addEventListener('click', function() {
-            scale = Math.max(scale - 0.25, 0.5);
-            renderPage(pageNum);
-        });
-        
-        document.getElementById('zoom-reset').addEventListener('click', function() {
-            scale = 1.0;
-            renderPage(pageNum);
-        });
-        
-        document.getElementById('zoom-in').addEventListener('click', function() {
-            scale = Math.min(scale + 0.25, 3.0);
-            renderPage(pageNum);
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                imageSection.classList.remove('fullscreen');
+                // Reset to normal view when exiting fullscreen
+                imageContainer.style.transform = `scale(${currentZoom})`;
+            }
         });
         
         // Keyboard shortcuts
-        document.addEventListener('keydown', function(e) {
-            if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
-                if (pageNum > 1) {
-                    pageNum--;
-                    queueRenderPage(pageNum);
-                }
-                e.preventDefault();
-            } else if (e.key === 'ArrowRight' || e.key === 'PageDown') {
-                if (pageNum < pdfDoc.numPages) {
-                    pageNum++;
-                    queueRenderPage(pageNum);
-                }
-                e.preventDefault();
-            } else if (e.key === '+') {
-                scale = Math.min(scale + 0.25, 3.0);
-                renderPage(pageNum);
-                e.preventDefault();
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '+') {
+                currentZoom = Math.min(currentZoom + 0.1, 3);
+                updateZoom();
             } else if (e.key === '-') {
-                scale = Math.max(scale - 0.25, 0.5);
-                renderPage(pageNum);
-                e.preventDefault();
+                currentZoom = Math.max(currentZoom - 0.1, 0.1);
+                updateZoom();
             } else if (e.key === '0') {
-                scale = 1.0;
-                renderPage(pageNum);
-                e.preventDefault();
+                currentZoom = 1;
+                updateZoom();
+            } else if (e.key === 'f') {
+                fullscreenBtn.click();
+            } else if (e.key === 'c') {
+                centerEye();
             }
         });
-        
-        // Form submission handling
-        document.querySelector('form').addEventListener('submit', function(e) {
-            // Handle checkbox array for defect patterns
-            const checkboxes = document.querySelectorAll('input[name="defect_pattern[]"]:checked');
-            const patterns = Array.from(checkboxes).map(cb => cb.value).join(',');
-            
-            // Create hidden input for defect patterns
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.name = 'defect_pattern';
-            hiddenInput.value = patterns;
-            this.appendChild(hiddenInput);
-            
-            // Show save confirmation
-            const confirmation = document.querySelector('.save-confirmation');
-            confirmation.style.display = 'block';
-            setTimeout(() => {
-                confirmation.style.display = 'none';
-            }, 3000);
-        });
-        
-        // Initialize PDF viewer
-        loadPDF('<?= htmlspecialchars($pdf_path) ?>');
     </script>
 </body>
 </html>
