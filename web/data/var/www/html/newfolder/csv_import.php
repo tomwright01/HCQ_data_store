@@ -10,7 +10,7 @@ $password = "notgood";
 $dbname = "PatientData";
 
 // CSV file path
-$csvFilePath = "/var/www/html/data/Patient Info Master 1(Retrospective Data).csv";
+$csvFilePath = "/var/www/html/data/Patient Info Master 1.csv";
 
 // Create database connection
 $conn = new mysqli($servername, $username, $password, $dbname);
