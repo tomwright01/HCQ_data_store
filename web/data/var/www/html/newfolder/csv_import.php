@@ -10,7 +10,7 @@ $password = "notgood";
 $dbname = "PatientData";
 
 // CSV file path
-$csvFilePath = "/var/www/html/data/Patient Info Master 1.csv";
+$csvFilePath = "/var/www/html/data/Patient Info Master 1(Retrospective Data).csv";
 
 // Create database connection
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -73,9 +73,9 @@ try {
 
             // Process Patient (Subject ID and DoB)
             $subjectId = $data[0] ?? '';
-            $dob = DateTime::createFromFormat('n/j/Y', $data[1] ?? '');
+            $dob = DateTime::createFromFormat('Y-m-d', $data[1] ?? '');
             if (!$dob) {
-                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL'));
+                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected YYYY-MM-DD");
             }
             $dobFormatted = $dob->format('Y-m-d');
 
@@ -86,9 +86,9 @@ try {
             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
             
             // Process Test data
-            $testDate = DateTime::createFromFormat('n/j/Y', $data[2] ?? '');
+            $testDate = DateTime::createFromFormat('Y-m-d', $data[2] ?? '');
             if (!$testDate) {
-                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
+                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected YYYY-MM-DD");
             }
             
             // Generate test_id (date + eye + letter if duplicate)
@@ -313,5 +313,4 @@ function insertTest($conn, $testData) {
         <p><a href="index.php">Return to Dashboard</a></p>
     </div>
 </body>
-</html> 
-
+</html>
