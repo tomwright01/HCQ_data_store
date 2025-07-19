@@ -116,7 +116,7 @@ try {
             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location);
             
             // Process Test data
-            $testDate = DateTime::createFromFormat('Y/m/d', $data[2] ?? '');
+            $testDate = DateTime::createFromFormat('n/j/Y', $data[2] ?? '');
             if (!$testDate) {
                 throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected YYYY/MM/DD");
             }
