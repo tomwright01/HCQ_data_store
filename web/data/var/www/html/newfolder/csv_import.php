@@ -59,9 +59,9 @@ try {
             // Skip empty rows
             if (count(array_filter($data)) === 0) continue;
             
-            // Validate minimum columns
-            if (count($data) < 12) {
-                throw new Exception("Row has only " . count($data) . " columns (minimum 12 required)");
+            // Validate minimum columns (now 13 with location)
+            if (count($data) < 13) {
+                throw new Exception("Row has only " . count($data) . " columns (minimum 13 required with location)");
             }
 
             // Clean and format data
@@ -79,11 +79,16 @@ try {
             }
             $dobFormatted = $dob->format('Y-m-d');
 
+            // Get location from last column
+            $location = $data[count($data)-1] ?? 'KH'; // Default to 'KH' if not specified
+            $location = str_replace(['"', "'"], '', $location); // Clean any quotes
+            $location = in_array($location, ['KH', 'Montreal', 'Dal', 'Ivey']) ? $location : 'KH';
+
             // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
             $patientId = $subjectId;
             
             // Insert or get existing patient
-            $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
+            $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location);
             
             // Process Test data
             $testDate = DateTime::createFromFormat('Y-m-d', $data[2] ?? '');
@@ -161,6 +166,7 @@ try {
             $testData = [
                 'test_id' => $testId,
                 'patient_id' => $patientId,
+                'location' => $location,
                 'date_of_test' => $testDate->format('Y-m-d'),
                 'age' => $age,
                 'eye' => $eye,
@@ -205,7 +211,7 @@ try {
 }
 
 // Database functions
-function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
+function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH') {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
     $stmt->execute();
@@ -215,8 +221,8 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
         return $patientId;
     }
     
-    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) VALUES (?, ?, ?)");
-    $stmt->bind_param("sss", $patientId, $subjectId, $dob);
+    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth, location) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("ssss", $patientId, $subjectId, $dob, $location);
     
     if (!$stmt->execute()) {
         throw new Exception("Patient insert failed: " . $stmt->error);
@@ -231,9 +237,9 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            test_id, patient_id, date_of_test, age, eye, report_diagnosis, exclusion,
+            test_id, patient_id, location, date_of_test, age, eye, report_diagnosis, exclusion,
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
     // Convert values for database
@@ -243,9 +249,10 @@ function insertTest($conn, $testData) {
     $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
     $stmt->bind_param(
-        "sssisssissddd",
+        "ssssisssissddd",
         $testData['test_id'],
         $testData['patient_id'],
+        $testData['location'],
         $testData['date_of_test'],
         $testData['age'],
         $testData['eye'],
