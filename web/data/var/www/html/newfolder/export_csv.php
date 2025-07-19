@@ -13,11 +13,12 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Query to get all patient and test data
+// Query to get all patient and test data with location
 $sql = "SELECT 
     p.patient_id,
     p.subject_id,
     p.date_of_birth,
+    p.location AS patient_location,
     t.test_id,
     t.date_of_test,
     t.age,
@@ -30,6 +31,7 @@ $sql = "SELECT
     t.faf_grade,
     t.oct_score,
     t.vf_score,
+    t.location AS test_location,
     t.faf_reference_od,
     t.faf_reference_os,
     t.oct_reference_od,
@@ -60,6 +62,7 @@ $headers = [
     'Patient ID',
     'Subject ID',
     'Date of Birth',
+    'Patient Location',
     'Test ID',
     'Date of Test',
     'Age',
@@ -72,6 +75,7 @@ $headers = [
     'FAF Grade',
     'OCT Score',
     'VF Score',
+    'Test Location',
     'FAF Reference OD',
     'FAF Reference OS',
     'OCT Reference OD',
