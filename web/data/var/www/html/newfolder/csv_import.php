@@ -85,7 +85,7 @@ try {
 
             // Process Patient (Subject ID and DoB)
             $subjectId = $data[0] ?? '';
-            $dob = DateTime::createFromFormat('Y/m/d', $data[1] ?? '');
+            $dob = DateTime::createFromFormat('n/j/Y', $data[1] ?? '');
             if (!$dob) {
                 throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected YYYY/MM/DD");
             }
