@@ -10,6 +10,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         // Process Patient Data
         $subjectId = trim($_POST['subject_id']);
         $dob = $_POST['date_of_birth'];
+        $location = $_POST['location'] ?? 'KH'; // Default to KH if not specified
         
         if (empty($subjectId) || empty($dob)) {
             throw new Exception("Subject ID and Date of Birth are required");
@@ -18,12 +19,13 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $patientId = $subjectId;
         
         // Insert or update patient
-        $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) 
-                              VALUES (?, ?, ?)
+        $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth, location) 
+                              VALUES (?, ?, ?, ?)
                               ON DUPLICATE KEY UPDATE 
                               subject_id = VALUES(subject_id),
-                              date_of_birth = VALUES(date_of_birth)");
-        $stmt->bind_param("sss", $patientId, $subjectId, $dob);
+                              date_of_birth = VALUES(date_of_birth),
+                              location = VALUES(location)");
+        $stmt->bind_param("ssss", $patientId, $subjectId, $dob, $location);
         
         if (!$stmt->execute()) {
             throw new Exception("Error saving patient: " . $stmt->error);
@@ -65,9 +67,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             
             // Insert or update test data
             $stmt = $conn->prepare("INSERT INTO tests (
-                test_id, patient_id, date_of_test, age, eye, report_diagnosis, exclusion,
+                test_id, patient_id, location, date_of_test, age, eye, report_diagnosis, exclusion,
                 merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
                 age = VALUES(age),
                 report_diagnosis = VALUES(report_diagnosis),
@@ -80,9 +82,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 vf_score = VALUES(vf_score)");
             
             $stmt->bind_param(
-                "sssisssisiddd",
+                "ssssisssisiddd",
                 $testId,
                 $patientId,
+                $location,
                 $testDate,
                 $age,
                 $eye,
@@ -347,14 +350,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             <div class="form-section">
                 <h2>Patient Information</h2>
                 
-                <div class="form-group">
-                    <label for="subject_id">Subject ID:</label>
-                    <input type="text" name="subject_id" id="subject_id" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="date_of_birth">Date of Birth:</label>
-                    <input type="date" name="date_of_birth" id="date_of_birth" required>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="subject_id">Subject ID:</label>
+                        <input type="text" name="subject_id" id="subject_id" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="date_of_birth">Date of Birth:</label>
+                        <input type="date" name="date_of_birth" id="date_of_birth" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="location">Location:</label>
+                        <select name="location" id="location" required>
+                            <option value="KH">KH</option>
+                            <option value="Ivey">Ivey</option>
+                            <option value="Dal">Dal</option>
+                            <option value="Montreal">Montreal</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
