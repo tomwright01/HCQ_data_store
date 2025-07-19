@@ -10,7 +10,7 @@ $password = "notgood";
 $dbname = "PatientData";
 
 // CSV file path
-$csvFilePath = "/var/www/html/data/Patient Info Master 1.csv";
+$csvFilePath = "/var/www/html/data/Patient Info Master 1(Retrospective Data).csv";
 
 // Create database connection
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -39,11 +39,6 @@ try {
         throw new Exception("CSV file is not readable. Check permissions.");
     }
 
-    // Check file extension
-    if (strtolower(pathinfo($csvFilePath, PATHINFO_EXTENSION)) !== 'csv') {
-        throw new Exception("File is not a CSV: ".basename($csvFilePath));
-    }
-
     // Open CSV file
     if (($handle = fopen($csvFilePath, "r")) === FALSE) {
         throw new Exception("Could not open CSV file");
@@ -52,17 +47,10 @@ try {
     // Start transaction
     $conn->begin_transaction();
 
-    // Start timer
-    $startTime = microtime(true);
-
-    // Validate header row
-    $headers = fgetcsv($handle);
-    $expectedColumns = 14; // Update this based on your actual column count
-    if (count($headers) < $expectedColumns) {
-        throw new Exception("CSV header has only ".count($headers)." columns (expected $expectedColumns)");
-    }
-
-    $lineNumber = 1; // Start counting from 1 after header
+    // Skip header row if exists
+    fgetcsv($handle, 0, ",", '"', "\0");
+    
+    $lineNumber = 1; // Start counting from 1 (header is line 0)
     
     while (($data = fgetcsv($handle, 0, ",", '"', "\0")) !== FALSE) {
         $lineNumber++;
@@ -71,9 +59,9 @@ try {
             // Skip empty rows
             if (count(array_filter($data)) === 0) continue;
             
-            // Validate minimum columns (now 13 to include location)
-            if (count($data) < 13) {
-                throw new Exception("Row has only " . count($data) . " columns (minimum 13 required with location)");
+            // Validate minimum columns
+            if (count($data) < 12) {
+                throw new Exception("Row has only " . count($data) . " columns (minimum 12 required)");
             }
 
             // Clean and format data
@@ -87,38 +75,20 @@ try {
             $subjectId = $data[0] ?? '';
             $dob = DateTime::createFromFormat('n/j/Y', $data[1] ?? '');
             if (!$dob) {
-                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected YYYY/MM/DD");
+                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL'));
             }
             $dobFormatted = $dob->format('Y-m-d');
-            
-            // Process Location (column 13)
-            $locationIndex = 13;
-            $location = isset($data[$locationIndex]) ? strtoupper(trim($data[$locationIndex])) : 'KH';
-            $validLocations = ['KH', 'MONTREAL', 'DAL', 'IVEY'];
-            
-            if (!in_array($location, $validLocations)) {
-                $results['errors'][] = "Line $lineNumber: Invalid location '{$location}' - defaulting to KH";
-                $location = 'KH';
-            }
-            
-            // Standardize location names
-            $location = match($location) {
-                'MONTREAL' => 'Montreal',
-                'DAL' => 'Dal',
-                'IVEY' => 'Ivey',
-                default => 'KH'
-            };
 
             // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
             $patientId = $subjectId;
             
-            // Insert or get existing patient with location
-            $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location);
+            // Insert or get existing patient
+            $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted);
             
             // Process Test data
             $testDate = DateTime::createFromFormat('n/j/Y', $data[2] ?? '');
             if (!$testDate) {
-                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected YYYY/MM/DD");
+                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
             }
             
             // Generate test_id (date + eye + letter if duplicate)
@@ -170,6 +140,7 @@ try {
                 ? strtolower($merciDiagnosisValue) 
                 : 'no value';
 
+            // FIXED: error_type with NULL handling
             $errorTypeValue = $data[9] ?? null;
             $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
             $errorType = null; // Default to NULL
@@ -190,7 +161,6 @@ try {
             $testData = [
                 'test_id' => $testId,
                 'patient_id' => $patientId,
-                'location' => $location,
                 'date_of_test' => $testDate->format('Y-m-d'),
                 'age' => $age,
                 'eye' => $eye,
@@ -215,17 +185,14 @@ try {
     
     fclose($handle);
     
-    // Calculate import time
-    $importTime = round(microtime(true) - $startTime, 2);
-    
     // Commit or rollback
     if (empty($results['errors'])) {
         $conn->commit();
-        $message = "Successfully processed {$results['patients']} patients and {$results['tests']} tests in $importTime seconds";
+        $message = "Successfully processed {$results['patients']} patients and {$results['tests']} tests";
         $messageClass = 'success';
     } else {
         $conn->rollback();
-        $message = "Completed with " . count($results['errors']) . " errors in $importTime seconds. No data was imported.";
+        $message = "Completed with " . count($results['errors']) . " errors. No data was imported.";
         $messageClass = 'error';
     }
     
@@ -238,22 +205,18 @@ try {
 }
 
 // Database functions
-function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location) {
+function getOrCreatePatient($conn, $patientId, $subjectId, $dob) {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
     $stmt->execute();
     $result = $stmt->get_result();
     
     if ($result->num_rows > 0) {
-        // Update location if patient exists
-        $updateStmt = $conn->prepare("UPDATE patients SET location = ? WHERE patient_id = ?");
-        $updateStmt->bind_param("ss", $location, $patientId);
-        $updateStmt->execute();
         return $patientId;
     }
     
-    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, location, date_of_birth) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("ssss", $patientId, $subjectId, $location, $dob);
+    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth) VALUES (?, ?, ?)");
+    $stmt->bind_param("sss", $patientId, $subjectId, $dob);
     
     if (!$stmt->execute()) {
         throw new Exception("Patient insert failed: " . $stmt->error);
@@ -268,9 +231,9 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location) {
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            test_id, patient_id, location, date_of_test, age, eye, report_diagnosis, exclusion,
+            test_id, patient_id, date_of_test, age, eye, report_diagnosis, exclusion,
             merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
     // Convert values for database
@@ -280,10 +243,9 @@ function insertTest($conn, $testData) {
     $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
     $stmt->bind_param(
-        "ssssisssissddd",
+        "sssisssissddd",
         $testData['test_id'],
         $testData['patient_id'],
-        $testData['location'],
         $testData['date_of_test'],
         $testData['age'],
         $testData['eye'],
@@ -322,7 +284,7 @@ function insertTest($conn, $testData) {
 <body>
     <div class="container">
         <h1>CSV Import Results</h1>
-        <p>File processed: <?= htmlspecialchars(basename($csvFilePath)) ?></p>
+        <p>File processed: <?= htmlspecialchars($csvFilePath) ?></p>
         
         <div class="results">
             <h2 class="<?= $messageClass ?>"><?= $message ?></h2>
@@ -335,10 +297,6 @@ function insertTest($conn, $testData) {
                 <tr>
                     <th>Tests Imported</th>
                     <td><?= $results['tests'] ?></td>
-                </tr>
-                <tr>
-                    <th>Location Tagging</th>
-                    <td>Enabled (KH, Montreal, Dal, Ivey)</td>
                 </tr>
             </table>
             
@@ -355,4 +313,5 @@ function insertTest($conn, $testData) {
         <p><a href="index.php">Return to Dashboard</a></p>
     </div>
 </body>
-</html>
+</html> 
+
