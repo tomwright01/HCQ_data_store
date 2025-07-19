@@ -39,6 +39,11 @@ try {
         throw new Exception("CSV file is not readable. Check permissions.");
     }
 
+    // Check file extension
+    if (strtolower(pathinfo($csvFilePath, PATHINFO_EXTENSION)) !== 'csv') {
+        throw new Exception("File is not a CSV: ".basename($csvFilePath));
+    }
+
     // Open CSV file
     if (($handle = fopen($csvFilePath, "r")) === FALSE) {
         throw new Exception("Could not open CSV file");
@@ -47,10 +52,17 @@ try {
     // Start transaction
     $conn->begin_transaction();
 
-    // Skip header row if exists
-    fgetcsv($handle, 0, ",", '"', "\0");
-    
-    $lineNumber = 1; // Start counting from 1 (header is line 0)
+    // Start timer
+    $startTime = microtime(true);
+
+    // Validate header row
+    $headers = fgetcsv($handle);
+    $expectedColumns = 14; // Update this based on your actual column count
+    if (count($headers) < $expectedColumns) {
+        throw new Exception("CSV header has only ".count($headers)." columns (expected $expectedColumns)");
+    }
+
+    $lineNumber = 1; // Start counting from 1 after header
     
     while (($data = fgetcsv($handle, 0, ",", '"', "\0")) !== FALSE) {
         $lineNumber++;
@@ -59,9 +71,9 @@ try {
             // Skip empty rows
             if (count(array_filter($data)) === 0) continue;
             
-            // Validate minimum columns
-            if (count($data) < 12) {
-                throw new Exception("Row has only " . count($data) . " columns (minimum 12 required)");
+            // Validate minimum columns (now 13 to include location)
+            if (count($data) < 13) {
+                throw new Exception("Row has only " . count($data) . " columns (minimum 13 required with location)");
             }
 
             // Clean and format data
@@ -79,16 +91,23 @@ try {
             }
             $dobFormatted = $dob->format('Y-m-d');
             
-            // Process Location (last column)
-            $location = strtoupper(trim(end($data)));
+            // Process Location (column 13)
+            $locationIndex = 13;
+            $location = isset($data[$locationIndex]) ? strtoupper(trim($data[$locationIndex])) : 'KH';
             $validLocations = ['KH', 'MONTREAL', 'DAL', 'IVEY'];
+            
             if (!in_array($location, $validLocations)) {
-                $location = 'KH'; // Default to KH if invalid
+                $results['errors'][] = "Line $lineNumber: Invalid location '{$location}' - defaulting to KH";
+                $location = 'KH';
             }
+            
             // Standardize location names
-            $location = ($location === 'MONTREAL') ? 'Montreal' : 
-                       ($location === 'DAL') ? 'Dal' : 
-                       ($location === 'IVEY') ? 'Ivey' : 'KH';
+            $location = match($location) {
+                'MONTREAL' => 'Montreal',
+                'DAL' => 'Dal',
+                'IVEY' => 'Ivey',
+                default => 'KH'
+            };
 
             // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
             $patientId = $subjectId;
@@ -196,14 +215,17 @@ try {
     
     fclose($handle);
     
+    // Calculate import time
+    $importTime = round(microtime(true) - $startTime, 2);
+    
     // Commit or rollback
     if (empty($results['errors'])) {
         $conn->commit();
-        $message = "Successfully processed {$results['patients']} patients and {$results['tests']} tests";
+        $message = "Successfully processed {$results['patients']} patients and {$results['tests']} tests in $importTime seconds";
         $messageClass = 'success';
     } else {
         $conn->rollback();
-        $message = "Completed with " . count($results['errors']) . " errors. No data was imported.";
+        $message = "Completed with " . count($results['errors']) . " errors in $importTime seconds. No data was imported.";
         $messageClass = 'error';
     }
     
@@ -300,7 +322,7 @@ function insertTest($conn, $testData) {
 <body>
     <div class="container">
         <h1>CSV Import Results</h1>
-        <p>File processed: <?= htmlspecialchars($csvFilePath) ?></p>
+        <p>File processed: <?= htmlspecialchars(basename($csvFilePath)) ?></p>
         
         <div class="results">
             <h2 class="<?= $messageClass ?>"><?= $message ?></h2>
