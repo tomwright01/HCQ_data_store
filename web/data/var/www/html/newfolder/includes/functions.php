@@ -7,7 +7,7 @@ require_once 'config.php';
  */
 function anonymizePDF(string $inputPath, string $outputPath): bool {
     // adjust this path to wherever you place your script
-    $script = '/usr/local/bin/anonymize_pdf.py';
+    $script = 'web/data/var/www/html/newfolder/anonymize_pdf.py';
 
     // build & run command
     $cmd = escapeshellcmd("python3 {$script} "
