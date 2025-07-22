@@ -12,6 +12,55 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
+// Handle form submission for editing
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_test'])) {
+    $test_id = $_POST['test_id'];
+    $age = $_POST['age'];
+    $eye = $_POST['eye'];
+    $report_diagnosis = $_POST['report_diagnosis'];
+    $exclusion = $_POST['exclusion'];
+    $merci_score = $_POST['merci_score'];
+    $merci_diagnosis = $_POST['merci_diagnosis'];
+    $error_type = $_POST['error_type'];
+    $faf_grade = $_POST['faf_grade'];
+    $oct_score = $_POST['oct_score'];
+    $vf_score = $_POST['vf_score'];
+    
+    $stmt = $conn->prepare("UPDATE tests SET 
+        age = ?, 
+        eye = ?, 
+        report_diagnosis = ?, 
+        exclusion = ?, 
+        merci_score = ?, 
+        merci_diagnosis = ?, 
+        error_type = ?, 
+        faf_grade = ?, 
+        oct_score = ?, 
+        vf_score = ? 
+        WHERE test_id = ?");
+    
+    $stmt->bind_param("isssssssdds", 
+        $age, 
+        $eye, 
+        $report_diagnosis, 
+        $exclusion, 
+        $merci_score, 
+        $merci_diagnosis, 
+        $error_type, 
+        $faf_grade, 
+        $oct_score, 
+        $vf_score, 
+        $test_id);
+    
+    if ($stmt->execute()) {
+        $success_message = "Test record updated successfully!";
+    } else {
+        $error_message = "Error updating record: " . $stmt->error;
+    }
+    
+    $stmt->close();
+}
+
 // Query to get total number of patients
 $sql_total_patients = "SELECT COUNT(*) AS total_patients FROM patients";
 $result_total_patients = $conn->query($sql_total_patients);
@@ -85,6 +134,7 @@ while ($row = $result_location->fetch_assoc()) {
 
 // Patient search functionality
 $search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient_id'] : '';
+$edit_mode = isset($_GET['edit']) && $_GET['edit'] === 'true';
 
 if ($search_patient_id) {
     $sql_patient_data = "SELECT 
@@ -380,6 +430,72 @@ if ($search_patient_id) {
             color: rgb(0, 140, 120);
             text-decoration: underline;
         }
+
+        .edit-button {
+            background-color: rgb(0, 109, 44);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        
+        .edit-button:hover {
+            background-color: rgb(0, 89, 34);
+        }
+        
+        .save-button {
+            background-color: rgb(0, 168, 143);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+        
+        .save-button:hover {
+            background-color: rgb(0, 140, 120);
+        }
+        
+        .cancel-button {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .cancel-button:hover {
+            background-color: #c82333;
+        }
+        
+        .edit-select, .edit-input {
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            text-align: center;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
@@ -399,66 +515,143 @@ if ($search_patient_id) {
         <div class="search-form">
             <form method="POST" action="index.php">
                 <label for="search_patient_id">Enter Patient ID to Search for Tests:</label><br>
-                <input type="text" name="search_patient_id" id="search_patient_id" required>
+                <input type="text" name="search_patient_id" id="search_patient_id" required value="<?= htmlspecialchars($search_patient_id) ?>">
                 <button type="submit">Search</button>
+                <?php if ($search_patient_id && isset($result_patient) && $result_patient->num_rows > 0): ?>
+                    <?php if ($edit_mode): ?>
+                        <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="cancel-button">Cancel Edit</a>
+                    <?php else: ?>
+                        <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>&edit=true" class="edit-button">Edit Mode</a>
+                    <?php endif; ?>
+                <?php endif; ?>
             </form>
         </div>
+
+        <?php if (isset($success_message)): ?>
+            <div class="message success"><?= htmlspecialchars($success_message) ?></div>
+        <?php endif; ?>
+        
+        <?php if (isset($error_message)): ?>
+            <div class="message error"><?= htmlspecialchars($error_message) ?></div>
+        <?php endif; ?>
 
         <?php if ($search_patient_id && isset($result_patient)): ?>
             <?php if ($result_patient->num_rows > 0): ?>
                 <h3>Tests for Patient ID: <?= htmlspecialchars($search_patient_id) ?></h3>
-                <table>
-                    <tr>
-                        <th>Test ID</th>
-                        <th>Test Location</th>
-                        <th>Patient Location</th>
-                        <th>Date</th>
-                        <th>Age</th>
-                        <th>Eye</th>
-                        <th>Report Diagnosis</th>
-                        <th>Exclusion</th>
-                        <th>MERCI Score</th>
-                        <th>MERCI Diagnosis</th>
-                        <th>Error Type</th>
-                        <th>FAF Grade</th>
-                        <th>OCT Score</th>
-                        <th>VF Score</th>
-                        <th>Images</th>
-                    </tr>
-                    <?php while ($row = $result_patient->fetch_assoc()): ?>
+                <form method="POST" action="index.php">
+                    <input type="hidden" name="search_patient_id" value="<?= htmlspecialchars($search_patient_id) ?>">
+                    <table>
                         <tr>
-                            <td><?= htmlspecialchars($row["test_id"]) ?></td>
-                            <td><?= htmlspecialchars($row["test_location"] ?? 'KH') ?></td>
-                            <td><?= htmlspecialchars($row["patient_location"] ?? 'KH') ?></td>
-                            <td><?= htmlspecialchars($row["date_of_test"]) ?></td>
-                            <td><?= htmlspecialchars($row["age"] ?? 'N/A') ?></td>
-                            <td><?= htmlspecialchars($row["eye"] ?? 'N/A') ?></td>
-                            <td><?= htmlspecialchars($row["report_diagnosis"]) ?></td>
-                            <td><?= htmlspecialchars($row["exclusion"]) ?></td>
-                            <td><?= htmlspecialchars($row["merci_score"] ?? 'N/A') ?></td>
-                            <td><?= htmlspecialchars($row["merci_diagnosis"]) ?></td>
-                            <td><?= htmlspecialchars($row["error_type"] ?? 'N/A') ?></td>
-                            <td><?= htmlspecialchars($row["faf_grade"] ?? 'N/A') ?></td>
-                            <td><?= htmlspecialchars($row["oct_score"] ?? 'N/A') ?></td>
-                            <td><?= htmlspecialchars($row["vf_score"] ?? 'N/A') ?></td>
-                            <td>
-                                <?php 
-                                $imageLinks = [];
-                                if (!empty($row['faf_reference_od'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_od']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OD" class="image-link">FAF OD</a>';
-                                if (!empty($row['faf_reference_os'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_os']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OS" class="image-link">FAF OS</a>';
-                                if (!empty($row['oct_reference_od'])) $imageLinks[] = '<a href="view_oct.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">OCT OD</a>';
-                                if (!empty($row['oct_reference_os'])) $imageLinks[] = '<a href="view_oct.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">OCT OS</a>';
-                                if (!empty($row['vf_reference_od'])) $imageLinks[] = '<a href="view_vf.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">VF OD</a>';
-                                if (!empty($row['vf_reference_os'])) $imageLinks[] = '<a href="view_vf.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">VF OS</a>';
-                                if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="view_mferg.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">MFERG OD</a>';
-                                if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="view_mferg.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">MFERG OS</a>';
-
-                                echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
-                                ?>
-                            </td>
+                            <th>Test ID</th>
+                            <th>Test Location</th>
+                            <th>Patient Location</th>
+                            <th>Date</th>
+                            <th>Age</th>
+                            <th>Eye</th>
+                            <th>Report Diagnosis</th>
+                            <th>Exclusion</th>
+                            <th>MERCI Score</th>
+                            <th>MERCI Diagnosis</th>
+                            <th>Error Type</th>
+                            <th>FAF Grade</th>
+                            <th>OCT Score</th>
+                            <th>VF Score</th>
+                            <th>Images</th>
+                            <?php if ($edit_mode): ?>
+                                <th>Actions</th>
+                            <?php endif; ?>
                         </tr>
-                    <?php endwhile; ?>
-                </table>
+                        <?php while ($row = $result_patient->fetch_assoc()): ?>
+                            <tr>
+                                <td><?= htmlspecialchars($row["test_id"]) ?></td>
+                                <td><?= htmlspecialchars($row["test_location"] ?? 'KH') ?></td>
+                                <td><?= htmlspecialchars($row["patient_location"] ?? 'KH') ?></td>
+                                <td><?= htmlspecialchars($row["date_of_test"]) ?></td>
+                                
+                                <?php if ($edit_mode): ?>
+                                    <td><input type="number" name="age" class="edit-input" value="<?= htmlspecialchars($row["age"] ?? '') ?>" min="0" max="100"></td>
+                                    <td>
+                                        <select name="eye" class="edit-select">
+                                            <option value="">Not Specified</option>
+                                            <option value="OD" <?= ($row["eye"] ?? '') === 'OD' ? 'selected' : '' ?>>OD</option>
+                                            <option value="OS" <?= ($row["eye"] ?? '') === 'OS' ? 'selected' : '' ?>>OS</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="report_diagnosis" class="edit-select">
+                                            <option value="normal" <?= $row["report_diagnosis"] === 'normal' ? 'selected' : '' ?>>normal</option>
+                                            <option value="abnormal" <?= $row["report_diagnosis"] === 'abnormal' ? 'selected' : '' ?>>abnormal</option>
+                                            <option value="no input" <?= $row["report_diagnosis"] === 'no input' ? 'selected' : '' ?>>no input</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="exclusion" class="edit-select">
+                                            <option value="none" <?= $row["exclusion"] === 'none' ? 'selected' : '' ?>>none</option>
+                                            <option value="retinal detachment" <?= $row["exclusion"] === 'retinal detachment' ? 'selected' : '' ?>>retinal detachment</option>
+                                            <option value="generalized retinal dysfunction" <?= $row["exclusion"] === 'generalized retinal dysfunction' ? 'selected' : '' ?>>generalized retinal dysfunction</option>
+                                            <option value="unilateral testing" <?= $row["exclusion"] === 'unilateral testing' ? 'selected' : '' ?>>unilateral testing</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="text" name="merci_score" class="edit-input" value="<?= htmlspecialchars($row["merci_score"] ?? '') ?>"></td>
+                                    <td>
+                                        <select name="merci_diagnosis" class="edit-select">
+                                            <option value="normal" <?= $row["merci_diagnosis"] === 'normal' ? 'selected' : '' ?>>normal</option>
+                                            <option value="abnormal" <?= $row["merci_diagnosis"] === 'abnormal' ? 'selected' : '' ?>>abnormal</option>
+                                            <option value="no value" <?= $row["merci_diagnosis"] === 'no value' ? 'selected' : '' ?>>no value</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select name="error_type" class="edit-select">
+                                            <option value="none" <?= ($row["error_type"] ?? '') === 'none' ? 'selected' : '' ?>>none</option>
+                                            <option value="TN" <?= ($row["error_type"] ?? '') === 'TN' ? 'selected' : '' ?>>TN</option>
+                                            <option value="FP" <?= ($row["error_type"] ?? '') === 'FP' ? 'selected' : '' ?>>FP</option>
+                                            <option value="TP" <?= ($row["error_type"] ?? '') === 'TP' ? 'selected' : '' ?>>TP</option>
+                                            <option value="FN" <?= ($row["error_type"] ?? '') === 'FN' ? 'selected' : '' ?>>FN</option>
+                                        </select>
+                                    </td>
+                                    <td><input type="number" name="faf_grade" class="edit-input" value="<?= htmlspecialchars($row["faf_grade"] ?? '') ?>" min="1" max="4"></td>
+                                    <td><input type="number" step="0.01" name="oct_score" class="edit-input" value="<?= htmlspecialchars($row["oct_score"] ?? '') ?>"></td>
+                                    <td><input type="number" step="0.01" name="vf_score" class="edit-input" value="<?= htmlspecialchars($row["vf_score"] ?? '') ?>"></td>
+                                <?php else: ?>
+                                    <td><?= htmlspecialchars($row["age"] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row["eye"] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row["report_diagnosis"]) ?></td>
+                                    <td><?= htmlspecialchars($row["exclusion"]) ?></td>
+                                    <td><?= htmlspecialchars($row["merci_score"] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row["merci_diagnosis"]) ?></td>
+                                    <td><?= htmlspecialchars($row["error_type"] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row["faf_grade"] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row["oct_score"] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row["vf_score"] ?? 'N/A') ?></td>
+                                <?php endif; ?>
+                                
+                                <td>
+                                    <?php 
+                                    $imageLinks = [];
+                                    if (!empty($row['faf_reference_od'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_od']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OD" class="image-link">FAF OD</a>';
+                                    if (!empty($row['faf_reference_os'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_os']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OS" class="image-link">FAF OS</a>';
+                                    if (!empty($row['oct_reference_od'])) $imageLinks[] = '<a href="view_oct.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">OCT OD</a>';
+                                    if (!empty($row['oct_reference_os'])) $imageLinks[] = '<a href="view_oct.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">OCT OS</a>';
+                                    if (!empty($row['vf_reference_od'])) $imageLinks[] = '<a href="view_vf.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">VF OD</a>';
+                                    if (!empty($row['vf_reference_os'])) $imageLinks[] = '<a href="view_vf.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">VF OS</a>';
+                                    if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="view_mferg.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OD" class="image-link">MFERG OD</a>';
+                                    if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="view_mferg.php?test_id='.htmlspecialchars($row['test_id']).'&eye=OS" class="image-link">MFERG OS</a>';
+
+                                    echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
+                                    ?>
+                                </td>
+                                
+                                <?php if ($edit_mode): ?>
+                                    <td>
+                                        <input type="hidden" name="test_id" value="<?= htmlspecialchars($row['test_id']) ?>">
+                                        <button type="submit" name="update_test" class="save-button">Save</button>
+                                        <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="cancel-button">Cancel</a>
+                                    </td>
+                                <?php endif; ?>
+                            </tr>
+                        <?php endwhile; ?>
+                    </table>
+                </form>
             <?php else: ?>
                 <p>No tests found for Patient ID: <?= htmlspecialchars($search_patient_id) ?></p>
             <?php endif; ?>
