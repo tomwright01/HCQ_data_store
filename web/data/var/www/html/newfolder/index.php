@@ -1,10 +1,11 @@
 <?php
+// Database configuration
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
 $dbname = "PatientData";
 
-// Create database connection
+// Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
 
 // Check connection
@@ -12,159 +13,119 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// Handle form submission for editing
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_test'])) {
-    $test_id = $_POST['test_id'];
-    $age = $_POST['age'];
-    $eye = $_POST['eye'];
-    $report_diagnosis = $_POST['report_diagnosis'];
-    $exclusion = $_POST['exclusion'];
-    $merci_score = $_POST['merci_score'];
-    $merci_diagnosis = $_POST['merci_diagnosis'];
-    $error_type = $_POST['error_type'];
-    $faf_grade = $_POST['faf_grade'];
-    $oct_score = $_POST['oct_score'];
-    $vf_score = $_POST['vf_score'];
-    
-    $stmt = $conn->prepare("UPDATE tests SET 
-        age = ?, 
-        eye = ?, 
-        report_diagnosis = ?, 
-        exclusion = ?, 
-        merci_score = ?, 
-        merci_diagnosis = ?, 
-        error_type = ?, 
-        faf_grade = ?, 
-        oct_score = ?, 
-        vf_score = ? 
-        WHERE test_id = ?");
-    
-    $stmt->bind_param("isssssssdds", 
-        $age, 
-        $eye, 
-        $report_diagnosis, 
-        $exclusion, 
-        $merci_score, 
-        $merci_diagnosis, 
-        $error_type, 
-        $faf_grade, 
-        $oct_score, 
-        $vf_score, 
-        $test_id);
-    
-    if ($stmt->execute()) {
-        $success_message = "Test record updated successfully!";
-    } else {
-        $error_message = "Error updating record: " . $stmt->error;
+// Initialize variables
+$success_message = '';
+$error_message = '';
+$search_patient_id = isset($_REQUEST['search_patient_id']) ? $_REQUEST['search_patient_id'] : '';
+$edit_mode = isset($_GET['edit']) && $_GET['edit'] === 'true';
+
+// Handle form submissions
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['update_test'])) {
+        // Process update
+        $test_id = $_POST['test_id'] ?? '';
+        $age = isset($_POST['age']) && $_POST['age'] !== '' ? (int)$_POST['age'] : NULL;
+        $eye = $_POST['eye'] ?? NULL;
+        $report_diagnosis = $_POST['report_diagnosis'] ?? 'no input';
+        $exclusion = $_POST['exclusion'] ?? 'none';
+        $merci_score = $_POST['merci_score'] ?? NULL;
+        $merci_diagnosis = $_POST['merci_diagnosis'] ?? 'no value';
+        $error_type = $_POST['error_type'] ?? 'none';
+        $faf_grade = isset($_POST['faf_grade']) && $_POST['faf_grade'] !== '' ? (int)$_POST['faf_grade'] : NULL;
+        $oct_score = isset($_POST['oct_score']) && $_POST['oct_score'] !== '' ? (float)$_POST['oct_score'] : NULL;
+        $vf_score = isset($_POST['vf_score']) && $_POST['vf_score'] !== '' ? (float)$_POST['vf_score'] : NULL;
+        
+        try {
+            $stmt = $conn->prepare("UPDATE tests SET 
+                age = ?, 
+                eye = ?, 
+                report_diagnosis = ?, 
+                exclusion = ?, 
+                merci_score = ?, 
+                merci_diagnosis = ?, 
+                error_type = ?, 
+                faf_grade = ?, 
+                oct_score = ?, 
+                vf_score = ? 
+                WHERE test_id = ?");
+            
+            $stmt->bind_param("isssssssdds", 
+                $age, $eye, $report_diagnosis, $exclusion, $merci_score, 
+                $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score, $test_id);
+            
+            if ($stmt->execute()) {
+                $success_message = "Test record updated successfully!";
+            } else {
+                throw new Exception("Execute failed: " . $stmt->error);
+            }
+            
+            $stmt->close();
+        } catch (Exception $e) {
+            $error_message = "Error updating record: " . $e->getMessage();
+        }
+    } elseif (isset($_POST['search_patient_id'])) {
+        // Process search
+        $search_patient_id = $_POST['search_patient_id'];
     }
-    
-    $stmt->close();
 }
 
-// Query to get total number of patients
+// Get statistics data
 $sql_total_patients = "SELECT COUNT(*) AS total_patients FROM patients";
 $result_total_patients = $conn->query($sql_total_patients);
-$row_total_patients = $result_total_patients->fetch_assoc();
-$total_patients = $row_total_patients['total_patients'];
+$total_patients = $result_total_patients->fetch_assoc()['total_patients'];
 
-// Query to get age statistics from date_of_birth
-$sql_age_stats = "SELECT 
-    TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) AS age 
-    FROM patients";
+// Age statistics
+$sql_age_stats = "SELECT TIMESTAMPDIFF(YEAR, date_of_birth, CURDATE()) AS age FROM patients";
 $result_age_stats = $conn->query($sql_age_stats);
-
-$ages = [];
-while ($row_age = $result_age_stats->fetch_assoc()) {
-    $ages[] = $row_age['age'];
-}
-
-// Calculate age statistics
+$ages = array_column($result_age_stats->fetch_all(MYSQLI_ASSOC), 'age');
 sort($ages);
 $median = !empty($ages) ? $ages[floor(count($ages)/2)] : 0;
 $percentile_25 = !empty($ages) ? $ages[floor(count($ages)*0.25)] : 0;
 $percentile_75 = !empty($ages) ? $ages[floor(count($ages)*0.75)] : 0;
 
-// Query to get diagnosis distribution
-$sql_diagnosis = "SELECT 
-    merci_diagnosis AS diagnosis,
-    COUNT(*) AS count 
-    FROM tests 
-    GROUP BY merci_diagnosis";
+// Diagnosis distribution
+$sql_diagnosis = "SELECT merci_diagnosis AS diagnosis, COUNT(*) AS count FROM tests GROUP BY merci_diagnosis";
 $result_diagnosis = $conn->query($sql_diagnosis);
 $diagnosis_data = [];
 while ($row = $result_diagnosis->fetch_assoc()) {
     $diagnosis_data[$row['diagnosis']] = $row['count'];
 }
 
-// Query to get eye distribution
-$sql_eye = "SELECT 
-    IFNULL(eye, 'Not Specified') AS eye, 
-    COUNT(*) AS count 
-    FROM tests 
-    GROUP BY eye";
+// Eye distribution
+$sql_eye = "SELECT IFNULL(eye, 'Not Specified') AS eye, COUNT(*) AS count FROM tests GROUP BY eye";
 $result_eye = $conn->query($sql_eye);
 $eye_data = [];
 while ($row = $result_eye->fetch_assoc()) {
     $eye_data[$row['eye']] = $row['count'];
 }
 
-// Query to get exclusion reasons
-$sql_exclusion = "SELECT 
-    exclusion, 
-    COUNT(*) AS count 
-    FROM tests 
-    GROUP BY exclusion";
+// Exclusion reasons
+$sql_exclusion = "SELECT exclusion, COUNT(*) AS count FROM tests GROUP BY exclusion";
 $result_exclusion = $conn->query($sql_exclusion);
 $exclusion_data = [];
 while ($row = $result_exclusion->fetch_assoc()) {
     $exclusion_data[$row['exclusion']] = $row['count'];
 }
 
-// Query to get location distribution
-$sql_location = "SELECT 
-    location, 
-    COUNT(*) AS count 
-    FROM tests 
-    GROUP BY location";
+// Location distribution
+$sql_location = "SELECT location, COUNT(*) AS count FROM tests GROUP BY location";
 $result_location = $conn->query($sql_location);
 $location_data = [];
 while ($row = $result_location->fetch_assoc()) {
     $location_data[$row['location']] = $row['count'];
 }
 
-// Patient search functionality
-$search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient_id'] : (isset($_GET['search_patient_id']) ? $_GET['search_patient_id'] : '');
-$edit_mode = isset($_GET['edit']) && $_GET['edit'] === 'true';
-
+// Get patient data if search was performed
+$result_patient = null;
 if ($search_patient_id) {
     $sql_patient_data = "SELECT 
-        t.test_id, 
-        t.location AS test_location,
-        t.date_of_test, 
-        t.age,
-        t.eye,
-        t.report_diagnosis,
-        t.exclusion,
-        t.merci_score,
-        t.merci_diagnosis,
-        t.error_type,
-        t.faf_grade,
-        t.oct_score,
-        t.vf_score,
-        t.faf_reference_od,
-        t.faf_reference_os,
-        t.oct_reference_od,
-        t.oct_reference_os,
-        t.vf_reference_od,
-        t.vf_reference_os,
-        t.mferg_reference_od,
-        t.mferg_reference_os,
-        p.patient_id, 
-        p.subject_id, 
-        p.date_of_birth,
-        p.location AS patient_location
-        FROM tests t
-        JOIN patients p ON t.patient_id = p.patient_id
+        t.test_id, t.location AS test_location, t.date_of_test, t.age, t.eye,
+        t.report_diagnosis, t.exclusion, t.merci_score, t.merci_diagnosis,
+        t.error_type, t.faf_grade, t.oct_score, t.vf_score,
+        t.faf_reference_od, t.faf_reference_os, t.oct_reference_od, t.oct_reference_os,
+        t.vf_reference_od, t.vf_reference_os, t.mferg_reference_od, t.mferg_reference_os,
+        p.patient_id, p.subject_id, p.date_of_birth, p.location AS patient_location
+        FROM tests t JOIN patients p ON t.patient_id = p.patient_id
         WHERE p.patient_id = ?";
     
     $stmt = $conn->prepare($sql_patient_data);
@@ -173,7 +134,6 @@ if ($search_patient_id) {
     $result_patient = $stmt->get_result();
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -194,14 +154,12 @@ if ($search_patient_id) {
             flex-direction: column;
             min-height: 100vh;
         }
-
         .logo {
             position: absolute;
             top: 20px;
             right: 20px;
             width: 150px;
         }
-
         .content {
             width: 80%;
             max-width: 1200px;
@@ -213,13 +171,11 @@ if ($search_patient_id) {
             margin-bottom: 30px;
             border: 1px solid #ddd;
         }
-
         h1 {
             font-size: 36px;
             color: rgb(0, 168, 143);
             margin-bottom: 20px;
         }
-
         .action-buttons {
             display: flex;
             gap: 15px;
@@ -227,7 +183,6 @@ if ($search_patient_id) {
             justify-content: center;
             flex-wrap: wrap;
         }
-        
         .action-button {
             padding: 12px 25px;
             font-size: 16px;
@@ -241,47 +196,21 @@ if ($search_patient_id) {
             text-align: center;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-        
         .action-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
-        
-        .import-button {
-            background-color: rgb(102, 194, 164);
-        }
-        
-        .import-button:hover {
-            background-color: rgb(92, 174, 154);
-        }
-        
-        .image-button {
-            background-color: rgb(178, 226, 226);
-        }
-        
-        .image-button:hover {
-            background-color: rgb(158, 206, 206);
-        }
-        
-        .form-button {
-            background-color: rgb(44, 162, 95);
-        }
-        
-        .form-button:hover {
-            background-color: rgb(0, 140, 120);
-        }
-        .export-button {
-            background-color: rgb(0, 109, 44);
-        }
-
-        .export-button:hover {
-            background-color: rgb(0, 89, 34);
-        }
-
+        .import-button { background-color: rgb(102, 194, 164); }
+        .import-button:hover { background-color: rgb(92, 174, 154); }
+        .image-button { background-color: rgb(178, 226, 226); }
+        .image-button:hover { background-color: rgb(158, 206, 206); }
+        .form-button { background-color: rgb(44, 162, 95); }
+        .form-button:hover { background-color: rgb(0, 140, 120); }
+        .export-button { background-color: rgb(0, 109, 44); }
+        .export-button:hover { background-color: rgb(0, 89, 34); }
         .search-form {
             margin: 20px;
         }
-
         .search-form input {
             padding: 10px;
             width: 300px;
@@ -289,7 +218,6 @@ if ($search_patient_id) {
             border: 1px solid #ddd;
             border-radius: 5px;
         }
-
         .search-form button {
             padding: 10px 20px;
             font-size: 16px;
@@ -300,36 +228,29 @@ if ($search_patient_id) {
             cursor: pointer;
             transition: background-color 0.3s;
         }
-
         .search-form button:hover {
             background-color: rgb(0, 140, 120);
         }
-
         table {
             width: 100%;
             margin-top: 20px;
             border-collapse: collapse;
         }
-
         th, td {
             padding: 12px;
             text-align: center;
             border: 1px solid #ddd;
         }
-
         th {
             background-color: rgb(0, 168, 143);
             color: white;
         }
-
         tr:nth-child(even) {
             background-color: #f9f9f9;
         }
-
         tr:hover {
             background-color: #f1f1f1;
         }
-
         .chart-container {
             width: 100%;
             max-width: 600px;
@@ -340,13 +261,11 @@ if ($search_patient_id) {
             box-shadow: 0 4px 10px rgba(0,0,0,0.1);
             border: 1px solid #ddd;
         }
-
         .chart-title {
             text-align: center;
             color: rgb(0, 168, 143);
             margin-bottom: 15px;
         }
-
         .stats-section {
             display: flex;
             flex-wrap: wrap;
@@ -354,13 +273,11 @@ if ($search_patient_id) {
             gap: 20px;
             margin-top: 30px;
         }
-
         .metric-bar-container {
             margin-top: 30px;
             width: 80%;
             max-width: 600px;
         }
-
         .metric-bar {
             width: 100%;
             background-color: #eee;
@@ -372,14 +289,12 @@ if ($search_patient_id) {
             transition: width 1s ease;
             border: 1px solid #ddd;
         }
-
         .metric-bar .metric-fill {
             height: 100%;
             background-color: rgb(0, 168, 143);
             width: 0;
             transition: width 1s ease;
         }
-
         .metric-bar .metric-value {
             position: absolute;
             top: 50%;
@@ -389,7 +304,6 @@ if ($search_patient_id) {
             color: #fff;
             text-shadow: 1px 1px 1px rgba(0,0,0,0.5);
         }
-
         .data-section {
             display: flex;
             flex-wrap: wrap;
@@ -397,7 +311,6 @@ if ($search_patient_id) {
             gap: 20px;
             margin-top: 20px;
         }
-
         .data-card {
             background: white;
             border-radius: 8px;
@@ -407,30 +320,25 @@ if ($search_patient_id) {
             text-align: center;
             border: 1px solid #ddd;
         }
-
         .data-card h3 {
             color: rgb(0, 168, 143);
             margin-top: 0;
         }
-
         .data-value {
             font-size: 24px;
             font-weight: bold;
             margin: 10px 0;
         }
-
         .image-link {
             color: rgb(0, 168, 143);
             text-decoration: none;
             font-weight: bold;
             transition: color 0.3s;
         }
-
         .image-link:hover {
             color: rgb(0, 140, 120);
             text-decoration: underline;
         }
-
         .edit-button {
             background-color: rgb(0, 109, 44);
             color: white;
@@ -440,11 +348,9 @@ if ($search_patient_id) {
             cursor: pointer;
             margin-right: 5px;
         }
-        
         .edit-button:hover {
             background-color: rgb(0, 89, 34);
         }
-        
         .save-button {
             background-color: rgb(0, 168, 143);
             color: white;
@@ -454,11 +360,9 @@ if ($search_patient_id) {
             cursor: pointer;
             margin-right: 5px;
         }
-        
         .save-button:hover {
             background-color: rgb(0, 140, 120);
         }
-        
         .cancel-button {
             background-color: #dc3545;
             color: white;
@@ -467,11 +371,9 @@ if ($search_patient_id) {
             border-radius: 4px;
             cursor: pointer;
         }
-        
         .cancel-button:hover {
             background-color: #c82333;
         }
-        
         .edit-select, .edit-input {
             padding: 5px;
             border: 1px solid #ddd;
@@ -479,19 +381,16 @@ if ($search_patient_id) {
             width: 100%;
             box-sizing: border-box;
         }
-        
         .message {
             padding: 10px;
             margin: 10px 0;
             border-radius: 4px;
             text-align: center;
         }
-        
         .success {
             background-color: #d4edda;
             color: #155724;
         }
-        
         .error {
             background-color: #f8d7da;
             color: #721c24;
@@ -499,7 +398,6 @@ if ($search_patient_id) {
     </style>
 </head>
 <body>
-
     <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
 
     <div class="content">
@@ -515,7 +413,8 @@ if ($search_patient_id) {
         <div class="search-form">
             <form method="POST" action="index.php">
                 <label for="search_patient_id">Enter Patient ID to Search for Tests:</label><br>
-                <input type="text" name="search_patient_id" id="search_patient_id" required value="<?= htmlspecialchars($search_patient_id) ?>">
+                <input type="text" name="search_patient_id" id="search_patient_id" required 
+                       value="<?= htmlspecialchars($search_patient_id) ?>">
                 <button type="submit">Search</button>
                 <?php if ($search_patient_id && isset($result_patient) && $result_patient->num_rows > 0): ?>
                     <?php if ($edit_mode): ?>
@@ -527,45 +426,41 @@ if ($search_patient_id) {
             </form>
         </div>
 
-        <?php if (isset($success_message)): ?>
+        <?php if (!empty($success_message)): ?>
             <div class="message success"><?= htmlspecialchars($success_message) ?></div>
         <?php endif; ?>
         
-        <?php if (isset($error_message)): ?>
+        <?php if (!empty($error_message)): ?>
             <div class="message error"><?= htmlspecialchars($error_message) ?></div>
         <?php endif; ?>
 
         <?php if ($search_patient_id && isset($result_patient)): ?>
             <?php if ($result_patient->num_rows > 0): ?>
                 <h3>Tests for Patient ID: <?= htmlspecialchars($search_patient_id) ?></h3>
-                <?php if ($edit_mode): ?>
-                    <form method="POST" action="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>&edit=true">
-                <?php else: ?>
-                    <form method="POST" action="index.php">
-                <?php endif; ?>
-                    <input type="hidden" name="search_patient_id" value="<?= htmlspecialchars($search_patient_id) ?>">
-                    <table>
-                        <tr>
-                            <th>Test ID</th>
-                            <th>Test Location</th>
-                            <th>Patient Location</th>
-                            <th>Date</th>
-                            <th>Age</th>
-                            <th>Eye</th>
-                            <th>Report Diagnosis</th>
-                            <th>Exclusion</th>
-                            <th>MERCI Score</th>
-                            <th>MERCI Diagnosis</th>
-                            <th>Error Type</th>
-                            <th>FAF Grade</th>
-                            <th>OCT Score</th>
-                            <th>VF Score</th>
-                            <th>Images</th>
-                            <?php if ($edit_mode): ?>
-                                <th>Actions</th>
-                            <?php endif; ?>
-                        </tr>
-                        <?php while ($row = $result_patient->fetch_assoc()): ?>
+                <table>
+                    <tr>
+                        <th>Test ID</th>
+                        <th>Test Location</th>
+                        <th>Patient Location</th>
+                        <th>Date</th>
+                        <th>Age</th>
+                        <th>Eye</th>
+                        <th>Report Diagnosis</th>
+                        <th>Exclusion</th>
+                        <th>MERCI Score</th>
+                        <th>MERCI Diagnosis</th>
+                        <th>Error Type</th>
+                        <th>FAF Grade</th>
+                        <th>OCT Score</th>
+                        <th>VF Score</th>
+                        <th>Images</th>
+                        <?php if ($edit_mode): ?>
+                            <th>Actions</th>
+                        <?php endif; ?>
+                    </tr>
+                    <?php while ($row = $result_patient->fetch_assoc()): ?>
+                        <form method="POST" action="index.php?search_patient_id=<?= urlencode($search_patient_id) ?><?= $edit_mode ? '&edit=true' : '' ?>">
+                            <input type="hidden" name="test_id" value="<?= htmlspecialchars($row['test_id']) ?>">
                             <tr>
                                 <td><?= htmlspecialchars($row["test_id"]) ?></td>
                                 <td><?= htmlspecialchars($row["test_location"] ?? 'KH') ?></td>
@@ -647,15 +542,14 @@ if ($search_patient_id) {
                                 
                                 <?php if ($edit_mode): ?>
                                     <td>
-                                        <input type="hidden" name="test_id" value="<?= htmlspecialchars($row['test_id']) ?>">
                                         <button type="submit" name="update_test" class="save-button">Save</button>
                                         <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="cancel-button">Cancel</a>
                                     </td>
                                 <?php endif; ?>
                             </tr>
-                        <?php endwhile; ?>
-                    </table>
-                </form>
+                        </form>
+                    <?php endwhile; ?>
+                </table>
             <?php else: ?>
                 <p>No tests found for Patient ID: <?= htmlspecialchars($search_patient_id) ?></p>
             <?php endif; ?>
