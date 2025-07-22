@@ -82,7 +82,7 @@ function processBulkImages($testType, $sourcePath) {
                     $returnVar = 0;
                     $command = sprintf(
                         '/bin/bash %s %s %s',
-                        escapeshellarg('web/data/anonymiseHVF.sh'),
+                        escapeshellarg('Resources/anonymiseHVF/anonymiseHVF.sh'),
                         escapeshellarg($sourceFile),
                         escapeshellarg($tempDir)
                     );
@@ -196,43 +196,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception("For VF tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
             }
             
-             // Special handling for VF PDFs
-            if ($testType === 'VF' && $fileExt === 'pdf') {
+            // Special handling for VF PDFs
+            if ($testType === 'VF' && $mime === 'application/pdf') {
                 $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
-                if (!mkdir($tempDir, 0755, true)) {
+                if (!mkdir($tempDir)) {
                     throw new Exception("Failed to create temp directory for anonymization");
                 }
-            
-                // Run anonymization script (verify path is correct)
-                $anonScript = 'web/data/anonymiseHVF.sh'; // Update if different
-                $command = sprintf(
-                    '/bin/bash %s %s %s',
-                    escapeshellarg($anonScript),
-                    escapeshellarg($sourceFile),
-                    escapeshellarg($tempDir)
-                );
+
+                // Generate filename
+                $filename = $patientId . '_' . $eye . '_' . date('Ymd', strtotime($testDate)) . '.pdf';
+                $tempFile = $tempDir . '/' . $filename;
                 
-                exec($command, $output, $returnVar);
-            
-                if ($returnVar !== 0) {
-                    throw new Exception("Failed to anonymize PDF: " . implode("\n", $output));
+                // First move the uploaded file
+                if (!move_uploaded_file($_FILES['image']['tmp_name'], $tempFile)) {
+                    throw new Exception("Failed to process uploaded PDF");
                 }
-            
-                // Verify anonymized file exists
-                $anonFile = $tempDir . '/' . $filename;
-                if (!file_exists($anonFile)) {
-                    throw new Exception("Anonymized file not found in output directory");
-                }
-            
-                // Copy to permanent storage
-                if (!copy($anonFile, $targetFile)) {
-                    throw new Exception("Failed to save anonymized PDF");
-                }
-            
-                // Clean up
-                array_map('unlink', glob("$tempDir/*"));
-                rmdir($tempDir);
-            }
 
                 // Run the anonymization script
                 $output = [];
