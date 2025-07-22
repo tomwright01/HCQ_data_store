@@ -400,11 +400,14 @@ $test_date = $test['date_of_test'] ?? 'Unknown';
             </div>
             
             <div class="pdf-wrapper">
-                <div class="pdf-container" id="pdf-container">
-                    <embed src="<?= htmlspecialchars($pdf_path) ?>#toolbar=0&navpanes=0&scrollbar=0" type="application/pdf" id="vf-pdf">
+                <div class="pdf-container" style="width: 100%; height: 80vh;">
+                    <embed 
+                        src="<?= htmlspecialchars($pdf_path) ?>#toolbar=0&navpanes=0&scrollbar=0&zoom=100" 
+                        type="application/pdf"
+                        style="width: 100%; height: 100%;"
+                    >
                 </div>
             </div>
-            
             <button class="fullscreen-btn" id="fullscreen-btn">Fullscreen</button>
             
             <div class="eye-indicator">
