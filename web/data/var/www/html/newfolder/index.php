@@ -133,7 +133,7 @@ while ($row = $result_location->fetch_assoc()) {
 }
 
 // Patient search functionality
-$search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient_id'] : '';
+$search_patient_id = isset($_POST['search_patient_id']) ? $_POST['search_patient_id'] : (isset($_GET['search_patient_id']) ? $_GET['search_patient_id'] : '');
 $edit_mode = isset($_GET['edit']) && $_GET['edit'] === 'true';
 
 if ($search_patient_id) {
@@ -538,7 +538,11 @@ if ($search_patient_id) {
         <?php if ($search_patient_id && isset($result_patient)): ?>
             <?php if ($result_patient->num_rows > 0): ?>
                 <h3>Tests for Patient ID: <?= htmlspecialchars($search_patient_id) ?></h3>
-                <form method="POST" action="index.php">
+                <?php if ($edit_mode): ?>
+                    <form method="POST" action="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>&edit=true">
+                <?php else: ?>
+                    <form method="POST" action="index.php">
+                <?php endif; ?>
                     <input type="hidden" name="search_patient_id" value="<?= htmlspecialchars($search_patient_id) ?>">
                     <table>
                         <tr>
