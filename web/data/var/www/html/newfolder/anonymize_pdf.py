@@ -2,8 +2,15 @@
 """
 anonymize_pdf.py
 
-A small utility to redact identifiers in a PDF file.
-Usage: anonymize_pdf.py input.pdf output.pdf
+A utility to redact patient identifiers in a PDF. It first attempts text‑layer redaction using PyMuPDF.
+If no text matches, it falls back to OCR‑based redaction.
+
+Usage:
+    anonymize_pdf.py input.pdf output.pdf
+
+Dependencies:
+    pip install PyMuPDF pytesseract pdf2image pillow
+    Ensure Tesseract OCR and Poppler are installed and in your PATH.
 """
 import sys
 import io
@@ -14,12 +21,15 @@ from pdf2image import convert_from_bytes
 from PIL import Image, ImageDraw
 import pytesseract
 
-# Regex for IDs to redact; adjust to your pattern
+# Regex for IDs to redact—adjust to your pattern
 ID_RE = re.compile(r"\b[A-Z0-9]{4,}\b")
 
-
 def anonymize_pdf_bytes(pdf_bytes: bytes) -> bytes:
-    # Try text-layer based redaction
+    """
+    Try text-layer redaction first; if nothing found,
+    fall back to OCR redaction on page images.
+    Returns the redacted PDF bytes.
+    """
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     found = False
     for page in doc:
@@ -30,57 +40,47 @@ def anonymize_pdf_bytes(pdf_bytes: bytes) -> bytes:
                 page.add_redact_annot(r, fill=(0, 0, 0))
     if found:
         doc.apply_redactions()
-        return doc.write()  # redacted bytes
+        return doc.write()
 
-    # Fallback to OCR-based redaction on images
-    pages = convert_from_bytes(pdf_bytes, dpi=200)
-    redacted_pages = []
-    for img in pages:
+    # OCR fallback
+    images = convert_from_bytes(pdf_bytes, dpi=200)
+    redacted_images = []
+    for img in images:
         draw = ImageDraw.Draw(img)
         data = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)
-        for i, word in enumerate(data["text"]):
-            if ID_RE.match(word):
-                x = data["left"][i]
-                y = data["top"][i]
-                w = data["width"][i]
-                h = data["height"][i]
+        for i, text in enumerate(data["text"]):
+            if ID_RE.match(text):
+                x, y, w, h = (data[field][i] for field in ("left","top","width","height"))
                 draw.rectangle([x, y, x + w, y + h], fill="black")
-        redacted_pages.append(img)
+        redacted_images.append(img)
 
-    # Assemble images back into PDF
-    out_buf = io.BytesIO()
-    redacted_pages[0].save(
-        out_buf,
+    buf = io.BytesIO()
+    redacted_images[0].save(
+        buf,
         format="PDF",
         save_all=True,
-        append_images=redacted_pages[1:]
+        append_images=redacted_images[1:]
     )
-    return out_buf.getvalue()
-
+    return buf.getvalue()
 
 def main():
     if len(sys.argv) != 3:
         print("Usage: anonymize_pdf.py input.pdf output.pdf", file=sys.stderr)
         sys.exit(1)
 
-    input_path = sys.argv[1]
-    output_path = sys.argv[2]
-
-    # Read input PDF
-    with open(input_path, "rb") as f:
-        pdf_bytes = f.read()
+    in_path, out_path = sys.argv[1], sys.argv[2]
+    with open(in_path, "rb") as f:
+        data = f.read()
 
     try:
-        redacted_bytes = anonymize_pdf_bytes(pdf_bytes)
-        # Write out redacted PDF
-        with open(output_path, "wb") as f_out:
-            f_out.write(redacted_bytes)
+        redacted = anonymize_pdf_bytes(data)
+        with open(out_path, "wb") as f_out:
+            f_out.write(redacted)
     except Exception as e:
-        print(f"Error during anonymization: {e}", file=sys.stderr)
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(2)
 
     sys.exit(0)
-
 
 if __name__ == "__main__":
     main()
