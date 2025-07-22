@@ -149,23 +149,39 @@ function checkDuplicateTest($patient_id, $test_date, $eye) {
     return $stmt->get_result()->num_rows > 0;
 }
 
-function backupDatabase() {
-    $backupDir = '/var/www/html/data/';
-    if (!file_exists($backupDir)) mkdir($backupDir, 0755, true);
-
-    $file = $backupDir . 'PatientData_' . date("Y-m-d_His") . '.sql';
-    $cmd  = sprintf(
+function performDatabaseBackup() {
+    $backupDir = '/var/www/html/data/backups/';
+    if (!file_exists($backupDir)) {
+        mkdir($backupDir, 0755, true);
+    }
+    
+    $backupFile = $backupDir . 'PatientData_' . date("Y-m-d_His") . '.sql';
+    
+    $command = sprintf(
         'mysqldump -u%s -p%s -h%s %s > %s',
         escapeshellarg(DB_USERNAME),
         escapeshellarg(DB_PASSWORD),
         escapeshellarg(DB_SERVER),
         escapeshellarg(DB_NAME),
-        escapeshellarg($file)
+        escapeshellarg($backupFile)
     );
-    system($cmd, $rc);
-    return $rc === 0 ? $file : false;
+    
+    system($command, $returnCode);
+    
+    if ($returnCode === 0) {
+        // Compress the backup
+        $compressedFile = $backupFile . '.gz';
+        $compressCmd = sprintf('gzip -c %s > %s', escapeshellarg($backupFile), escapeshellarg($compressedFile));
+        system($compressCmd);
+        
+        // Remove uncompressed file
+        unlink($backupFile);
+        
+        return $compressedFile;
+    }
+    
+    return false;
 }
-
 function getStoredImagePath($filename) {
     if (empty($filename)) return null;
     foreach (ALLOWED_TEST_TYPES as $type => $dir) {
