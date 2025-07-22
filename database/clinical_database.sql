@@ -14,6 +14,17 @@ CREATE TABLE patients (
     INDEX idx_location (location)
 );
 
+CREATE TABLE audit_log (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    table_name VARCHAR(50) NOT NULL,
+    record_id VARCHAR(50) NOT NULL,
+    action ENUM('INSERT', 'UPDATE', 'DELETE') NOT NULL,
+    old_values TEXT,
+    new_values TEXT,
+    changed_by VARCHAR(100),
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Tests table with location and all image reference fields
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
