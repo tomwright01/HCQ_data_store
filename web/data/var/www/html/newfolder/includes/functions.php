@@ -150,7 +150,7 @@ function checkDuplicateTest($patient_id, $test_date, $eye) {
 }
 
 function backupDatabase() {
-    $backupDir = '/var/www/html/backups/';
+    $backupDir = '/var/www/html/data/';
     if (!file_exists($backupDir)) mkdir($backupDir, 0755, true);
 
     $file = $backupDir . 'PatientData_' . date("Y-m-d_His") . '.sql';
