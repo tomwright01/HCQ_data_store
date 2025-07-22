@@ -119,7 +119,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
         
         $conn->commit();
-        $successMessage = "Data successfully saved!";
+        // Redirect to avoid resubmission on refresh
+        header("Location: " . $_SERVER['PHP_SELF'] . "?success=1");
+        exit(); // Stop further execution
     } catch (Exception $e) {
         $conn->rollback();
         $errorMessage = "Error: " . $e->getMessage();
