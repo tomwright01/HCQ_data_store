@@ -465,7 +465,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             
             <form method="POST" class="grading-form">
-                <!-- Amplitude and Timing -->
+                <!-- Waveform Characteristics -->
                 <div class="grading-card">
                     <h2>Waveform Characteristics</h2>
                     <div class="form-group">
