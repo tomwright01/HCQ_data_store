@@ -16,8 +16,8 @@ CREATE TABLE patients (
 
 -- Tests table with location and all image reference fields
 CREATE TABLE tests (
-    test_id VARCHAR(20) PRIMARY KEY,
-    patient_id VARCHAR(20) NOT NULL,
+    test_id VARCHAR(25) PRIMARY KEY,
+    patient_id VARCHAR(25) NOT NULL,
     location ENUM('KH', 'Montreal', 'Dal', 'Ivey') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
     age TINYINT UNSIGNED NULL COMMENT 'Patient age at time of test (0-100)',
