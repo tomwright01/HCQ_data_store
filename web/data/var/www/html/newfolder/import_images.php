@@ -91,7 +91,7 @@ function processBulkImages($testType, $sourcePath) {
 
                 // Special handling for VF PDFs
                 // Special handling for VF and OCT PDFs
-                if (($testType === 'VF' || $testType === 'OCT') && $fileExt === 'pdf') {
+                if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $fileExt === 'pdf') {
                     $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
                     if (!mkdir($tempDir)) {
                         throw new Exception("Failed to create temp directory for anonymization");
