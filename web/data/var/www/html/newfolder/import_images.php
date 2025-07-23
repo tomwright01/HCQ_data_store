@@ -61,14 +61,14 @@ function processBulkImages($testType, $sourcePath) {
         
         // Process PNG files for all test types except VF, or PDF for VF
         // Process PNG files for all test types, or PDF for VF/OCT
-        if ($file->isFile() && ( $extension === 'png' || (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf') ||($testType === 'MFERG' && ($extension === 'pdf' || $extension === 'exp')))) {
+        if ($file->isFile() && ($extension === 'png' || (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $extension === 'pdf'))) {
             $results['processed']++;
             $filename = $file->getFilename();
             $sourceFile = $file->getPathname();
             
             try {
                 // Parse filename (patientid_eye_YYYYMMDD.ext)
-                if (!preg_match('/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i', $filename, $matches)) {
+                if (!preg_match('/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i', $filename, $matches)) {
                     throw new Exception("Invalid filename format - must be patientid_eye_YYYYMMDD.ext");
                 }
 
@@ -91,12 +91,12 @@ function processBulkImages($testType, $sourcePath) {
 
                 // Special handling for VF PDFs
                 // Process PNG files for all test types, or PDF for VF/OCT
-                if (($testType === 'VF' || $testType === 'OCT') && $fileExt === 'pdf') {
-                    // Handle VF/OCT PDF anonymization
+                if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $fileExt === 'pdf') {
                     $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
                     if (!mkdir($tempDir)) {
                         throw new Exception("Failed to create temp directory for anonymization");
                     }
+
                     // Run the anonymization script
                     $output = [];
                     $returnVar = 0;
@@ -595,7 +595,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 <div class="form-group">
                     <label for="image">File (PNG for all tests except VF, PDF for VF):</label>
-                    <input type="file" name="image" id="image" accept="image/png,.pdf,.exp" required>
+                    <input type="file" name="image" id="image" accept="image/png,.pdf" required>
                 </div>
                 
                 <button type="submit" name="import">Upload File</button>
