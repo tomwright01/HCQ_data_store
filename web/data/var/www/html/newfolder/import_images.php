@@ -216,8 +216,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception("For VF, OCT and MFERG tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
             }
 
-// Special handling for VF, OCT and MFERG PDFs
-if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $mime === 'application/pdf') {
+            // Special handling for VF, OCT and MFERG PDFs
+            if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $mime === 'application/pdf') {
             
             // Special handling for VF PDFs
             if ($testType === 'VF' && $mime === 'application/pdf') {
