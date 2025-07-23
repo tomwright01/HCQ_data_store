@@ -68,7 +68,7 @@ function processBulkImages($testType, $sourcePath) {
             
             try {
                 // Parse filename (patientid_eye_YYYYMMDD.ext)
-                if (!preg_match('/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i', $filename, $matches)) {
+                if (!preg_match('/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i', $filename, $matches)) {
                     throw new Exception("Invalid filename format - must be patientid_eye_YYYYMMDD.ext");
                 }
 
