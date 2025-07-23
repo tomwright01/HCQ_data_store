@@ -92,11 +92,22 @@ function processBulkImages($testType, $sourcePath) {
 
                 // Special handling for VF PDFs
                 // Process PNG files for all test types, or PDF for VF/OCT
-                if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $fileExt === 'pdf') {
-                    $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
-                    if (!mkdir($tempDir)) {
-                        throw new Exception("Failed to create temp directory for anonymization");
+                // Special handling for VF/OCT PDFs and MFERG PDF/EXP files
+                if (($testType === 'VF' || $testType === 'OCT') && $fileExt === 'pdf') {
+                    // Existing PDF anonymization code
+                } 
+                elseif ($testType === 'MFERG' && $fileExt === 'pdf') {
+                    // PDF anonymization for MFERG
+                    $tempDir = sys_get_temp_dir() . '/mferg_anon_' . uniqid();
+                    // ... same anonymization process as VF/OCT PDFs
+                }
+                elseif ($testType === 'MFERG' && $fileExt === 'exp') {
+                    // Direct copy for .exp files (no anonymization)
+                    $targetFile = $targetDir . $filename;
+                    if (!copy($sourceFile, $targetFile)) {
+                        throw new Exception("Failed to copy EXP file to target directory");
                     }
+                }
 
                     // Run the anonymization script
                     $output = [];
