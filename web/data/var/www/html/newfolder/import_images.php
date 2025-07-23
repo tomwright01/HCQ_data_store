@@ -61,7 +61,7 @@ function processBulkImages($testType, $sourcePath) {
         
         // Process PNG files for all test types except VF, or PDF for VF
         // Process PNG files for all test types, or PDF for VF/OCT
-        if ($file->isFile() && ($extension === 'png' || (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf'))) {
+        if ($file->isFile() && ($extension === 'png' || (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $extension === 'pdf'))) {
             $results['processed']++;
             $filename = $file->getFilename();
             $sourceFile = $file->getPathname();
@@ -644,3 +644,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </body>
 </html>
+(
