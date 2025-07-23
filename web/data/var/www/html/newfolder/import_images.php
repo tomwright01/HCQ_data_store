@@ -212,9 +212,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mime = $fileInfo->file($_FILES['image']['tmp_name']);
             
             // Allow PNG for all tests or PDF for VF
-            if (!($mime === 'image/png' || ($testType === 'VF' && $mime === 'application/pdf'))) {
-                throw new Exception("For VF tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
+            if (!($mime === 'image/png' || (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $mime === 'application/pdf'))) {
+                throw new Exception("For VF, OCT and MFERG tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
             }
+
+// Special handling for VF, OCT and MFERG PDFs
+if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $mime === 'application/pdf') {
             
             // Special handling for VF PDFs
             if ($testType === 'VF' && $mime === 'application/pdf') {
