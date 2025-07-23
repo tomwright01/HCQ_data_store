@@ -28,13 +28,13 @@ $stmt->execute();
 $test = $stmt->get_result()->fetch_assoc();
 
 if (!$test) {
-    die("Test data not found for this MFERG image reference.");
+    die("Test data not found for this MFERG report.");
 }
 
-// Get image path using the config function
-$image_path = getDynamicImagePath($ref);
-if (!$image_path) {
-    die("MFERG image not found in the system.");
+// Get PDF path using the config function
+$pdf_path = getDynamicImagePath($ref);
+if (!$pdf_path) {
+    die("MFERG report not found in the system.");
 }
 
 // Calculate patient age
@@ -47,22 +47,11 @@ $report_diagnosis = $test['report_diagnosis'] ?? 'Not specified';
 $exclusion = $test['exclusion'] ?? 'None';
 $merci_diagnosis = $test['merci_diagnosis'] ?? 'Not specified';
 $error_type = $test['error_type'] ?? 'N/A';
-$mferg_grade = $test['mferg_grade'] ?? 'N/A';
+$faf_grade = $test['faf_grade'] ?? 'N/A';
 $oct_score = $test['oct_score'] ?? 'N/A';
 $vf_score = $test['vf_score'] ?? 'N/A';
+$mferg_score = $test['mferg_score'] ?? 'N/A';
 $test_date = $test['date_of_test'] ?? 'Unknown';
-
-$current_brightness = 1.0; // Default brightness
-
-// Handle form submissions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['brightness'])) {
-        $new_brightness = (float)$_POST['brightness'];
-        if ($new_brightness >= 0.1 && $new_brightness <= 3.0) {
-            $current_brightness = $new_brightness;
-        }
-    }
-}
 ?>
 
 <!DOCTYPE html>
@@ -73,8 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>MFERG Viewer - Patient <?= htmlspecialchars($patient_id) ?></title>
     <style>
         :root {
-            --primary-color: #00a88f;
-            --primary-dark: #008774;
+            --primary-color: #5d5dff;
+            --primary-dark: #4a4ae6;
             --text-color: #333;
             --bg-color: #fff;
             --light-bg: #f5f5f5;
@@ -96,10 +85,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             height: 100vh;
         }
         
-        .image-section {
+        .pdf-section {
             flex: 1;
             padding: 20px;
-            background-color: #000;
+            background-color: #f0f0f0;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -108,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             position: relative;
         }
         
-        .image-controls {
+        .pdf-controls {
             position: absolute;
             top: 20px;
             right: 20px;
@@ -150,37 +139,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             gap: 5px;
         }
         
-        .brightness-control {
+        .pdf-wrapper {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
             display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .brightness-slider {
-            width: 100px;
-        }
-        
-        .image-wrapper {
-            max-width: 100%;
-            max-height: 100%;
-            overflow: hidden;
-            transition: transform 0.3s ease;
-        }
-        
-        .image-container {
-            transition: transform 0.3s ease;
-            transform-origin: center center;
-            display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
         }
         
-        .image-container img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
+        .pdf-container {
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        
+        .pdf-container embed {
+            width: 100%;
+            height: 100%;
         }
         
         .info-section {
@@ -358,7 +333,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             position: absolute;
             bottom: 20px;
             right: 20px;
-            background: rgba(0, 168, 143, 0.7);
+            background: rgba(93, 93, 255, 0.7);
             color: white;
             border: none;
             border-radius: 4px;
@@ -369,10 +344,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .fullscreen-btn:hover {
-            background: rgba(0, 168, 143, 0.9);
+            background: rgba(93, 93, 255, 0.9);
         }
         
-        .image-section.fullscreen {
+        .pdf-section.fullscreen {
             position: fixed;
             top: 0;
             left: 0;
@@ -381,12 +356,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             z-index: 1000;
         }
         
-        .image-section.fullscreen .image-wrapper {
+        .pdf-section.fullscreen .pdf-wrapper {
             width: 100%;
             height: 100%;
         }
         
-        .image-section.fullscreen .fullscreen-btn {
+        .pdf-section.fullscreen .fullscreen-btn {
             position: fixed;
             bottom: 30px;
             right: 30px;
@@ -398,11 +373,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 height: auto;
             }
             
-            .image-section {
+            .pdf-section {
                 height: 50vh;
             }
             
-            .image-controls {
+            .pdf-controls {
                 top: 10px;
                 right: 10px;
                 padding: 5px;
@@ -412,33 +387,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="container">
-        <!-- Image Section with Controls -->
-        <div class="image-section" id="image-section">
-            <div class="image-controls">
+        <!-- PDF Section with Controls -->
+        <div class="pdf-section" id="pdf-section">
+            <div class="pdf-controls">
                 <div class="control-group zoom-controls">
                     <button class="control-btn zoom-out">-</button>
-                    <button class="control-btn zoom-reset">1:1</button>
+                    <button class="control-btn zoom-reset">100%</button>
                     <button class="control-btn zoom-in">+</button>
                 </div>
                 <div class="control-group">
-                    <button class="control-btn" id="center-eye-btn">👁️</button>
-                </div>
-                <form method="POST" class="control-group brightness-control">
-                    <button type="button" class="control-btn brightness-down">-</button>
-                    <input type="range" class="brightness-slider" name="brightness" min="0.1" max="3.0" step="0.1" 
-                           value="<?= $current_brightness ?>">
-                    <button type="button" class="control-btn brightness-up">+</button>
-                    <button type="submit" class="control-btn" style="margin-left: 5px;">✓</button>
-                </form>
-            </div>
-            
-            <div class="image-wrapper">
-                <div class="image-container" id="image-container">
-                    <img src="<?= htmlspecialchars($image_path) ?>" alt="MFERG Image" id="mferg-image"
-                         style="filter: brightness(<?= $current_brightness ?>);">
+                    <button class="control-btn" id="download-btn">↓</button>
                 </div>
             </div>
             
+            <div class="pdf-wrapper">
+                <div class="pdf-container" style="width: 100%; height: 80vh;">
+                    <embed 
+                        src="<?= htmlspecialchars($pdf_path) ?>#toolbar=0&navpanes=0&scrollbar=0&zoom=100" 
+                        type="application/pdf"
+                        style="width: 100%; height: 100%;"
+                    >
+                </div>
+            </div>
             <button class="fullscreen-btn" id="fullscreen-btn">Fullscreen</button>
             
             <div class="eye-indicator">
@@ -518,9 +488,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <div class="detail-row">
-                    <div class="detail-label">MFERG Grade:</div>
-                    <div class="detail-value"><?= htmlspecialchars($mferg_grade) ?></div>
+                    <div class="detail-label">FAF Grade:</div>
+                    <div class="detail-value"><?= htmlspecialchars($faf_grade) ?></div>
                 </div>
+                
+                <?php if ($mferg_score !== 'N/A'): ?>
+                    <div class="detail-row">
+                        <div class="detail-label">MFERG Score:</div>
+                        <div class="detail-value"><?= htmlspecialchars($mferg_score) ?></div>
+                    </div>
+                <?php endif; ?>
                 
                 <?php if ($oct_score !== 'N/A'): ?>
                     <div class="detail-row">
@@ -537,7 +514,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <?php endif; ?>
                 
                 <div class="detail-row">
-                    <div class="detail-label">Image Reference:</div>
+                    <div class="detail-label">Report Reference:</div>
                     <div class="detail-value"><?= htmlspecialchars($ref) ?></div>
                 </div>
             </div>
@@ -549,14 +526,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
-        // Image Zoom and Brightness Controls
-        const imageContainer = document.getElementById('image-container');
-        const mfergImage = document.getElementById('mferg-image');
-        const imageSection = document.getElementById('image-section');
+        // PDF Zoom Controls
+        const pdfContainer = document.querySelector('.pdf-container');
+        const pdfSection = document.getElementById('pdf-section');
         const fullscreenBtn = document.getElementById('fullscreen-btn');
-        const imageWrapper = document.querySelector('.image-wrapper');
+        const pdfWrapper = document.querySelector('.pdf-wrapper');
         let currentZoom = 1;
-        const brightnessSlider = document.querySelector('.brightness-slider');
         
         // Zoom functionality
         document.querySelector('.zoom-in').addEventListener('click', () => {
@@ -565,7 +540,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         
         document.querySelector('.zoom-out').addEventListener('click', () => {
-            currentZoom = Math.max(currentZoom - 0.1, 0.1);
+            currentZoom = Math.max(currentZoom - 0.1, 0.5);
             updateZoom();
         });
         
@@ -575,71 +550,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         
         function updateZoom() {
-            imageContainer.style.transform = `scale(${currentZoom})`;
+            pdfContainer.style.transform = `scale(${currentZoom})`;
+            pdfContainer.style.width = `${100 / currentZoom}%`;
+            pdfContainer.style.height = `${100 / currentZoom}%`;
         }
         
-        // Brightness controls
-        document.querySelector('.brightness-up').addEventListener('click', () => {
-            brightnessSlider.value = parseFloat(brightnessSlider.value) + 0.1;
-            updatePreviewBrightness();
+        // Download functionality
+        document.getElementById('download-btn').addEventListener('click', () => {
+            const a = document.createElement('a');
+            a.href = "<?= htmlspecialchars($pdf_path) ?>";
+            a.download = "MFERG_Report_<?= htmlspecialchars($patient_id) ?>_<?= $eye ?>_<?= htmlspecialchars($test_date) ?>.pdf";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         });
-        
-        document.querySelector('.brightness-down').addEventListener('click', () => {
-            brightnessSlider.value = parseFloat(brightnessSlider.value) - 0.1;
-            updatePreviewBrightness();
-        });
-        
-        brightnessSlider.addEventListener('input', updatePreviewBrightness);
-        
-        function updatePreviewBrightness() {
-            mfergImage.style.filter = `brightness(${brightnessSlider.value})`;
-        }
-        
-        // Center eye functionality
-        document.getElementById('center-eye-btn').addEventListener('click', centerEye);
-        
-        function centerEye() {
-            const imgWidth = mfergImage.naturalWidth;
-            const imgHeight = mfergImage.naturalHeight;
-            
-            // Calculate center coordinates (assuming eye is roughly centered in the image)
-            const centerX = imgWidth / 2;
-            const centerY = imgHeight / 2;
-            
-            // Calculate the viewport dimensions
-            const viewportWidth = imageWrapper.clientWidth;
-            const viewportHeight = imageWrapper.clientHeight;
-            
-            // Calculate the scale needed to fit the image to the viewport
-            const scaleX = viewportWidth / imgWidth;
-            const scaleY = viewportHeight / imgHeight;
-            const scale = Math.min(scaleX, scaleY);
-            
-            // Calculate the translation needed to center the eye
-            const translateX = (viewportWidth / 2 - centerX * scale) / scale;
-            const translateY = (viewportHeight / 2 - centerY * scale) / scale;
-            
-            // Apply the transformation
-            imageContainer.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
-            
-            // Update current zoom level
-            currentZoom = scale;
-        }
         
         // Fullscreen functionality
         fullscreenBtn.addEventListener('click', () => {
             if (!document.fullscreenElement) {
-                imageSection.classList.add('fullscreen');
-                if (imageSection.requestFullscreen) {
-                    imageSection.requestFullscreen();
-                } else if (imageSection.webkitRequestFullscreen) {
-                    imageSection.webkitRequestFullscreen();
-                } else if (imageSection.msRequestFullscreen) {
-                    imageSection.msRequestFullscreen();
+                pdfSection.classList.add('fullscreen');
+                if (pdfSection.requestFullscreen) {
+                    pdfSection.requestFullscreen();
+                } else if (pdfSection.webkitRequestFullscreen) {
+                    pdfSection.webkitRequestFullscreen();
+                } else if (pdfSection.msRequestFullscreen) {
+                    pdfSection.msRequestFullscreen();
                 }
-                
-                // Center the eye in fullscreen mode
-                setTimeout(centerEye, 100);
             } else {
                 if (document.exitFullscreen) {
                     document.exitFullscreen();
@@ -653,9 +589,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement) {
-                imageSection.classList.remove('fullscreen');
+                pdfSection.classList.remove('fullscreen');
                 // Reset to normal view when exiting fullscreen
-                imageContainer.style.transform = `scale(${currentZoom})`;
+                pdfContainer.style.transform = `scale(${currentZoom})`;
             }
         });
         
@@ -665,15 +601,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 currentZoom = Math.min(currentZoom + 0.1, 3);
                 updateZoom();
             } else if (e.key === '-') {
-                currentZoom = Math.max(currentZoom - 0.1, 0.1);
+                currentZoom = Math.max(currentZoom - 0.1, 0.5);
                 updateZoom();
             } else if (e.key === '0') {
                 currentZoom = 1;
                 updateZoom();
             } else if (e.key === 'f') {
                 fullscreenBtn.click();
-            } else if (e.key === 'c') {
-                centerEye();
+            } else if (e.key === 'd') {
+                document.getElementById('download-btn').click();
             }
         });
     </script>
