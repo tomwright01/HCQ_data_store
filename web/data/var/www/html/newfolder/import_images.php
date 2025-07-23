@@ -20,21 +20,8 @@ function processBulkImages($testType, $sourcePath) {
     ];
 
     // Validate and normalize paths
-   // Validate and normalize paths
-    // 1. FIRST get the directory name for this test type
     $testTypeDir = ALLOWED_TEST_TYPES[$testType];
-    
-    // 2. Normalize paths (ensure single trailing slash)
     $sourcePath = rtrim($sourcePath, '/') . '/';
-    
-    // 3. SMART PATH HANDLING - Only append subdirectory if:
-    //    - The path doesn't already contain it (e.g. "/data/FAF/")
-    //    - And the path isn't a custom full path (e.g. "/custom/FAF_folder/")
-   // if (!str_contains($sourcePath, "/$testTypeDir/")) {
-   //    $sourcePath .= $testTypeDir . '/';
-   // }
-    
-    // 4. Target directory remains consistent
     $targetDir = IMAGE_BASE_DIR . $testTypeDir . '/';
     
     // DEBUG: Add these lines to verify paths
@@ -59,8 +46,8 @@ function processBulkImages($testType, $sourcePath) {
     foreach ($files as $file) {
         $extension = strtolower($file->getExtension());
         
-        // Process PNG files for all test types except VF, or PDF for VF
-        if ($file->isFile() && ($extension === 'png' || ($testType === 'VF' && $extension === 'pdf'))) {
+        // Process PNG files for all test types except VF and OCT, or PDF for VF and OCT
+        if ($file->isFile() && ($extension === 'png' || (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf')) {
             $results['processed']++;
             $filename = $file->getFilename();
             $sourceFile = $file->getPathname();
@@ -88,9 +75,9 @@ function processBulkImages($testType, $sourcePath) {
                     throw new Exception("Patient $patientId not found in database");
                 }
 
-                // Special handling for VF PDFs
-                if ($testType === 'VF' && $fileExt === 'pdf') {
-                    $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
+                // Special handling for VF and OCT PDFs
+                if (($testType === 'VF' || $testType === 'OCT') && $fileExt === 'pdf') {
+                    $tempDir = sys_get_temp_dir() . '/pdf_anon_' . uniqid();
                     if (!mkdir($tempDir)) {
                         throw new Exception("Failed to create temp directory for anonymization");
                     }
@@ -209,14 +196,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $fileInfo = new finfo(FILEINFO_MIME_TYPE);
             $mime = $fileInfo->file($_FILES['image']['tmp_name']);
             
-            // Allow PNG for all tests or PDF for VF
-            if (!($mime === 'image/png' || ($testType === 'VF' && $mime === 'application/pdf'))) {
-                throw new Exception("For VF tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
+            // Allow PNG for all tests or PDF for VF and OCT
+            if (!($mime === 'image/png' || (($testType === 'VF' || $testType === 'OCT') && $mime === 'application/pdf')) {
+                throw new Exception("For VF and OCT tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
             }
             
-            // Special handling for VF PDFs
-            if ($testType === 'VF' && $mime === 'application/pdf') {
-                $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
+            // Special handling for VF and OCT PDFs
+            if (($testType === 'VF' || $testType === 'OCT') && $mime === 'application/pdf') {
+                $tempDir = sys_get_temp_dir() . '/pdf_anon_' . uniqid();
                 if (!mkdir($tempDir)) {
                     throw new Exception("Failed to create temp directory for anonymization");
                 }
@@ -592,7 +579,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <div class="form-group">
-                    <label for="image">File (PNG for all tests except VF, PDF for VF):</label>
+                    <label for="image">File (PNG for all tests except VF and OCT, PDF for VF and OCT):</label>
                     <input type="file" name="image" id="image" accept="image/png,.pdf" required>
                 </div>
                 
@@ -623,9 +610,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="requirements-box">
                     <h3>File Requirements for Bulk Import</h3>
                     <ul>
-                        <li>For <strong>VF tests</strong>: PDF files named <code>patientid_eye_YYYYMMDD.pdf</code></li>
+                        <li>For <strong>VF and OCT tests</strong>: PDF files named <code>patientid_eye_YYYYMMDD.pdf</code></li>
                         <li>For other tests: PNG files named <code>patientid_eye_YYYYMMDD.png</code></li>
-                        <li>Example: <code>12345_OD_20230715.pdf</code> (VF) or <code>12345_OD_20230715.png</code></li>
+                        <li>Example: <code>12345_OD_20230715.pdf</code> (VF/OCT) or <code>12345_OD_20230715.png</code></li>
                         <li>Patient ID must exist in the database</li>
                         <li>Eye must be either <strong>OD</strong> (right) or <strong>OS</strong> (left)</li>
                         <li>Date must be in <strong>YYYYMMDD</strong> format</li>
