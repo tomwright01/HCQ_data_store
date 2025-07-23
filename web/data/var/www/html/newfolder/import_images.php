@@ -60,7 +60,8 @@ function processBulkImages($testType, $sourcePath) {
         $extension = strtolower($file->getExtension());
         
         // Process PNG files for all test types except VF, or PDF for VF
-        if ($file->isFile() && ($extension === 'png' || ($testType === 'VF' && $extension === 'pdf'))) {
+        // Process PNG files for all test types, or PDF for VF/OCT
+        if ($file->isFile() && ($extension === 'png' || (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf'))) {
             $results['processed']++;
             $filename = $file->getFilename();
             $sourceFile = $file->getPathname();
@@ -89,7 +90,8 @@ function processBulkImages($testType, $sourcePath) {
                 }
 
                 // Special handling for VF PDFs
-                if ($testType === 'VF' && $fileExt === 'pdf') {
+                // Process PNG files for all test types, or PDF for VF/OCT
+                if ($file->isFile() && ($extension === 'png' || (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf'))) {
                     $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
                     if (!mkdir($tempDir)) {
                         throw new Exception("Failed to create temp directory for anonymization");
