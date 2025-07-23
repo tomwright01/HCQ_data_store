@@ -619,7 +619,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 <div class="form-group">
                     <label for="image">File (PNG for all tests except VF, PDF for VF):</label>
-                    <input type="file" name="image" id="image" accept="image/png,.pdf" required>
+                    <input type="file" name="image" id="image" accept="image/png,.pdf,.exp" required>
                 </div>
                 
                 <button type="submit" name="import">Upload File</button>
