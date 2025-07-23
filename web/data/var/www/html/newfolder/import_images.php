@@ -21,16 +21,25 @@ function processBulkImages($testType, $sourcePath) {
 
     // Validate and normalize paths
    // Validate and normalize paths
-    $sourcePath = rtrim($sourcePath, '/') . '/';
-    $testTypeDir = ALLOWED_TEST_TYPES[$testType]; // Define this first!
+    // 1. FIRST get the directory name for this test type
+    $testTypeDir = ALLOWED_TEST_TYPES[$testType];
     
-    // Only append subdirectory if not already present AND not using full path
-    $baseDir = rtrim(IMAGE_BASE_DIR, '/') . '/';
-    if (strpos($sourcePath, $testTypeDir) === false && strpos($sourcePath, $baseDir) !== false) {
+    // 2. Normalize paths (ensure single trailing slash)
+    $sourcePath = rtrim($sourcePath, '/') . '/';
+    
+    // 3. SMART PATH HANDLING - Only append subdirectory if:
+    //    - The path doesn't already contain it (e.g. "/data/FAF/")
+    //    - And the path isn't a custom full path (e.g. "/custom/FAF_folder/")
+    if (!str_contains($sourcePath, "/$testTypeDir/")) {
         $sourcePath .= $testTypeDir . '/';
     }
     
+    // 4. Target directory remains consistent
     $targetDir = IMAGE_BASE_DIR . $testTypeDir . '/';
+    
+    // DEBUG: Add these lines to verify paths
+    error_log("Final source path: $sourcePath");
+    error_log("Final target dir: $targetDir");
     
     if (!is_dir($sourcePath)) {
         throw new Exception("Source directory does not exist: " . htmlspecialchars($sourcePath));
