@@ -60,8 +60,7 @@ function processBulkImages($testType, $sourcePath) {
         $extension = strtolower($file->getExtension());
         
         // Process PNG files for all test types except VF, or PDF for VF
-        // Process PNG files for all test types, or PDF for VF/OCT
-        if ($file->isFile() && ($extension === 'png' || (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $extension === 'pdf'))) {
+        if ($file->isFile() && ($extension === 'png' || ($testType === 'VF' && $extension === 'pdf'))) {
             $results['processed']++;
             $filename = $file->getFilename();
             $sourceFile = $file->getPathname();
@@ -90,8 +89,7 @@ function processBulkImages($testType, $sourcePath) {
                 }
 
                 // Special handling for VF PDFs
-                // Special handling for VF and OCT PDFs
-                if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $fileExt === 'pdf') {
+                if ($testType === 'VF' && $fileExt === 'pdf') {
                     $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
                     if (!mkdir($tempDir)) {
                         throw new Exception("Failed to create temp directory for anonymization");
@@ -212,12 +210,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $mime = $fileInfo->file($_FILES['image']['tmp_name']);
             
             // Allow PNG for all tests or PDF for VF
-            if (!($mime === 'image/png' || (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $mime === 'application/pdf'))) {
-                throw new Exception("For VF, OCT and MFERG tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
+            if (!($mime === 'image/png' || ($testType === 'VF' && $mime === 'application/pdf'))) {
+                throw new Exception("For VF tests only PDF files are allowed, for other tests only PNG images are allowed (detected: $mime)");
             }
-
-            // Special handling for VF, OCT and MFERG PDFs
-            if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $mime === 'application/pdf') {
             
             // Special handling for VF PDFs
             if ($testType === 'VF' && $mime === 'application/pdf') {
