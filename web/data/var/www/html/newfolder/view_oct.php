@@ -3,9 +3,10 @@ require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
 // Get parameters from URL
-$ref = isset($_GET['ref']) ? $_GET['ref'] : '';
-$patient_id = isset($_GET['patient_id']) ? (int)$_GET['patient_id'] : 0;
-$eye = isset($_GET['eye']) ? $_GET['eye'] : '';
+$ref = $_GET['ref'] ?? '';
+$patient_id = $_GET['patient_id'] ?? '';
+$eye = $_GET['eye'] ?? '';
+$test_type = 'OCT'; // Hardcoded for OCT viewer
 
 // Validate parameters
 if (empty($ref) || empty($patient_id) || !in_array($eye, ['OD', 'OS'])) {
@@ -18,118 +19,38 @@ if (!$patient) {
     die("Patient not found.");
 }
 
-// Get visit data containing this OCT reference
-$stmt = $conn->prepare("SELECT * FROM Visits 
-                       WHERE patient_id = ? 
-                       AND (oct_reference_OD = ? OR oct_reference_OS = ?)");
-$stmt->bind_param("iss", $patient_id, $ref, $ref);
+// Get test data containing this image reference
+$fieldName = strtolower($test_type) . '_reference_' . strtolower($eye);
+$sql = "SELECT * FROM tests WHERE patient_id = ? AND $fieldName = ?";
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("ss", $patient_id, $ref);
 $stmt->execute();
-$visit = $stmt->get_result()->fetch_assoc();
+$test = $stmt->get_result()->fetch_assoc();
 
-if (!$visit) {
-    die("Visit data not found for this OCT image.");
+if (!$test) {
+    die("Test data not found for this OCT report.");
 }
 
-// Get image path
-$image_path = getDynamicImagePath($ref, 'oct');
-if (!$image_path) {
-    die("OCT image not found in the system.");
+// Get PDF path using the config function
+$pdf_path = getDynamicImagePath($ref);
+if (!$pdf_path) {
+    die("OCT report not found in the system.");
 }
 
 // Calculate patient age
-$current_year = date('Y');
-$age = $current_year - $patient['year_of_birth'];
+$age = !empty($patient['date_of_birth']) ? 
+    date_diff(date_create($patient['date_of_birth']), date_create('today'))->y : 'N/A';
 
-// Get MERCI score and OCT stage from Grading table
-$stmt = $conn->prepare("SELECT score_value FROM Grading 
-                       WHERE visit_id = ? 
-                       AND test_type = 'oct' 
-                       AND eye_side = ? 
-                       AND score_type = 'stage'");
-$stmt->bind_param("is", $visit['visit_id'], $eye);
-$stmt->execute();
-$grading_result = $stmt->get_result()->fetch_assoc();
-$current_stage = $grading_result ? $grading_result['score_value'] : null;
-
-// Get brightness setting
-$stmt = $conn->prepare("SELECT score_value FROM Grading 
-                       WHERE visit_id = ? 
-                       AND test_type = 'oct' 
-                       AND eye_side = ? 
-                       AND score_type = 'brightness'");
-$stmt->bind_param("is", $visit['visit_id'], $eye);
-$stmt->execute();
-$brightness_result = $stmt->get_result()->fetch_assoc();
-$current_brightness = $brightness_result ? $brightness_result['score_value'] : 1.0;
-
-// Handle form submissions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Handle stage update
-    if (isset($_POST['stage'])) {
-        $new_stage = (int)$_POST['stage'];
-        if ($new_stage >= 0 && $new_stage <= 4) {
-            // Check if grading exists
-            $stmt = $conn->prepare("SELECT grading_id FROM Grading 
-                                   WHERE visit_id = ? 
-                                   AND test_type = 'oct' 
-                                   AND eye_side = ? 
-                                   AND score_type = 'stage'");
-            $stmt->bind_param("is", $visit['visit_id'], $eye);
-            $stmt->execute();
-            $existing = $stmt->get_result()->fetch_assoc();
-            
-            if ($existing) {
-                // Update existing
-                $stmt = $conn->prepare("UPDATE Grading SET score_value = ? 
-                                       WHERE grading_id = ?");
-                $stmt->bind_param("ii", $new_stage, $existing['grading_id']);
-            } else {
-                // Insert new
-                $stmt = $conn->prepare("INSERT INTO Grading 
-                                      (visit_id, test_type, eye_side, score_type, score_value) 
-                                      VALUES (?, 'oct', ?, 'stage', ?)");
-                $stmt->bind_param("isi", $visit['visit_id'], $eye, $new_stage);
-            }
-            
-            if ($stmt->execute()) {
-                $current_stage = $new_stage;
-            }
-        }
-    }
-    
-    // Handle brightness update
-    if (isset($_POST['brightness'])) {
-        $new_brightness = (float)$_POST['brightness'];
-        if ($new_brightness >= 0.1 && $new_brightness <= 3.0) {
-            // Check if brightness setting exists
-            $stmt = $conn->prepare("SELECT grading_id FROM Grading 
-                                   WHERE visit_id = ? 
-                                   AND test_type = 'oct' 
-                                   AND eye_side = ? 
-                                   AND score_type = 'brightness'");
-            $stmt->bind_param("is", $visit['visit_id'], $eye);
-            $stmt->execute();
-            $existing = $stmt->get_result()->fetch_assoc();
-            
-            if ($existing) {
-                // Update existing
-                $stmt = $conn->prepare("UPDATE Grading SET score_value = ? 
-                                       WHERE grading_id = ?");
-                $stmt->bind_param("di", $new_brightness, $existing['grading_id']);
-            } else {
-                // Insert new
-                $stmt = $conn->prepare("INSERT INTO Grading 
-                                      (visit_id, test_type, eye_side, score_type, score_value) 
-                                      VALUES (?, 'oct', ?, 'brightness', ?)");
-                $stmt->bind_param("isd", $visit['visit_id'], $eye, $new_brightness);
-            }
-            
-            if ($stmt->execute()) {
-                $current_brightness = $new_brightness;
-            }
-        }
-    }
-}
+// Get all diagnostic data directly from database
+$merci_score = $test['merci_score'] ?? 'N/A';
+$report_diagnosis = $test['report_diagnosis'] ?? 'Not specified';
+$exclusion = $test['exclusion'] ?? 'None';
+$merci_diagnosis = $test['merci_diagnosis'] ?? 'Not specified';
+$error_type = $test['error_type'] ?? 'N/A';
+$faf_grade = $test['faf_grade'] ?? 'N/A';
+$oct_score = $test['oct_score'] ?? 'N/A';
+$vf_score = $test['vf_score'] ?? 'N/A';
+$test_date = $test['date_of_test'] ?? 'Unknown';
 ?>
 
 <!DOCTYPE html>
@@ -137,14 +58,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OCT Viewer - Patient <?= $patient_id ?></title>
+    <title>OCT Viewer - Patient <?= htmlspecialchars($patient_id) ?></title>
     <style>
+        :root {
+            --primary-color: #00a88f;
+            --primary-dark: #008774;
+            --text-color: #333;
+            --bg-color: #fff;
+            --light-bg: #f5f5f5;
+            --border-color: #e0e0e0;
+            --meta-bg: #f0f0f0;
+            --card-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
         body {
             font-family: 'Arial', sans-serif;
             margin: 0;
             padding: 0;
-            background-color: #f5f5f5;
-            color: #333;
+            background-color: var(--light-bg);
+            color: var(--text-color);
         }
         
         .container {
@@ -152,10 +84,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             height: 100vh;
         }
         
-        .image-section {
+        .pdf-section {
             flex: 1;
             padding: 20px;
-            background-color: #000;
+            background-color: #f0f0f0;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -164,7 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             position: relative;
         }
         
-        .image-controls {
+        .pdf-controls {
             position: absolute;
             top: 20px;
             right: 20px;
@@ -184,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .control-btn {
-            background: #4CAF50;
+            background: var(--primary-color);
             color: white;
             border: none;
             border-radius: 4px;
@@ -198,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .control-btn:hover {
-            background: #3d8b40;
+            background: var(--primary-dark);
         }
         
         .zoom-controls {
@@ -206,54 +138,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             gap: 5px;
         }
         
-        .brightness-control {
+        .pdf-wrapper {
+            width: 100%;
+            height: 100%;
+            overflow: auto;
             display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .brightness-slider {
-            width: 100px;
-        }
-        
-        .image-wrapper {
-            max-width: 100%;
-            max-height: 100%;
-            overflow: hidden;
-            transition: transform 0.3s ease;
-        }
-        
-        .image-container {
-            transition: filter 0.3s ease;
-            transform-origin: center center;
-            display: flex;
-            align-items: center;
             justify-content: center;
+            align-items: center;
         }
         
-        .image-container img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
-            image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
+        .pdf-container {
+            background-color: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        
+        .pdf-container embed {
+            width: 100%;
+            height: 100%;
         }
         
         .info-section {
             flex: 1;
             padding: 30px;
-            background-color: white;
+            background-color: var(--bg-color);
             overflow-y: auto;
         }
         
         .patient-header {
-            border-bottom: 2px solid #4CAF50;
+            border-bottom: 2px solid var(--primary-color);
             padding-bottom: 15px;
             margin-bottom: 20px;
         }
         
         .patient-header h1 {
-            color: #4CAF50;
+            color: var(--primary-color);
             margin: 0;
             display: flex;
             align-items: center;
@@ -267,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .meta-item {
-            background-color: #f0f0f0;
+            background-color: var(--meta-bg);
             padding: 8px 15px;
             border-radius: 20px;
             font-size: 14px;
@@ -277,21 +195,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .meta-item i {
             margin-right: 8px;
-            color: #4CAF50;
+            color: var(--primary-color);
         }
         
         .score-card {
-            background-color: #f9f9f9;
+            background-color: var(--light-bg);
             border-radius: 10px;
             padding: 25px;
             margin: 25px 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
         }
         
         .score-value {
             font-size: 72px;
             font-weight: bold;
-            color: #4CAF50;
+            color: var(--primary-color);
             text-align: center;
             margin: 20px 0;
             line-height: 1;
@@ -306,7 +224,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .progress-container {
             width: 100%;
-            background-color: #e0e0e0;
+            background-color: var(--border-color);
             border-radius: 5px;
             margin: 20px 0;
             height: 25px;
@@ -314,9 +232,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         .progress-bar {
             height: 100%;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             border-radius: 5px;
-            width: <?= $merci_score ? ($merci_score / 5 * 100) : 0 ?>%;
+            width: <?= $merci_score !== 'N/A' ? ($merci_score / 100 * 100) : 0 ?>%;
             transition: width 0.3s ease;
             position: relative;
         }
@@ -336,113 +254,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             justify-content: center;
         }
         
-        .grading-card {
-            background-color: #f9f9f9;
+        .diagnostic-card {
+            background-color: var(--light-bg);
             border-radius: 10px;
             padding: 25px;
             margin: 25px 0;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            box-shadow: var(--card-shadow);
         }
         
-        .grading-card h2 {
-            color: #4CAF50;
+        .diagnostic-card h2 {
+            color: var(--primary-color);
             margin-top: 0;
             margin-bottom: 20px;
-        }
-        
-        .grading-system {
-            border-left: 3px solid #e0e0e0;
-            padding-left: 15px;
-            margin: 15px 0;
-        }
-        
-        .stage {
-            padding: 12px 0;
-            border-bottom: 1px dashed #e0e0e0;
-            display: flex;
-            align-items: flex-start;
-        }
-        
-        .stage:last-child {
-            border-bottom: none;
-        }
-        
-        .stage.active {
-            background-color: #f0f9f0;
-            margin: 0 -25px;
-            padding: 12px 25px;
-            border-left: 4px solid #4CAF50;
-        }
-        
-        .stage-radio {
-            margin-right: 15px;
-            margin-top: 3px;
-            accent-color: #4CAF50;
-            transform: scale(1.3);
-            cursor: pointer;
-        }
-        
-        .stage-content {
-            flex: 1;
-        }
-        
-        .stage-number {
-            font-weight: bold;
-            color: #4CAF50;
-            margin-bottom: 5px;
-        }
-        
-        .stage-description {
-            color: #555;
-            font-size: 14px;
-            line-height: 1.4;
-        }
-        
-        .grading-note {
-            font-size: 13px;
-            color: #666;
-            font-style: italic;
-            margin-top: 15px;
-        }
-        
-        .stage-form {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        
-        .save-btn {
-            align-self: flex-start;
-            padding: 8px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-top: 10px;
-            transition: background-color 0.3s;
-        }
-        
-        .save-btn:hover {
-            background-color: #3d8b40;
-        }
-        
-        .save-confirmation {
-            color: #4CAF50;
-            font-size: 14px;
-            margin-top: 10px;
-        }
-        
-        .visit-details {
-            margin-top: 30px;
         }
         
         .detail-row {
             display: flex;
             margin-bottom: 12px;
             padding-bottom: 12px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid var(--border-color);
         }
         
         .detail-label {
@@ -461,7 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             align-items: center;
             padding: 12px 25px;
             margin-top: 25px;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
             text-decoration: none;
             border-radius: 5px;
@@ -470,14 +300,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         
         .back-button:hover {
-            background-color: #3d8b40;
+            background-color: var(--primary-dark);
         }
         
         .eye-indicator {
             display: inline-flex;
             align-items: center;
             padding: 5px 15px;
-            background-color: #4CAF50;
+            background-color: var(--primary-color);
             color: white;
             border-radius: 20px;
             font-size: 14px;
@@ -498,17 +328,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flex: 1;
         }
         
+        .fullscreen-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 168, 143, 0.7);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 10;
+        }
+        
+        .fullscreen-btn:hover {
+            background: rgba(0, 168, 143, 0.9);
+        }
+        
+        .pdf-section.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1000;
+        }
+        
+        .pdf-section.fullscreen .pdf-wrapper {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .pdf-section.fullscreen .fullscreen-btn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+        }
+        
         @media (max-width: 768px) {
             .container {
                 flex-direction: column;
                 height: auto;
             }
             
-            .image-section {
+            .pdf-section {
                 height: 50vh;
             }
             
-            .image-controls {
+            .pdf-controls {
                 top: 10px;
                 right: 10px;
                 padding: 5px;
@@ -518,29 +386,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <div class="container">
-        <!-- Image Section with Controls -->
-        <div class="image-section">
-            <div class="image-controls">
+        <!-- PDF Section with Controls -->
+        <div class="pdf-section" id="pdf-section">
+            <div class="pdf-controls">
                 <div class="control-group zoom-controls">
                     <button class="control-btn zoom-out">-</button>
-                    <button class="control-btn zoom-reset">1:1</button>
+                    <button class="control-btn zoom-reset">100%</button>
                     <button class="control-btn zoom-in">+</button>
                 </div>
-                <form method="POST" class="control-group brightness-control">
-                    <button type="button" class="control-btn brightness-down">-</button>
-                    <input type="range" class="brightness-slider" name="brightness" min="0.1" max="3.0" step="0.1" 
-                           value="<?= $current_brightness ?>">
-                    <button type="button" class="control-btn brightness-up">+</button>
-                    <button type="submit" class="control-btn" style="margin-left: 5px;">✓</button>
-                </form>
-            </div>
-            
-            <div class="image-wrapper">
-                <div class="image-container" id="image-container">
-                    <img src="<?= htmlspecialchars($image_path) ?>" alt="OCT Image" id="oct-image"
-                         style="filter: brightness(<?= $current_brightness ?>);">
+                <div class="control-group">
+                    <button class="control-btn" id="download-btn">↓</button>
                 </div>
             </div>
+            
+            <div class="pdf-wrapper">
+                <div class="pdf-container" style="width: 100%; height: 80vh;">
+                    <embed 
+                        src="<?= htmlspecialchars($pdf_path) ?>#toolbar=0&navpanes=0&scrollbar=0&zoom=100" 
+                        type="application/pdf"
+                        style="width: 100%; height: 100%;"
+                    >
+                </div>
+            </div>
+            <button class="fullscreen-btn" id="fullscreen-btn">Fullscreen</button>
+            
             <div class="eye-indicator">
                 <?= $eye ?> (<?= $eye == 'OD' ? 'Right Eye' : 'Left Eye' ?>)
             </div>
@@ -551,163 +420,94 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="patient-header">
                 <h1>
                     Patient <?= htmlspecialchars($patient_id) ?>
-                    <?php if (!empty($patient['disease_name'])): ?>
-                        <span style="font-size: 18px; margin-left: 15px; color: #666;">
-                            (<?= htmlspecialchars($patient['disease_name']) ?>)
-                        </span>
-                    <?php endif; ?>
+                    <span class="eye-indicator">
+                        <?= $eye ?> (<?= $eye == 'OD' ? 'Right Eye' : 'Left Eye' ?>)
+                    </span>
                 </h1>
                 <div class="patient-meta">
                     <div class="meta-item">
                         <i>👤</i> <?= $age ?> years
                     </div>
-                    <div class="meta-item">
-                        <i>⚥</i> <?= $patient['gender'] == 'm' ? 'Male' : 'Female' ?>
-                    </div>
-                    <div class="meta-item">
-                        <i>📍</i> <?= htmlspecialchars($patient['location']) ?>
-                    </div>
-                    <?php if (!empty($patient['referring_doctor'])): ?>
+                    <?php if (!empty($patient['subject_id'])): ?>
                         <div class="meta-item">
-                            <i>👨‍⚕️</i> Dr. <?= htmlspecialchars($patient['referring_doctor']) ?>
+                            <i>🆔</i> <?= htmlspecialchars($patient['subject_id']) ?>
                         </div>
                     <?php endif; ?>
                 </div>
             </div>
             
             <div class="score-card">
-                <h2>OCT Grading</h2>
-                <div class="score-value"><?= $current_stage !== null ? htmlspecialchars($current_stage) : 'N/A' ?></div>
-                <div class="score-label">out of 4</div>
+                <h2>MERCI Score</h2>
+                <div class="score-value"><?= $merci_score !== 'N/A' ? htmlspecialchars($merci_score) : 'N/A' ?></div>
+                <div class="score-label">out of 100</div>
                 
                 <div class="progress-container">
-                    <div class="progress-bar" style="width: <?= $current_stage !== null ? ($current_stage / 4 * 100) : 0 ?>%;">
-                        <?php if ($current_stage !== null): ?>
-                            <div class="progress-marker"><?= $current_stage ?></div>
+                    <div class="progress-bar">
+                        <?php if ($merci_score !== 'N/A'): ?>
+                            <div class="progress-marker"><?= $merci_score ?></div>
                         <?php endif; ?>
                     </div>
                 </div>
                 
                 <div class="severity-scale">
-                    <div class="scale-item">0 - Normal</div>
-                    <div class="scale-item">1 - Mild</div>
-                    <div class="scale-item">2 - Moderate</div>
-                    <div class="scale-item">3 - Severe</div>
-                    <div class="scale-item">4 - Very Severe</div>
+                    <div class="scale-item">0-20 - Normal</div>
+                    <div class="scale-item">21-40 - Mild</div>
+                    <div class="scale-item">41-60 - Moderate</div>
+                    <div class="scale-item">61-80 - Significant</div>
+                    <div class="scale-item">81-100 - Severe</div>
                 </div>
             </div>
             
-            <div class="grading-card">
-                <h2>OCT Staging System</h2>
-                
-                <form method="POST" class="stage-form">
-                    <div class="grading-system">
-                        <div class="stage <?= ($current_stage == 0) ? 'active' : '' ?>">
-                            <input type="radio" name="stage" value="0" class="stage-radio" 
-                                   id="stage-0" <?= ($current_stage == 0) ? 'checked' : '' ?>>
-                            <div class="stage-content">
-                                <label for="stage-0">
-                                    <div class="stage-number">Stage 0</div>
-                                    <div class="stage-description">Normal retinal layers with no visible abnormalities</div>
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="stage <?= ($current_stage == 1) ? 'active' : '' ?>">
-                            <input type="radio" name="stage" value="1" class="stage-radio" 
-                                   id="stage-1" <?= ($current_stage == 1) ? 'checked' : '' ?>>
-                            <div class="stage-content">
-                                <label for="stage-1">
-                                    <div class="stage-number">Stage 1</div>
-                                    <div class="stage-description">Mild retinal layer disruption or thinning</div>
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="stage <?= ($current_stage == 2) ? 'active' : '' ?>">
-                            <input type="radio" name="stage" value="2" class="stage-radio" 
-                                   id="stage-2" <?= ($current_stage == 2) ? 'checked' : '' ?>>
-                            <div class="stage-content">
-                                <label for="stage-2">
-                                    <div class="stage-number">Stage 2</div>
-                                    <div class="stage-description">Moderate retinal layer disruption with visible abnormalities</div>
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="stage <?= ($current_stage == 3) ? 'active' : '' ?>">
-                            <input type="radio" name="stage" value="3" class="stage-radio" 
-                                   id="stage-3" <?= ($current_stage == 3) ? 'checked' : '' ?>>
-                            <div class="stage-content">
-                                <label for="stage-3">
-                                    <div class="stage-number">Stage 3</div>
-                                    <div class="stage-description">Severe retinal layer disruption with significant abnormalities</div>
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <div class="stage <?= ($current_stage == 4) ? 'active' : '' ?>">
-                            <input type="radio" name="stage" value="4" class="stage-radio" 
-                                   id="stage-4" <?= ($current_stage == 4) ? 'checked' : '' ?>>
-                            <div class="stage-content">
-                                <label for="stage-4">
-                                    <div class="stage-number">Stage 4</div>
-                                    <div class="stage-description">Very severe disruption with complete layer breakdown</div>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <button type="submit" class="save-btn">Save OCT Stage</button>
-                    <?php if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['stage'])): ?>
-                        <div class="save-confirmation" style="display: block;">
-                            Stage updated successfully!
-                        </div>
-                    <?php endif; ?>
-                </form>
-                
-                <p class="grading-note">
-                    This classification system evaluates the severity of retinal layer abnormalities visible on OCT imaging.
-                </p>
-            </div>
-            
-            <div class="visit-details">
-                <h2>Visit Information</h2>
+            <div class="diagnostic-card">
+                <h2>Diagnostic Information</h2>
                 
                 <div class="detail-row">
-                    <div class="detail-label">Visit Date:</div>
-                    <div class="detail-value"><?= htmlspecialchars($visit['visit_date']) ?></div>
+                    <div class="detail-label">Test Date:</div>
+                    <div class="detail-value"><?= htmlspecialchars($test_date) ?></div>
                 </div>
                 
-                <?php if (!empty($visit['visit_notes'])): ?>
+                <div class="detail-row">
+                    <div class="detail-label">Report Diagnosis:</div>
+                    <div class="detail-value"><?= htmlspecialchars($report_diagnosis) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">MERCI Diagnosis:</div>
+                    <div class="detail-value"><?= htmlspecialchars($merci_diagnosis) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Exclusion:</div>
+                    <div class="detail-value"><?= htmlspecialchars($exclusion) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">Error Type:</div>
+                    <div class="detail-value"><?= htmlspecialchars($error_type) ?></div>
+                </div>
+                
+                <div class="detail-row">
+                    <div class="detail-label">FAF Grade:</div>
+                    <div class="detail-value"><?= htmlspecialchars($faf_grade) ?></div>
+                </div>
+                
+                <?php if ($oct_score !== 'N/A'): ?>
                     <div class="detail-row">
-                        <div class="detail-label">Clinical Notes:</div>
-                        <div class="detail-value"><?= nl2br(htmlspecialchars($visit['visit_notes'])) ?></div>
+                        <div class="detail-label">OCT Score:</div>
+                        <div class="detail-value"><?= htmlspecialchars($oct_score) ?></div>
+                    </div>
+                <?php endif; ?>
+                
+                <?php if ($vf_score !== 'N/A'): ?>
+                    <div class="detail-row">
+                        <div class="detail-label">VF Score:</div>
+                        <div class="detail-value"><?= htmlspecialchars($vf_score) ?></div>
                     </div>
                 <?php endif; ?>
                 
                 <div class="detail-row">
-                    <div class="detail-label">Image Reference:</div>
+                    <div class="detail-label">Report Reference:</div>
                     <div class="detail-value"><?= htmlspecialchars($ref) ?></div>
-                </div>
-                
-                <?php if (!empty($patient['disease_id'])): ?>
-                    <div class="detail-row">
-                        <div class="detail-label">Disease Code:</div>
-                        <div class="detail-value">
-                            <?= htmlspecialchars($patient['disease_id']) ?>
-                            <?php if (!empty($patient['disease_name'])): ?>
-                                (<?= htmlspecialchars($patient['disease_name']) ?>)
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                <?php endif; ?>
-                
-                <div class="detail-row">
-                    <div class="detail-label">OCT Stage:</div>
-                    <div class="detail-value">
-                        <?= !is_null($current_stage) ? "Stage $current_stage" : "Not graded" ?>
-                    </div>
                 </div>
             </div>
             
@@ -718,11 +518,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 
     <script>
-        // Image Zoom and Brightness Controls
-        const imageContainer = document.getElementById('image-container');
-        const octImage = document.getElementById('oct-image');
+        // PDF Zoom Controls
+        const pdfContainer = document.querySelector('.pdf-container');
+        const pdfSection = document.getElementById('pdf-section');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        const pdfWrapper = document.querySelector('.pdf-wrapper');
         let currentZoom = 1;
-        const brightnessSlider = document.querySelector('.brightness-slider');
         
         // Zoom functionality
         document.querySelector('.zoom-in').addEventListener('click', () => {
@@ -731,7 +532,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         
         document.querySelector('.zoom-out').addEventListener('click', () => {
-            currentZoom = Math.max(currentZoom - 0.1, 0.1);
+            currentZoom = Math.max(currentZoom - 0.1, 0.5);
             updateZoom();
         });
         
@@ -741,25 +542,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         });
         
         function updateZoom() {
-            imageContainer.style.transform = `scale(${currentZoom})`;
+            pdfContainer.style.transform = `scale(${currentZoom})`;
+            pdfContainer.style.width = `${100 / currentZoom}%`;
+            pdfContainer.style.height = `${100 / currentZoom}%`;
         }
         
-        // Brightness controls
-        document.querySelector('.brightness-up').addEventListener('click', () => {
-            brightnessSlider.value = parseFloat(brightnessSlider.value) + 0.1;
-            updatePreviewBrightness();
+        // Download functionality
+        document.getElementById('download-btn').addEventListener('click', () => {
+            const a = document.createElement('a');
+            a.href = "<?= htmlspecialchars($pdf_path) ?>";
+            a.download = "OCT_Report_<?= htmlspecialchars($patient_id) ?>_<?= $eye ?>_<?= htmlspecialchars($test_date) ?>.pdf";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
         });
         
-        document.querySelector('.brightness-down').addEventListener('click', () => {
-            brightnessSlider.value = parseFloat(brightnessSlider.value) - 0.1;
-            updatePreviewBrightness();
+        // Fullscreen functionality
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                pdfSection.classList.add('fullscreen');
+                if (pdfSection.requestFullscreen) {
+                    pdfSection.requestFullscreen();
+                } else if (pdfSection.webkitRequestFullscreen) {
+                    pdfSection.webkitRequestFullscreen();
+                } else if (pdfSection.msRequestFullscreen) {
+                    pdfSection.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                } else if (document.msExitFullscreen) {
+                    document.msExitFullscreen();
+                }
+            }
         });
         
-        brightnessSlider.addEventListener('input', updatePreviewBrightness);
-        
-        function updatePreviewBrightness() {
-            octImage.style.filter = `brightness(${brightnessSlider.value})`;
-        }
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                pdfSection.classList.remove('fullscreen');
+                // Reset to normal view when exiting fullscreen
+                pdfContainer.style.transform = `scale(${currentZoom})`;
+            }
+        });
         
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
@@ -767,29 +593,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 currentZoom = Math.min(currentZoom + 0.1, 3);
                 updateZoom();
             } else if (e.key === '-') {
-                currentZoom = Math.max(currentZoom - 0.1, 0.1);
+                currentZoom = Math.max(currentZoom - 0.1, 0.5);
                 updateZoom();
             } else if (e.key === '0') {
                 currentZoom = 1;
                 updateZoom();
-            }
-        });
-        
-        // Stage form submission feedback
-        document.querySelector('.stage-form')?.addEventListener('submit', function() {
-            const btn = this.querySelector('.save-btn');
-            const confirmation = this.querySelector('.save-confirmation');
-            if (btn) {
-                btn.textContent = 'Saving...';
-                setTimeout(() => {
-                    btn.textContent = 'Save OCT Stage';
-                    if (confirmation) {
-                        confirmation.style.display = 'block';
-                        setTimeout(() => {
-                            confirmation.style.display = 'none';
-                        }, 3000);
-                    }
-                }, 1000);
+            } else if (e.key === 'f') {
+                fullscreenBtn.click();
+            } else if (e.key === 'd') {
+                document.getElementById('download-btn').click();
             }
         });
     </script>
