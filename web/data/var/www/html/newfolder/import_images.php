@@ -598,8 +598,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="form-group">
                     <label for="folder_path">Source Folder Path:</label>
                     <input type="text" name="folder_path" id="folder_path" required 
-                           value="<?= htmlspecialchars(IMAGE_BASE_DIR . 'FAF/') ?>"
-                           placeholder="e.g., /var/www/html/data/FAF/">
+                           value="<?= htmlspecialchars(IMAGE_BASE_DIR) ?>"
+                           placeholder="e.g., /var/www/html/data/">
                 </div>
                 
                 <div class="requirements-box">
