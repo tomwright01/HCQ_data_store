@@ -22,6 +22,11 @@ function processBulkImages($testType, $sourcePath) {
     // Validate and normalize paths
     $sourcePath = rtrim($sourcePath, '/') . '/';
     $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
+
+    // AUTO-APPEND TEST TYPE SUBDIRECTORY IF MISSING
+    if (strpos($sourcePath, $testTypeDir) === false) {
+        $sourcePath .= $testTypeDir . '/';  // Adds "FAF/" if not present
+    }
     
     if (!is_dir($sourcePath)) {
         throw new Exception("Source directory does not exist: " . htmlspecialchars($sourcePath));
