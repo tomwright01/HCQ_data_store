@@ -91,7 +91,7 @@ function processBulkImages($testType, $sourcePath) {
 
                 // Special handling for VF PDFs
                 // Process PNG files for all test types, or PDF for VF/OCT
-                if ($file->isFile() && ($extension === 'png' || (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf'))) {
+                if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $fileExt === 'pdf') {
                     $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
                     if (!mkdir($tempDir)) {
                         throw new Exception("Failed to create temp directory for anonymization");
@@ -644,4 +644,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </div>
 </body>
 </html>
-(
