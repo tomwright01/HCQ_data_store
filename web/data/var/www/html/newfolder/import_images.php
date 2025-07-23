@@ -61,8 +61,7 @@ function processBulkImages($testType, $sourcePath) {
         
         // Process PNG files for all test types except VF, or PDF for VF
         // Process PNG files for all test types, or PDF for VF/OCT
-        // Process PNG/PDF/EXP files based on test type
-        if ($file->isFile() && ( $extension === 'png' || (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf') || ($testType === 'MFERG' && ($extension === 'pdf' || $extension === 'exp')))) {
+        if ($file->isFile() && ( $extension === 'png' || (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf') ||($testType === 'MFERG' && ($extension === 'pdf' || $extension === 'exp')))) {
             $results['processed']++;
             $filename = $file->getFilename();
             $sourceFile = $file->getPathname();
@@ -92,23 +91,36 @@ function processBulkImages($testType, $sourcePath) {
 
                 // Special handling for VF PDFs
                 // Process PNG files for all test types, or PDF for VF/OCT
-                // Special handling for VF/OCT PDFs and MFERG PDF/EXP files
                 if (($testType === 'VF' || $testType === 'OCT') && $fileExt === 'pdf') {
-                    // Existing PDF anonymization code
+                    // Handle VF/OCT PDF anonymization
+                    $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
+                    if (!mkdir($tempDir)) {
+                        throw new Exception("Failed to create temp directory for anonymization");
+                    }
+                    // ... rest of PDF anonymization code ...
                 } 
                 elseif ($testType === 'MFERG' && $fileExt === 'pdf') {
-                    // PDF anonymization for MFERG
+                    // Handle MFERG PDF anonymization (same as VF/OCT)
                     $tempDir = sys_get_temp_dir() . '/mferg_anon_' . uniqid();
-                    // ... same anonymization process as VF/OCT PDFs
+                    if (!mkdir($tempDir)) {
+                        throw new Exception("Failed to create temp directory for anonymization");
+                    }
+                    // ... same anonymization process as above ...
                 }
                 elseif ($testType === 'MFERG' && $fileExt === 'exp') {
-                    // Direct copy for .exp files (no anonymization)
+                    // Handle MFERG EXP files (direct copy, no anonymization)
                     $targetFile = $targetDir . $filename;
                     if (!copy($sourceFile, $targetFile)) {
                         throw new Exception("Failed to copy EXP file to target directory");
                     }
                 }
-
+                else {
+                    // Handle PNG files (normal processing)
+                    $targetFile = $targetDir . $filename;
+                    if (!copy($sourceFile, $targetFile)) {
+                        throw new Exception("Failed to copy image to target directory");
+                    }
+                }
                     // Run the anonymization script
                     $output = [];
                     $returnVar = 0;
