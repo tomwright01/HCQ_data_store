@@ -298,16 +298,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif (isset($_POST['bulk_import'])) {
             // Bulk import processing
-            $testType = $_POST['bulk_test_type'] ?? '';
-            $sourcePath = $_POST['folder_path'] ?? '';
-            
-            if (empty($testType) || empty($sourcePath)) {
-                throw new Exception("Test type and folder path are required");
+            if (empty($testType)) {
+                throw new Exception("Test type is required");
+            }
+            if (!isset($_FILES['bulk_files']) || empty($_FILES['bulk_files']['name'][0])) {
+                throw new Exception("Please select a folder with files");
             }
             
-            if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
-                throw new Exception("Invalid test type selected");
+            $results = [
+                'processed' => 0,
+                'success' => 0,
+                'errors' => []
+            ];
+            
+            foreach ($_FILES['bulk_files']['tmp_name'] as $i => $tmpName) {
+                $originalName = $_FILES['bulk_files']['name'][$i];
+                $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+            
+                try {
+                    processSingleBulkFile($testType, $originalName, $tmpName);
+                    $results['success']++;
+                } catch (Exception $e) {
+                    $results['errors'][] = [
+                        'file' => $originalName,
+                        'error' => $e->getMessage(),
+                        'path' => $tmpName
+                    ];
+                }
+                $results['processed']++;
             }
+
             
             $results = processBulkImages($testType, $sourcePath);
             
