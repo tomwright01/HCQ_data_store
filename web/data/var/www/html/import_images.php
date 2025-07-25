@@ -298,15 +298,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } elseif (isset($_POST['bulk_import'])) {
             // Bulk import processing
-            $testType = $_POST['bulk_test_type'] ?? '';
-            $sourcePath = $_POST['folder_path'] ?? '';
-            
-            if (empty($testType) || empty($sourcePath)) {
-                throw new Exception("Test type and folder path are required");
+           $testType = $_POST['bulk_test_type'] ?? '';
+    
+            if (empty($testType)) {
+                throw new Exception("Test type is required");
             }
             
             if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
                 throw new Exception("Invalid test type selected");
+            }
+            
+            if (empty($_FILES['files']['name'][0])) {
+                throw new Exception("Please select a folder to upload");
+            }
+            
+            // Create temporary directory
+            $tempDir = sys_get_temp_dir() . '/bulk_import_' . uniqid();
+            if (!mkdir($tempDir)) {
+                throw new Exception("Failed to create temporary directory");
+            }
+            
+            // Move uploaded files
+            $fileCount = count($_FILES['files']['name']);
+            for ($i = 0; $i < $fileCount; $i++) {
+                $tmpName = $_FILES['files']['tmp_name'][$i];
+                $name = basename($_FILES['files']['name'][$i]);
+                $targetPath = $tempDir . '/' . $name;
+                
+                if (!move_uploaded_file($tmpName, $targetPath)) {
+                    throw new Exception("Failed to move uploaded file: " . $name);
+                }
             }
             
             $results = processBulkImages($testType, $sourcePath);
