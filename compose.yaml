@@ -4,6 +4,8 @@ services:
         build: ./database
         restart: always
         container_name: mariadb
+        volumes:
+            - ./DATA_STORE/database:/var/lib/mysql
         environment:
             MARIADB_ROOT_PASSWORD: notgood
     
@@ -19,6 +21,6 @@ services:
         restart: always
         container_name: web
         volumes:
-            - ./SAMPLE/:/var/www/html/data
+            - ./DATA_STORE/:/var/www/html/data
         ports: 
             - "8888:8080"
