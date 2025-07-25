@@ -6,6 +6,8 @@ set_time_limit(0);
 ini_set('memory_limit', '1024M');
 
 header("Access-Control-Allow-Origin: *");
+header("Access-Control-Allow-Methods: POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
     $testType = $_POST['test_type'] ?? '';
@@ -30,11 +32,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
         exit;
     }
 
-    // Process using your existing function
-    if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
+    // Process file using your existing function
+    $success = importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name']);
+
+    if ($success) {
         echo json_encode(['status' => 'success', 'message' => $_FILES['image']['name'] . ' uploaded']);
     } else {
-        echo json_encode(['status' => 'error', 'message' => 'Failed to import ' . $_FILES['image']['name']]);
+        echo json_encode(['status' => 'error', 'message' => 'Failed to process ' . $_FILES['image']['name']]);
     }
     exit;
 }
@@ -42,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Progressive Folder Upload</title>
+    <title>Full Folder Upload</title>
     <style>
         #file-list li.success { color: green; }
         #file-list li.error { color: red; }
@@ -50,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
     </style>
 </head>
 <body>
-    <h1>Upload Entire Folder (Progressive)</h1>
+    <h1>Upload Entire Folder (Progressively)</h1>
     <label>Test Type:
         <select id="test_type">
             <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
@@ -83,9 +87,9 @@ document.getElementById('startUpload').addEventListener('click', async () => {
         alert('Please select a folder first');
         return;
     }
+
     fileList.innerHTML = '';
-    let successCount = 0;
-    let errorCount = 0;
+    let successCount = 0, errorCount = 0;
 
     const test_type = document.getElementById('test_type').value;
     const eye = document.getElementById('eye').value;
