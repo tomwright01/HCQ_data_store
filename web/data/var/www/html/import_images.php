@@ -2,182 +2,129 @@
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
-set_time_limit(0); // unlimited time because many files
+set_time_limit(0);
 ini_set('memory_limit', '1024M');
-ini_set('max_file_uploads', '1000');
 
-$message = '';
-$messageType = '';
+header("Access-Control-Allow-Origin: *"); // allow JS fetch from same server
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        /* ======== SINGLE FILE UPLOAD ======== */
-        if (isset($_POST['import'])) {
-            $testType = $_POST['test_type'] ?? '';
-            $eye = $_POST['eye'] ?? '';
-            $patientId = $_POST['patient_id'] ?? '';
-            $testDate = $_POST['test_date'] ?? '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
+    $testType = $_POST['test_type'] ?? '';
+    $eye = $_POST['eye'] ?? '';
+    $patientId = $_POST['patient_id'] ?? '';
+    $testDate = $_POST['test_date'] ?? '';
 
-            if (empty($testType) || empty($eye) || empty($patientId) || empty($testDate)) {
-                throw new Exception("All fields are required");
-            }
-            if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
-                throw new Exception("Invalid test type selected");
-            }
-            if (!in_array($eye, ['OD', 'OS'])) {
-                throw new Exception("Eye must be either OD or OS");
-            }
-            if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-                throw new Exception("Please select a valid file");
-            }
-
-            if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
-                $message = "File uploaded and processed successfully!";
-                $messageType = 'success';
-            } else {
-                throw new Exception("Failed to process uploaded file");
-            }
-        }
-
-        /* ======== BULK UPLOAD (FOLDER) ======== */
-        elseif (isset($_POST['bulk_import'])) {
-            $testType = $_POST['bulk_test_type'] ?? '';
-            if (empty($testType)) throw new Exception("Test type is required");
-            if (!isset($_FILES['bulk_files']) || empty($_FILES['bulk_files']['name'][0])) {
-                throw new Exception("Please select a folder with files");
-            }
-
-            $results = ['processed' => 0, 'success' => 0, 'errors' => []];
-
-            foreach ($_FILES['bulk_files']['tmp_name'] as $i => $tmpName) {
-                $originalName = $_FILES['bulk_files']['name'][$i];
-
-                try {
-                    // validate filename
-                    $pattern = ($testType === 'MFERG')
-                        ? '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
-                        : '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
-
-                    if (!preg_match($pattern, $originalName, $matches)) {
-                        throw new Exception("Invalid filename format ($originalName)");
-                    }
-
-                    $patientId = $matches[1];
-                    $eye = strtoupper($matches[2]);
-                    $dateStr = $matches[3];
-                    $testDate = DateTime::createFromFormat('Ymd', $dateStr);
-                    if (!$testDate) throw new Exception("Invalid date format in filename");
-                    if (!getPatientById($patientId)) throw new Exception("Patient $patientId not found");
-
-                    $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
-                    if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
-
-                    $targetFile = $targetDir . $originalName;
-
-                    // move immediately
-                    if (!move_uploaded_file($tmpName, $targetFile)) {
-                        throw new Exception("Failed to move file $originalName");
-                    }
-
-                    // DB update
-                    $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
-                    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-                    $stmt->bind_param("ss", $patientId, $testDate->format('Y-m-d'));
-                    $stmt->execute();
-                    $test = $stmt->get_result()->fetch_assoc();
-
-                    $testId = $test ? $test['test_id'] :
-                        $patientId . '_' . $testDate->format('Ymd') . '_' . substr(md5(uniqid()), 0, 4);
-
-                    if ($test) {
-                        $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
-                        $stmt->bind_param("ss", $originalName, $testId);
-                    } else {
-                        $stmt = $conn->prepare("INSERT INTO tests 
-                            (test_id, patient_id, date_of_test, $imageField) 
-                            VALUES (?, ?, ?, ?)");
-                        $stmt->bind_param("ssss", $testId, $patientId, $testDate->format('Y-m-d'), $originalName);
-                    }
-                    if (!$stmt->execute()) throw new Exception("Database error: " . $conn->error);
-
-                    $results['success']++;
-                } catch (Exception $e) {
-                    $results['errors'][] = ['file' => $originalName, 'error' => $e->getMessage()];
-                }
-                $results['processed']++;
-
-                // free memory after each file
-                clearstatcache();
-            }
-
-            // summary
-            $message = "<div><h3>Folder Upload Results</h3>";
-            $message .= "<p>Processed: {$results['processed']}, Success: {$results['success']}, Errors: " . count($results['errors']) . "</p>";
-            if (!empty($results['errors'])) {
-                $message .= "<ul>";
-                foreach ($results['errors'] as $error) {
-                    $message .= "<li>{$error['file']}: {$error['error']}</li>";
-                }
-                $message .= "</ul>";
-            }
-            $message .= "</div>";
-            $messageType = empty($results['errors']) ? 'success' : 'warning';
-        }
-    } catch (Exception $e) {
-        $message = "<strong>Error:</strong> " . $e->getMessage();
-        $messageType = 'error';
+    if (empty($testType) || empty($eye) || empty($patientId) || empty($testDate)) {
+        echo json_encode(['status' => 'error', 'message' => 'All fields are required']);
+        exit;
     }
+    if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid test type']);
+        exit;
+    }
+    if (!in_array($eye, ['OD', 'OS'])) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid eye']);
+        exit;
+    }
+    if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid file']);
+        exit;
+    }
+
+    // Use existing import function
+    if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
+        echo json_encode(['status' => 'success', 'message' => $_FILES['image']['name'] . ' uploaded']);
+    } else {
+        echo json_encode(['status' => 'error', 'message' => 'Failed to import']);
+    }
+    exit;
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical Image Importer</title>
+    <style>
+        #file-list li.success { color: green; }
+        #file-list li.error { color: red; }
+    </style>
 </head>
 <body>
-    <h1>Medical Image Importer</h1>
-    <?php if ($message): ?>
-        <div class="message <?= $messageType ?>"><?= $message ?></div>
-    <?php endif; ?>
+    <h1>Folder Upload (One File at a Time)</h1>
 
-    <!-- Single Upload -->
-    <h2>Single File Upload</h2>
-    <form method="POST" enctype="multipart/form-data">
-        <label>Test Type:
-            <select name="test_type" required>
-                <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
-                    <option value="<?= $type ?>"><?= $type ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <label>Eye:
-            <select name="eye" required>
-                <option value="OD">OD</option>
-                <option value="OS">OS</option>
-            </select>
-        </label>
-        <label>Patient ID: <input type="text" name="patient_id" required></label>
-        <label>Test Date: <input type="date" name="test_date" required></label>
-        <label>File: <input type="file" name="image" accept="image/png,.pdf,.exp" required></label>
-        <button type="submit" name="import">Upload</button>
-    </form>
+    <!-- Upload Controls -->
+    <label>Test Type:
+        <select id="test_type">
+            <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                <option value="<?= $type ?>"><?= $type ?></option>
+            <?php endforeach; ?>
+        </select>
+    </label>
+    <label>Eye:
+        <select id="eye">
+            <option value="OD">OD</option>
+            <option value="OS">OS</option>
+        </select>
+    </label>
+    <label>Patient ID: <input type="text" id="patient_id"></label>
+    <label>Test Date: <input type="date" id="test_date"></label>
+    <input type="file" id="bulk_files" webkitdirectory multiple>
+    <button id="startUpload">Start Upload</button>
 
-    <!-- Folder Upload -->
-    <h2>Folder Upload (process one by one)</h2>
-    <form method="POST" enctype="multipart/form-data">
-        <label>Test Type:
-            <select name="bulk_test_type" required>
-                <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
-                    <option value="<?= $type ?>"><?= $type ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-        <label>Select Folder:
-            <input type="file" name="bulk_files[]" webkitdirectory multiple required>
-        </label>
-        <button type="submit" name="bulk_import">Process Folder</button>
-    </form>
+    <h3>Files:</h3>
+    <ul id="file-list"></ul>
+    <div id="status"></div>
+
+    <script>
+    const filesInput = document.getElementById('bulk_files');
+    const fileList = document.getElementById('file-list');
+    const status = document.getElementById('status');
+
+    document.getElementById('startUpload').addEventListener('click', async () => {
+        const files = filesInput.files;
+        if (files.length === 0) {
+            alert('Please select a folder first');
+            return;
+        }
+        fileList.innerHTML = '';
+        status.innerText = 'Uploading...';
+
+        const test_type = document.getElementById('test_type').value;
+        const eye = document.getElementById('eye').value;
+        const patient_id = document.getElementById('patient_id').value;
+        const test_date = document.getElementById('test_date').value;
+
+        for (let i = 0; i < files.length; i++) {
+            const li = document.createElement('li');
+            li.textContent = files[i].webkitRelativePath;
+            fileList.appendChild(li);
+
+            const formData = new FormData();
+            formData.append('import', '1');
+            formData.append('test_type', test_type);
+            formData.append('eye', eye);
+            formData.append('patient_id', patient_id);
+            formData.append('test_date', test_date);
+            formData.append('image', files[i], files[i].name);
+
+            try {
+                const response = await fetch('import_images.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (result.status === 'success') {
+                    li.classList.add('success');
+                } else {
+                    li.classList.add('error');
+                    li.textContent += ' - ' + result.message;
+                }
+            } catch (err) {
+                li.classList.add('error');
+                li.textContent += ' - network error';
+            }
+        }
+        status.innerText = 'All files processed!';
+    });
+    </script>
 </body>
 </html>
