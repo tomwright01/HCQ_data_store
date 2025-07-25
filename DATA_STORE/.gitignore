@@ -1,0 +1,4 @@
+# Ignore evertyhing in the DATA_STORE directory
+*
+# Except the .gitignore file itself
+!.gitignore
