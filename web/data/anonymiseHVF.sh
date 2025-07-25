@@ -24,21 +24,21 @@ if [[ ${#parts[@]} -eq 2 ]]; then
 fi
 
 # write the markdown template
-sed "s|<SUBJECTID>|${parts[0]}|g" $mdTemplate > md_template.md
-sed -i "s|<EYE>|${parts[1]}|g" md_template.md
-sed -i "s|<VISIT>|${parts[2]}|g" md_template.md
+sed "s|<SUBJECTID>|${parts[0]}|g" $mdTemplate > /tmp/md_template.md
+sed -i "s|<EYE>|${parts[1]}|g" /tmp/md_template.md
+sed -i "s|<VISIT>|${parts[2]}|g" /tmp/md_template.md
 
 # Build the overlay pdf
-pandoc md_template.md -o md_template.pdf
-pdftk "$1" stamp $VFReportMask output VFReport_masked.pdf
+pandoc /tmp/md_template.md -o /tmp/md_template.pdf
+pdftk "$1" stamp $VFReportMask output /tmp/VFReport_masked.pdf
 
-pdftk VFReport_masked.pdf stamp md_template.pdf output VFReport_masked_final.pdf
+pdftk /tmp/VFReport_masked.pdf stamp /tmp/md_template.pdf output /tmp/VFReport_masked_final.pdf
 
 # move the anon file
-cp VFReport_masked_final.pdf "$2/$filename"
+cp /tmp/VFReport_masked_final.pdf "$2/$filename"
 
 # clean up
-rm md_template.md
-rm md_template.pdf
-rm VFReport_masked.pdf
-rm VFReport_masked_final.pdf
+rm /tmp/md_template.md
+rm /tmp/md_template.pdf
+rm /tmp/VFReport_masked.pdf
+rm /tmp/VFReport_masked_final.pdf
