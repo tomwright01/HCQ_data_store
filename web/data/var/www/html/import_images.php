@@ -5,7 +5,7 @@ require_once 'includes/functions.php';
 set_time_limit(0);
 ini_set('memory_limit', '1024M');
 
-header("Access-Control-Allow-Origin: *"); // allow JS fetch from same server
+header("Access-Control-Allow-Origin: *");
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
     $testType = $_POST['test_type'] ?? '';
@@ -30,11 +30,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
         exit;
     }
 
-    // Use existing import function
+    // Process using your existing function
     if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
         echo json_encode(['status' => 'success', 'message' => $_FILES['image']['name'] . ' uploaded']);
     } else {
-        echo json_encode(['status' => 'error', 'message' => 'Failed to import']);
+        echo json_encode(['status' => 'error', 'message' => 'Failed to import ' . $_FILES['image']['name']]);
     }
     exit;
 }
@@ -42,16 +42,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Medical Image Importer</title>
+    <title>Progressive Folder Upload</title>
     <style>
         #file-list li.success { color: green; }
         #file-list li.error { color: red; }
+        #progress { margin: 10px 0; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>Folder Upload (One File at a Time)</h1>
-
-    <!-- Upload Controls -->
+    <h1>Upload Entire Folder (Progressive)</h1>
     <label>Test Type:
         <select id="test_type">
             <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
@@ -70,61 +69,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
     <input type="file" id="bulk_files" webkitdirectory multiple>
     <button id="startUpload">Start Upload</button>
 
-    <h3>Files:</h3>
+    <div id="progress">No files uploaded yet</div>
     <ul id="file-list"></ul>
-    <div id="status"></div>
 
-    <script>
-    const filesInput = document.getElementById('bulk_files');
-    const fileList = document.getElementById('file-list');
-    const status = document.getElementById('status');
+<script>
+const filesInput = document.getElementById('bulk_files');
+const fileList = document.getElementById('file-list');
+const progress = document.getElementById('progress');
 
-    document.getElementById('startUpload').addEventListener('click', async () => {
-        const files = filesInput.files;
-        if (files.length === 0) {
-            alert('Please select a folder first');
-            return;
-        }
-        fileList.innerHTML = '';
-        status.innerText = 'Uploading...';
+document.getElementById('startUpload').addEventListener('click', async () => {
+    const files = filesInput.files;
+    if (files.length === 0) {
+        alert('Please select a folder first');
+        return;
+    }
+    fileList.innerHTML = '';
+    let successCount = 0;
+    let errorCount = 0;
 
-        const test_type = document.getElementById('test_type').value;
-        const eye = document.getElementById('eye').value;
-        const patient_id = document.getElementById('patient_id').value;
-        const test_date = document.getElementById('test_date').value;
+    const test_type = document.getElementById('test_type').value;
+    const eye = document.getElementById('eye').value;
+    const patient_id = document.getElementById('patient_id').value;
+    const test_date = document.getElementById('test_date').value;
 
-        for (let i = 0; i < files.length; i++) {
-            const li = document.createElement('li');
-            li.textContent = files[i].webkitRelativePath;
-            fileList.appendChild(li);
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const li = document.createElement('li');
+        li.textContent = file.webkitRelativePath;
+        fileList.appendChild(li);
 
-            const formData = new FormData();
-            formData.append('import', '1');
-            formData.append('test_type', test_type);
-            formData.append('eye', eye);
-            formData.append('patient_id', patient_id);
-            formData.append('test_date', test_date);
-            formData.append('image', files[i], files[i].name);
+        const formData = new FormData();
+        formData.append('import', '1');
+        formData.append('test_type', test_type);
+        formData.append('eye', eye);
+        formData.append('patient_id', patient_id);
+        formData.append('test_date', test_date);
+        formData.append('image', file, file.name);
 
-            try {
-                const response = await fetch('import_images.php', {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await response.json();
-                if (result.status === 'success') {
-                    li.classList.add('success');
-                } else {
-                    li.classList.add('error');
-                    li.textContent += ' - ' + result.message;
-                }
-            } catch (err) {
+        try {
+            const response = await fetch('import_images.php', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.status === 'success') {
+                li.classList.add('success');
+                successCount++;
+            } else {
                 li.classList.add('error');
-                li.textContent += ' - network error';
+                li.textContent += ' - ' + result.message;
+                errorCount++;
             }
+        } catch (err) {
+            li.classList.add('error');
+            li.textContent += ' - network error';
+            errorCount++;
         }
-        status.innerText = 'All files processed!';
-    });
-    </script>
+
+        progress.innerText = `Processed ${i+1}/${files.length} files | Success: ${successCount}, Errors: ${errorCount}`;
+    }
+
+    progress.innerText = `Upload finished! Success: ${successCount}, Errors: ${errorCount}`;
+});
+</script>
 </body>
 </html>
