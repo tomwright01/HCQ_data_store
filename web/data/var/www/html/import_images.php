@@ -4,192 +4,162 @@ require_once 'includes/functions.php';
 
 set_time_limit(600);
 ini_set('memory_limit', '1024M');
-ini_set('max_file_uploads', '1000');
+ini_set('max_file_uploads', '2000');
 
 $message = '';
 $messageType = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    try {
-        /* ====================== SINGLE FILE UPLOAD ====================== */
-        if (isset($_POST['import'])) {
-            $testType = $_POST['test_type'] ?? '';
-            $eye = $_POST['eye'] ?? '';
-            $patientId = $_POST['patient_id'] ?? '';
-            $testDate = $_POST['test_date'] ?? '';
+function processUploadedFolder($testType, $files)
+{
+    global $conn;
 
-            if (empty($testType) || empty($eye) || empty($patientId) || empty($testDate)) {
-                throw new Exception("All fields are required");
-            }
-            if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
-                throw new Exception("Invalid test type selected");
-            }
-            if (!in_array($eye, ['OD', 'OS'])) {
-                throw new Exception("Eye must be either OD (right) or OS (left)");
-            }
-            if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-                throw new Exception("Please select a valid image file");
-            }
+    $results = [
+        'processed' => 0,
+        'success'   => 0,
+        'errors'    => []
+    ];
 
-            $fileInfo = new finfo(FILEINFO_MIME_TYPE);
-            $mime = $fileInfo->file($_FILES['image']['tmp_name']);
-            $allowedMimes = [
-                'image/png',
-                'application/pdf' => ['VF', 'OCT'],
-                'application/octet-stream' => ['MFERG'],
-                'text/plain' => ['MFERG']
+    $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
+    if (!is_dir($targetDir)) {
+        mkdir($targetDir, 0777, true);
+    }
+
+    for ($i = 0; $i < count($files['name']); $i++) {
+        $filename = basename($files['name'][$i]);
+        $tmpPath  = $files['tmp_name'][$i];
+        $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+
+        // Only accept allowed file types
+        if (!in_array($extension, ['png', 'pdf', 'exp'])) {
+            $results['errors'][] = [
+                'file'  => $filename,
+                'error' => "Invalid file extension: $extension",
+                'path'  => $filename
             ];
+            continue;
+        }
 
-            if (!(
-                $mime === 'image/png' ||
-                (in_array($testType, $allowedMimes['application/pdf'] ?? []) && $mime === 'application/pdf') ||
-                (in_array($testType, $allowedMimes['application/octet-stream'] ?? []) && $mime === 'application/octet-stream') ||
-                (in_array($testType, $allowedMimes['text/plain'] ?? []) && $mime === 'text/plain')
-            )) {
-                throw new Exception("Invalid file type for $testType.");
+        $results['processed']++;
+
+        try {
+            // Parse filename (patientid_eye_YYYYMMDD.ext)
+            $pattern = $testType === 'MFERG' ?
+                '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i' :
+                '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
+
+            if (!preg_match($pattern, $filename, $matches)) {
+                throw new Exception("Invalid filename format. Expected patientid_eye_YYYYMMDD.ext");
             }
 
-            // Special handling for VF PDF anonymization
-            if ($testType === 'VF' && $mime === 'application/pdf') {
+            $patientId = $matches[1];
+            $eye       = strtoupper($matches[2]);
+            $dateStr   = $matches[3];
+            $fileExt   = strtolower($matches[4]);
+
+            $testDate = DateTime::createFromFormat('Ymd', $dateStr);
+            if (!$testDate) {
+                throw new Exception("Invalid date in filename (must be YYYYMMDD)");
+            }
+            $testDate = $testDate->format('Y-m-d');
+
+            if (!getPatientById($patientId)) {
+                throw new Exception("Patient $patientId not found in database");
+            }
+
+            $targetFile = $targetDir . $filename;
+
+            // Handle anonymization for VF/OCT PDF
+            if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $fileExt === 'pdf') {
                 $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
-                if (!mkdir($tempDir)) throw new Exception("Failed to create temp directory");
+                mkdir($tempDir);
 
-                $filename = $patientId . '_' . $eye . '_' . date('Ymd', strtotime($testDate)) . '.pdf';
                 $tempFile = $tempDir . '/' . $filename;
+                move_uploaded_file($tmpPath, $tempFile);
 
-                if (!move_uploaded_file($_FILES['image']['tmp_name'], $tempFile)) {
-                    throw new Exception("Failed to process uploaded PDF");
-                }
-
-                $command = sprintf(
+                $cmd = sprintf(
                     '/bin/bash %s %s %s',
-                    escapeshellarg('Resources/anonymiseHVF/anonymiseHVF.sh'),
+                    escapeshellarg('/usr/local/bin/anonymiseHVF.sh'),
                     escapeshellarg($tempFile),
                     escapeshellarg($tempDir)
                 );
-                exec($command, $output, $returnVar);
+                exec($cmd, $out, $ret);
 
-                if ($returnVar !== 0) {
-                    throw new Exception("Failed to anonymize PDF: " . implode("\n", $output));
+                if ($ret !== 0) {
+                    throw new Exception("Failed to anonymize PDF: " . implode("\n", $out));
                 }
 
                 $anonFile = $tempDir . '/' . $filename;
-                if (!file_exists($anonFile)) throw new Exception("Anonymized file not found");
-
-                if (importTestImage($testType, $eye, $patientId, $testDate, $anonFile)) {
-                    $message = "PDF uploaded, anonymized, and database updated successfully!";
-                    $messageType = 'success';
-                } else throw new Exception("Failed to process anonymized PDF upload");
-
+                if (!copy($anonFile, $targetFile)) {
+                    throw new Exception("Failed to copy anonymized PDF");
+                }
                 array_map('unlink', glob("$tempDir/*"));
                 rmdir($tempDir);
             } else {
-                if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
-                    $message = "Image uploaded and database updated successfully!";
-                    $messageType = 'success';
-                } else throw new Exception("Failed to process image upload");
-            }
-        }
-
-        /* ====================== BULK IMPORT FROM FOLDER ====================== */
-        elseif (isset($_POST['bulk_import'])) {
-            $testType = $_POST['bulk_test_type'] ?? '';
-            if (empty($testType)) throw new Exception("Test type is required");
-            if (!isset($_FILES['bulk_files']) || empty($_FILES['bulk_files']['name'][0])) {
-                throw new Exception("Please select a folder with files");
+                if (!move_uploaded_file($tmpPath, $targetFile)) {
+                    throw new Exception("Failed to move file to target directory");
+                }
             }
 
-            $results = [
-                'processed' => 0,
-                'success' => 0,
-                'errors' => []
+            // Update database
+            $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
+            $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id=? AND date_of_test=?");
+            $stmt->bind_param("ss", $patientId, $testDate);
+            $stmt->execute();
+            $test = $stmt->get_result()->fetch_assoc();
+
+            $testId = $test ? $test['test_id'] :
+                $patientId . '_' . date('Ymd', strtotime($testDate)) . '_' . substr(md5(uniqid()), 0, 4);
+
+            if ($test) {
+                $stmt = $conn->prepare("UPDATE tests SET $imageField=? WHERE test_id=?");
+                $stmt->bind_param("ss", $filename, $testId);
+            } else {
+                $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test, $imageField) VALUES (?,?,?,?)");
+                $stmt->bind_param("ssss", $testId, $patientId, $testDate, $filename);
+            }
+
+            if (!$stmt->execute()) {
+                throw new Exception("Database error: " . $conn->error);
+            }
+
+            $results['success']++;
+        } catch (Exception $e) {
+            $results['errors'][] = [
+                'file'  => $filename,
+                'error' => $e->getMessage(),
+                'path'  => $filename
             ];
+        }
+    }
 
-            foreach ($_FILES['bulk_files']['tmp_name'] as $i => $tmpName) {
-                $originalName = $_FILES['bulk_files']['name'][$i];
+    return $results;
+}
 
-                try {
-                    // Validate filename: patientid_eye_YYYYMMDD.ext
-                    $pattern = ($testType === 'MFERG')
-                        ? '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
-                        : '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
-
-                    if (!preg_match($pattern, $originalName, $matches)) {
-                        throw new Exception("Invalid filename format ($originalName)");
-                    }
-
-                    $patientId = $matches[1];
-                    $eye = strtoupper($matches[2]);
-                    $dateStr = $matches[3];
-                    $fileExt = strtolower($matches[4]);
-
-                    $testDate = DateTime::createFromFormat('Ymd', $dateStr);
-                    if (!$testDate) throw new Exception("Invalid date format in filename: $dateStr");
-                    if (!getPatientById($patientId)) throw new Exception("Patient $patientId not found");
-
-                    // Move file to permanent storage
-                    $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
-                    if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
-                    $targetFile = $targetDir . $originalName;
-
-                    if (!copy($tmpName, $targetFile)) throw new Exception("Failed to copy file");
-
-                    // DB update or insert
-                    $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
-                    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-                    $stmt->bind_param("ss", $patientId, $testDate->format('Y-m-d'));
-                    $stmt->execute();
-                    $test = $stmt->get_result()->fetch_assoc();
-
-                    $testId = $test ? $test['test_id'] :
-                        $patientId . '_' . $testDate->format('Ymd') . '_' . substr(md5(uniqid()), 0, 4);
-
-                    if ($test) {
-                        $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
-                        $stmt->bind_param("ss", $originalName, $testId);
-                    } else {
-                        $stmt = $conn->prepare("INSERT INTO tests 
-                            (test_id, patient_id, date_of_test, $imageField) 
-                            VALUES (?, ?, ?, ?)");
-                        $stmt->bind_param("ssss", $testId, $patientId, $testDate->format('Y-m-d'), $originalName);
-                    }
-                    if (!$stmt->execute()) throw new Exception("Database error: " . $conn->error);
-
-                    $results['success']++;
-                } catch (Exception $e) {
-                    $results['errors'][] = [
-                        'file' => $originalName,
-                        'error' => $e->getMessage(),
-                        'path' => $tmpName
-                    ];
-                }
-                $results['processed']++;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    try {
+        if (isset($_POST['bulk_folder_import'])) {
+            $testType = $_POST['bulk_test_type'] ?? '';
+            if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
+                throw new Exception("Invalid test type selected");
             }
 
-            // Build message output
-            $message = "<div class='results-container'>";
-            $message .= "<h3>Bulk Import Results</h3>";
-            $message .= "<div class='stats-grid'>";
-            $message .= "<div class='stat-box'><span>Files Processed</span><strong>{$results['processed']}</strong></div>";
-            $message .= "<div class='stat-box success'><span>Successful</span><strong>{$results['success']}</strong></div>";
-            $message .= "<div class='stat-box error'><span>Errors</span><strong>" . count($results['errors']) . "</strong></div>";
-            $message .= "</div>";
+            if (!isset($_FILES['folder'])) {
+                throw new Exception("Please select a folder");
+            }
 
+            $results = processUploadedFolder($testType, $_FILES['folder']);
+
+            $message = "<h3>Bulk Folder Import Results</h3>";
+            $message .= "<p>Processed: {$results['processed']}, Success: {$results['success']}, Errors: " . count($results['errors']) . "</p>";
             if (!empty($results['errors'])) {
-                $message .= "<div class='error-section'><h4>Errors:</h4><ul>";
-                foreach (array_slice($results['errors'], 0, 20) as $error) {
-                    $message .= "<li><strong>" . htmlspecialchars($error['file']) . "</strong>: " .
-                        htmlspecialchars($error['error']) . "<br><small>" . htmlspecialchars($error['path']) . "</small></li>";
+                $message .= "<ul>";
+                foreach ($results['errors'] as $error) {
+                    $message .= "<li><strong>{$error['file']}</strong>: {$error['error']}</li>";
                 }
-                if (count($results['errors']) > 20) {
-                    $message .= "<li>... and " . (count($results['errors']) - 20) . " more errors</li>";
-                }
-                $message .= "</ul></div>";
+                $message .= "</ul>";
             }
-            $message .= "</div>";
 
-            $messageType = empty($results['errors']) ? 'success' :
-                ($results['success'] > 0 ? 'warning' : 'error');
+            $messageType = empty($results['errors']) ? 'success' : (count($results['success']) > 0 ? 'warning' : 'error');
         }
     } catch (Exception $e) {
         $message = "<strong>Error:</strong> " . $e->getMessage();
@@ -201,80 +171,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical Image Importer</title>
-    <style>
-        /* Keep your existing CSS styles here */
-    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Medical Image Importer</h1>
-        <?php if ($message): ?>
-            <div class="message <?= $messageType ?>"><?= $message ?></div>
-        <?php endif; ?>
-
-        <!-- Single Upload Form -->
-        <div class="form-section">
-            <h2>Single File Upload</h2>
-            <form method="POST" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="test_type">Test Type:</label>
-                    <select name="test_type" id="test_type" required>
-                        <option value="">Select Test Type</option>
-                        <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
-                            <option value="<?= $type ?>"><?= $type ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="eye">Eye:</label>
-                    <select name="eye" id="eye" required>
-                        <option value="">Select Eye</option>
-                        <option value="OD">Right Eye (OD)</option>
-                        <option value="OS">Left Eye (OS)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="patient_id">Patient ID:</label>
-                    <input type="text" name="patient_id" id="patient_id" required>
-                </div>
-                <div class="form-group">
-                    <label for="test_date">Test Date:</label>
-                    <input type="date" name="test_date" id="test_date" required>
-                </div>
-                <div class="form-group">
-                    <label for="image">File (PNG for all tests except VF, PDF for VF):</label>
-                    <input type="file" name="image" id="image" accept="image/png,.pdf,.exp" required>
-                </div>
-                <button type="submit" name="import">Upload File</button>
-            </form>
-        </div>
-
-        <!-- Bulk Folder Upload -->
-        <div class="form-section">
-            <h2>Bulk Import from Folder</h2>
-            <form method="POST" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="bulk_test_type">Test Type:</label>
-                    <select name="bulk_test_type" id="bulk_test_type" required>
-                        <option value="">Select Test Type</option>
-                        <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
-                            <option value="<?= $type ?>"><?= $type ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="bulk_files">Select Folder:</label>
-                    <input type="file" name="bulk_files[]" id="bulk_files" webkitdirectory multiple required>
-                </div>
-                <button type="submit" name="bulk_import" class="bulk-import-btn">
-                    Process All Files in Folder
-                </button>
-            </form>
-        </div>
-
-        <a href="index.php" class="back-link">← Back to Dashboard</a>
-    </div>
+    <h1>Bulk Import from Folder</h1>
+    <?php if ($message): ?>
+        <div class="<?= $messageType ?>"><?= $message ?></div>
+    <?php endif; ?>
+    <form method="POST" enctype="multipart/form-data">
+        <label for="bulk_test_type">Test Type:</label>
+        <select name="bulk_test_type" id="bulk_test_type" required>
+            <option value="">Select Test Type</option>
+            <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                <option value="<?= $type ?>"><?= $type ?></option>
+            <?php endforeach; ?>
+        </select>
+        <br><br>
+        <label>Select Folder:</label>
+        <input type="file" name="folder[]" webkitdirectory directory multiple required>
+        <br><br>
+        <button type="submit" name="bulk_folder_import">Upload Folder</button>
+    </form>
+    <br>
+    <a href="index.php">← Back to Dashboard</a>
 </body>
 </html>
