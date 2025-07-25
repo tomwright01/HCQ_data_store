@@ -139,7 +139,7 @@ if ($search_patient_id) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kensington Health Data Portal</title>
+    <title> Hydroxychloroquine Data Repository </title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
