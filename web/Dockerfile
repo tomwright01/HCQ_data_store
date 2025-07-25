@@ -17,7 +17,7 @@ COPY data/pdftk /usr/local/bin
 RUN chmod 775 /usr/local/bin/pdftk
 
 # Copy website source
-COPY data/var/www/html/* /var/www/html
+COPY data/var/www/html/ /var/www/html
 COPY data/anonymiseHVF.sh /usr/local/bin/
 COPY data/usr/local/Resources /usr/local/Resources
 
