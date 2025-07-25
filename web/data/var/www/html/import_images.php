@@ -20,8 +20,21 @@ function processBulkImages($testType, $sourcePath) {
     ];
 
     // Validate and normalize paths
+   // Validate and normalize paths
+    // 1. FIRST get the directory name for this test type
     $testTypeDir = ALLOWED_TEST_TYPES[$testType];
+    
+    // 2. Normalize paths (ensure single trailing slash)
     $sourcePath = rtrim($sourcePath, '/') . '/';
+    
+    // 3. SMART PATH HANDLING - Only append subdirectory if:
+    //    - The path doesn't already contain it (e.g. "/data/FAF/")
+    //    - And the path isn't a custom full path (e.g. "/custom/FAF_folder/")
+   // if (!str_contains($sourcePath, "/$testTypeDir/")) {
+   //    $sourcePath .= $testTypeDir . '/';
+   // }
+    
+    // 4. Target directory remains consistent
     $targetDir = IMAGE_BASE_DIR . $testTypeDir . '/';
     
     // DEBUG: Add these lines to verify paths
@@ -46,12 +59,13 @@ function processBulkImages($testType, $sourcePath) {
     foreach ($files as $file) {
         $extension = strtolower($file->getExtension());
         
+        // Process PNG files for all test types except VF, or PDF for VF
         // Process PNG files for all test types, or PDF for VF/OCT
         if ($file->isFile() && (
-            $extension === 'png' || 
-            (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf') ||
-            ($testType === 'MFERG' && ($extension === 'pdf' || $extension === 'exp'))
-        ) {
+        $extension === 'png' || 
+        (($testType === 'VF' || $testType === 'OCT') && $extension === 'pdf') ||
+        ($testType === 'MFERG' && ($extension === 'pdf' || $extension === 'exp'))
+        )) {
             $results['processed']++;
             $filename = $file->getFilename();
             $sourceFile = $file->getPathname();
@@ -83,7 +97,8 @@ function processBulkImages($testType, $sourcePath) {
                     throw new Exception("Patient $patientId not found in database");
                 }
 
-                // Special handling for VF/OCT PDFs
+                // Special handling for VF PDFs
+                // Process PNG files for all test types, or PDF for VF/OCT
                 if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $fileExt === 'pdf') {
                     $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
                     if (!mkdir($tempDir)) {
@@ -201,6 +216,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             
             // Validate file type
+            // Validate file type
+            // Validate file type
             $fileInfo = new finfo(FILEINFO_MIME_TYPE);
             $mime = $fileInfo->file($_FILES['image']['tmp_name']);
             
@@ -282,41 +299,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (isset($_POST['bulk_import'])) {
             // Bulk import processing
             $testType = $_POST['bulk_test_type'] ?? '';
+            $sourcePath = $_POST['folder_path'] ?? '';
             
-            if (empty($testType)) {
-                throw new Exception("Test type is required");
+            if (empty($testType) || empty($sourcePath)) {
+                throw new Exception("Test type and folder path are required");
             }
             
             if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
                 throw new Exception("Invalid test type selected");
             }
             
-            // Check if folder was uploaded
-            if (!isset($_FILES['bulk_folder']) || $_FILES['bulk_folder']['error'] !== UPLOAD_ERR_OK) {
-                throw new Exception("Please select a valid folder to upload");
-            }
-            
-            // Create temporary directory for uploaded files
-            $tempDir = sys_get_temp_dir() . '/bulk_upload_' . uniqid();
-            if (!mkdir($tempDir)) {
-                throw new Exception("Failed to create temporary directory");
-            }
-            
-            // Extract the uploaded zip file
-            $zip = new ZipArchive;
-            if ($zip->open($_FILES['bulk_folder']['tmp_name']) === TRUE) {
-                $zip->extractTo($tempDir);
-                $zip->close();
-            } else {
-                throw new Exception("Failed to extract uploaded folder");
-            }
-            
-            // Process the extracted files
-            $results = processBulkImages($testType, $tempDir);
-            
-            // Clean up temporary files
-            array_map('unlink', glob("$tempDir/*.*"));
-            rmdir($tempDir);
+            $results = processBulkImages($testType, $sourcePath);
             
             // Prepare results message
             $message = "<div class='results-container'>";
@@ -634,7 +627,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="form-section">
             <h2>Bulk Import from Folder</h2>
-            <form method="POST" enctype="multipart/form-data">
+            <form method="POST">
                 <div class="form-group">
                     <label for="bulk_test_type">Test Type:</label>
                     <select name="bulk_test_type" id="bulk_test_type" required>
@@ -646,8 +639,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <div class="form-group">
-                    <label for="bulk_folder">Select Folder (ZIP):</label>
-                    <input type="file" name="bulk_folder" id="bulk_folder" webkitdirectory directory multiple required>
+                    <label for="folder_path">Source Folder Path:</label>
+                    <input type="text" name="folder_path" id="folder_path" required 
+                           value="<?= htmlspecialchars(IMAGE_BASE_DIR) ?>"
+                           placeholder="e.g., /var/www/html/data/">
                 </div>
                 
                 <div class="requirements-box">
