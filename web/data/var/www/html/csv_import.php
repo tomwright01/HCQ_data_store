@@ -14,6 +14,7 @@ $baseDataDir = "/var/www/html/data/";
 
 // Initialize variables
 $selectedFile = $_POST['csv_file'] ?? '';
+$customPath = $_POST['custom_path'] ?? '';
 $csvFilePath = '';
 $message = '';
 $messageClass = '';
@@ -25,20 +26,28 @@ $results = [
 
 // Check if form was submitted
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
-    // Validate selected file
-    if (empty($selectedFile)) {
-        $message = "Please select a file to import";
+    // Determine which file input was used
+    if (!empty($customPath)) {
+        // Use custom path if provided
+        $csvFilePath = $customPath;
+        $inputMethod = 'custom';
+    } else {
+        // Use dropdown selection if no custom path
+        $csvFilePath = $baseDataDir . basename($selectedFile);
+        $inputMethod = 'dropdown';
+    }
+    
+    // Validate file selection
+    if (empty($csvFilePath)) {
+        $message = "Please either select a file or enter a file path";
         $messageClass = 'error';
     } else {
-        // Build full path and sanitize
-        $csvFilePath = $baseDataDir . basename($selectedFile);
-        
         // Verify file exists and is CSV
         if (!file_exists($csvFilePath)) {
-            $message = "Selected file does not exist: " . htmlspecialchars($selectedFile);
+            $message = "File does not exist: " . htmlspecialchars($csvFilePath);
             $messageClass = 'error';
         } elseif (strtolower(pathinfo($csvFilePath, PATHINFO_EXTENSION)) !== 'csv') {
-            $message = "Selected file is not a CSV file: " . htmlspecialchars($selectedFile);
+            $message = "Selected file is not a CSV file: " . htmlspecialchars($csvFilePath);
             $messageClass = 'error';
         } else {
             // Proceed with import if file is valid
@@ -235,7 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     }
 }
 
-// Database functions
+// Database functions (unchanged from previous version)
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH') {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
@@ -324,25 +333,71 @@ if (is_dir($baseDataDir)) {
         .error-list { max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
         form { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; font-weight: bold; }
-        select, input[type="submit"] { padding: 8px 12px; font-size: 16px; }
+        select, input[type="text"], input[type="submit"] { padding: 8px 12px; font-size: 16px; margin-bottom: 10px; }
         input[type="submit"] { background-color: #007bff; color: white; border: none; cursor: pointer; }
         input[type="submit"]:hover { background-color: #0069d9; }
+        .file-selector { margin-bottom: 20px; }
+        .file-selector label { margin-bottom: 5px; }
+        .file-selector p { margin-top: 0; font-size: 0.9em; color: #666; }
+        .tabs { display: flex; margin-bottom: 15px; }
+        .tab { padding: 10px 15px; background: #eee; cursor: pointer; border: 1px solid #ddd; border-bottom: none; }
+        .tab.active { background: #fff; border-bottom: 1px solid #fff; }
+        .tab-content { display: none; padding: 15px; border: 1px solid #ddd; }
+        .tab-content.active { display: block; }
     </style>
+    <script>
+        function showTab(tabId) {
+            // Hide all tab contents
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            
+            // Deactivate all tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show selected tab content
+            document.getElementById(tabId + '-content').classList.add('active');
+            
+            // Activate selected tab
+            document.getElementById(tabId + '-tab').classList.add('active');
+        }
+    </script>
 </head>
 <body>
     <div class="container">
         <h1>CSV Import Tool</h1>
         
         <form method="post" action="">
-            <label for="csv_file">Select CSV File to Import:</label>
-            <select name="csv_file" id="csv_file" required>
-                <option value="">-- Select a file --</option>
-                <?php foreach ($availableFiles as $file): ?>
-                    <option value="<?= htmlspecialchars($file) ?>" <?= $selectedFile === $file ? 'selected' : '' ?>>
-                        <?= htmlspecialchars($file) ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
+            <div class="tabs">
+                <div id="default-tab" class="tab active" onclick="showTab('default')">Default Directory</div>
+                <div id="custom-tab" class="tab" onclick="showTab('custom')">Custom Path</div>
+            </div>
+            
+            <div id="default-content" class="tab-content active">
+                <div class="file-selector">
+                    <label for="csv_file">Select CSV File from Default Directory:</label>
+                    <select name="csv_file" id="csv_file">
+                        <option value="">-- Select a file --</option>
+                        <?php foreach ($availableFiles as $file): ?>
+                            <option value="<?= htmlspecialchars($file) ?>" <?= $selectedFile === $file ? 'selected' : '' ?>>
+                                <?= htmlspecialchars($file) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <p>Default directory: <?= htmlspecialchars($baseDataDir) ?></p>
+                </div>
+            </div>
+            
+            <div id="custom-content" class="tab-content">
+                <div class="file-selector">
+                    <label for="custom_path">Enter Full Path to CSV File:</label>
+                    <input type="text" name="custom_path" id="custom_path" value="<?= htmlspecialchars($customPath) ?>" placeholder="e.g., /path/to/your/file.csv">
+                    <p>Example: /home/user/data/patient_data.csv</p>
+                </div>
+            </div>
+            
             <input type="submit" name="submit" value="Import File">
         </form>
         
