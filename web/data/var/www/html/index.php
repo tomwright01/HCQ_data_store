@@ -401,7 +401,7 @@ if ($search_patient_id) {
     <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
 
     <div class="content">
-        <h1>Kensington Health Data Portal</h1>
+        <h1>Hydroxychloroquine Data Repository</h1>
         
         <div class="action-buttons">
             <a href="form.php" class="action-button form-button">Manual Data Entry</a>
