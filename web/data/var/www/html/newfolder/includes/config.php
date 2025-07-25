@@ -21,8 +21,6 @@ define('MAX_FILE_SIZE', 10 * 1024 * 1024); // 10MB
 define('ALLOWED_IMAGE_TYPES', [
     'image/png' => 'png',
     'application/pdf' => 'pdf'
-    'application/octet-stream' => 'exp',  // For MFERG .exp files
-    'text/plain' => 'exp' 
 ]);
 
 // Create connection
