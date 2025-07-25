@@ -11,7 +11,7 @@ $messageType = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // ======= SINGLE FILE UPLOAD =======
+        /* ====================== SINGLE FILE UPLOAD ====================== */
         if (isset($_POST['import'])) {
             $testType = $_POST['test_type'] ?? '';
             $eye = $_POST['eye'] ?? '';
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
 
             if (!(
-                $mime === 'image/png' || 
+                $mime === 'image/png' ||
                 (in_array($testType, $allowedMimes['application/pdf'] ?? []) && $mime === 'application/pdf') ||
                 (in_array($testType, $allowedMimes['application/octet-stream'] ?? []) && $mime === 'application/octet-stream') ||
                 (in_array($testType, $allowedMimes['text/plain'] ?? []) && $mime === 'text/plain')
@@ -49,7 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception("Invalid file type for $testType.");
             }
 
-            // Normal PNG or PDF handling
+            // Special handling for VF PDF anonymization
             if ($testType === 'VF' && $mime === 'application/pdf') {
                 $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
                 if (!mkdir($tempDir)) throw new Exception("Failed to create temp directory");
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // ======= BULK IMPORT FROM FOLDER =======
+        /* ====================== BULK IMPORT FROM FOLDER ====================== */
         elseif (isset($_POST['bulk_import'])) {
             $testType = $_POST['bulk_test_type'] ?? '';
             if (empty($testType)) throw new Exception("Test type is required");
@@ -110,9 +110,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 try {
                     // Validate filename: patientid_eye_YYYYMMDD.ext
-                    $pattern = ($testType === 'MFERG') ? 
-                        '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i' :
-                        '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
+                    $pattern = ($testType === 'MFERG')
+                        ? '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
+                        : '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
 
                     if (!preg_match($pattern, $originalName, $matches)) {
                         throw new Exception("Invalid filename format ($originalName)");
@@ -127,21 +127,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$testDate) throw new Exception("Invalid date format in filename: $dateStr");
                     if (!getPatientById($patientId)) throw new Exception("Patient $patientId not found");
 
+                    // Move file to permanent storage
                     $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
                     if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
-
                     $targetFile = $targetDir . $originalName;
+
                     if (!copy($tmpName, $targetFile)) throw new Exception("Failed to copy file");
 
-                    $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
-
                     // DB update or insert
+                    $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
                     $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
                     $stmt->bind_param("ss", $patientId, $testDate->format('Y-m-d'));
                     $stmt->execute();
                     $test = $stmt->get_result()->fetch_assoc();
 
-                    $testId = $test ? $test['test_id'] : 
+                    $testId = $test ? $test['test_id'] :
                         $patientId . '_' . $testDate->format('Ymd') . '_' . substr(md5(uniqid()), 0, 4);
 
                     if ($test) {
@@ -203,23 +203,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical Image Importer</title>
-    <!-- (Keep your existing CSS styles here) -->
+    <style>
+        /* Keep your existing CSS styles here */
+    </style>
 </head>
 <body>
     <div class="container">
         <h1>Medical Image Importer</h1>
-
         <?php if ($message): ?>
             <div class="message <?= $messageType ?>"><?= $message ?></div>
         <?php endif; ?>
 
+        <!-- Single Upload Form -->
         <div class="form-section">
             <h2>Single File Upload</h2>
             <form method="POST" enctype="multipart/form-data">
-                <!-- (Same single upload fields as before) -->
+                <div class="form-group">
+                    <label for="test_type">Test Type:</label>
+                    <select name="test_type" id="test_type" required>
+                        <option value="">Select Test Type</option>
+                        <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                            <option value="<?= $type ?>"><?= $type ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="eye">Eye:</label>
+                    <select name="eye" id="eye" required>
+                        <option value="">Select Eye</option>
+                        <option value="OD">Right Eye (OD)</option>
+                        <option value="OS">Left Eye (OS)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="patient_id">Patient ID:</label>
+                    <input type="text" name="patient_id" id="patient_id" required>
+                </div>
+                <div class="form-group">
+                    <label for="test_date">Test Date:</label>
+                    <input type="date" name="test_date" id="test_date" required>
+                </div>
+                <div class="form-group">
+                    <label for="image">File (PNG for all tests except VF, PDF for VF):</label>
+                    <input type="file" name="image" id="image" accept="image/png,.pdf,.exp" required>
+                </div>
+                <button type="submit" name="import">Upload File</button>
             </form>
         </div>
 
+        <!-- Bulk Folder Upload -->
         <div class="form-section">
             <h2>Bulk Import from Folder</h2>
             <form method="POST" enctype="multipart/form-data">
@@ -241,6 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </button>
             </form>
         </div>
+
         <a href="index.php" class="back-link">← Back to Dashboard</a>
     </div>
 </body>
