@@ -329,9 +329,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     throw new Exception("Failed to move uploaded file: " . $name);
                 }
             }
-            
-            $results = processBulkImages($testType, $sourcePath);
-            
+            $results = processBulkImages($testType, $tempDir);
+    
+            // Cleanup
+            array_map('unlink', glob("$tempDir/*"));
+            rmdir($tempDir);
+                    
+         
             // Prepare results message
             $message = "<div class='results-container'>";
             $message .= "<h3>Bulk Import Results</h3>";
