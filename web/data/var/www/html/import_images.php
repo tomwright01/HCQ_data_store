@@ -207,6 +207,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Medical Image Importer</title>
     <style>
         /* Keep your existing CSS styles here */
+        .preview-list { margin-top: 10px; font-size: 14px; }
+        .preview-list li { margin-bottom: 3px; }
     </style>
 </head>
 <body>
@@ -268,7 +270,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="form-group">
                     <label for="bulk_files">Select Folder:</label>
-                    <input type="file" name="bulk_files[]" id="bulk_files" webkitdirectory multiple accept=".png,.pdf,.exp" required>
+                    <input type="file" name="bulk_files[]" id="bulk_files" webkitdirectory multiple required>
+                    <ul class="preview-list" id="file-preview"></ul>
                 </div>
                 <button type="submit" name="bulk_import" class="bulk-import-btn">
                     Process All Files in Folder
@@ -278,5 +281,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <a href="index.php" class="back-link">← Back to Dashboard</a>
     </div>
+
+<script>
+document.getElementById('bulk_files').addEventListener('change', function(e) {
+    const list = document.getElementById('file-preview');
+    list.innerHTML = '';
+    Array.from(e.target.files).forEach(file => {
+        const li = document.createElement('li');
+        li.textContent = file.webkitRelativePath || file.name;
+        list.appendChild(li);
+    });
+});
+</script>
 </body>
 </html>
