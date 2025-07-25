@@ -86,32 +86,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
 }
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Medical Image Importer</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f5f7fa; }
-        .container { max-width: 1000px; margin: 40px auto; background: white; padding: 30px; 
-                     border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #00a88f; margin-bottom: 20px; }
-        h2 { color: #00a88f; margin-top: 0; }
-        .form-section { margin-bottom: 40px; padding-bottom: 20px; border-bottom: 1px solid #eee; }
-        label { display: block; font-weight: bold; margin: 10px 0 5px; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f0f4f8; }
+        .container { max-width: 1000px; margin: 40px auto; background: white; padding: 40px;
+                     border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #00a88f; margin-bottom: 30px; font-size: 32px; }
+        h2 { color: #00a88f; margin-top: 0; font-size: 24px; }
+        .form-section { margin-bottom: 50px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0; }
+        label { display: block; font-weight: 600; margin: 15px 0 5px; font-size: 15px; }
         select, input[type="text"], input[type="date"], input[type="file"] {
-            width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 16px; 
-            margin-bottom: 10px;
+            width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px;
+            font-size: 16px; margin-bottom: 15px; transition: 0.3s;
         }
-        button { width: 100%; padding: 12px; background: #00a88f; color: white; border: none; 
-                 border-radius: 5px; font-size: 16px; cursor: pointer; transition: 0.3s; }
-        button:hover { background: #008f7a; }
-        .progress { font-weight: bold; margin: 10px 0; }
-        ul#file-list { list-style: none; padding: 0; font-size: 14px; max-height: 300px; overflow-y: auto; }
+        select:focus, input:focus { outline: none; border-color: #00a88f; box-shadow: 0 0 5px rgba(0,168,143,0.5); }
+        button { width: 100%; padding: 14px; background: #00a88f; color: white; border: none;
+                 border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;
+                 transition: background 0.3s, transform 0.2s; }
+        button:hover { background: #008f7a; transform: translateY(-1px); }
+        .progress { font-weight: bold; margin: 15px 0; font-size: 15px; }
+        .progress-bar-container { width: 100%; background: #e0e0e0; height: 14px; border-radius: 7px; margin: 10px 0; }
+        .progress-bar { height: 14px; background: #00a88f; width: 0%; border-radius: 7px; transition: width 0.3s; }
+        ul#file-list { list-style: none; padding: 0; font-size: 14px; max-height: 250px; overflow-y: auto; }
         #file-list li.success { color: green; }
         #file-list li.error { color: red; }
-        .message { text-align: center; padding: 10px; border-radius: 5px; margin-bottom: 20px; }
+        .message { text-align: center; padding: 12px; border-radius: 5px; margin-bottom: 20px; font-size: 16px; }
         .success { background: #e6f7e6; color: #3c763d; border: 1px solid #d6e9c6; }
         .error { background: #f2dede; color: #a94442; border: 1px solid #ebccd1; }
+        .back-link { display: inline-block; margin-top: 25px; color: #00a88f; text-decoration: none;
+                     font-weight: bold; font-size: 16px; transition: 0.3s; }
+        .back-link:hover { text-decoration: underline; color: #008f7a; }
     </style>
 </head>
 <body>
@@ -164,8 +171,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
         <button id="startUpload">Start Upload</button>
 
         <div id="progress" class="progress">No files uploaded yet</div>
+        <div class="progress-bar-container"><div class="progress-bar" id="progress-bar"></div></div>
         <ul id="file-list"></ul>
     </div>
+
+    <a href="index.php" class="back-link">← Return Home</a>
 </div>
 
 <script>
@@ -176,6 +186,7 @@ document.getElementById('startUpload').addEventListener('click', async () => {
     const test_type = document.getElementById('test_type').value;
     const fileList = document.getElementById('file-list');
     const progress = document.getElementById('progress');
+    const progressBar = document.getElementById('progress-bar');
 
     fileList.innerHTML = '';
     let successCount = 0, errorCount = 0;
@@ -207,7 +218,10 @@ document.getElementById('startUpload').addEventListener('click', async () => {
             li.textContent += ' - network error';
             errorCount++;
         }
+
+        const percentage = Math.round(((i+1)/files.length)*100);
         progress.innerText = `Processed ${i+1}/${files.length} | Success: ${successCount}, Errors: ${errorCount}`;
+        progressBar.style.width = percentage + '%';
     }
 
     progress.innerText = `Upload finished! Success: ${successCount}, Errors: ${errorCount}`;
