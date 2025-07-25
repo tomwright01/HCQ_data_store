@@ -639,10 +639,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <div class="form-group">
-                    <label for="folder_path">Source Folder Path:</label>
-                    <input type="text" name="folder_path" id="folder_path" required 
-                           value="<?= htmlspecialchars(IMAGE_BASE_DIR) ?>"
-                           placeholder="e.g., /var/www/html/data/">
+                    <label for="folder_upload">Select Folder:</label>
+                    <input type="file" name="files[]" id="folder_upload" webkitdirectory directory multiple required>
+                    <small class="help-text">(Chrome/Edge recommended for folder upload)</small>
                 </div>
                 
                 <div class="requirements-box">
