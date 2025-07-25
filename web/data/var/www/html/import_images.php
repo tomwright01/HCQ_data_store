@@ -9,22 +9,68 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
-    $testType = $_POST['test_type'] ?? '';
-    $eye = $_POST['eye'] ?? '';
-    $patientId = $_POST['patient_id'] ?? '';
-    $testDate = $_POST['test_date'] ?? '';
+function handleSingleFile($testType, $tmpName, $originalName) {
+    global $conn;
 
-    if (empty($testType) || empty($eye) || empty($patientId) || empty($testDate)) {
-        echo json_encode(['status' => 'error', 'message' => 'All fields are required']);
-        exit;
+    $results = ['success' => false, 'message' => ''];
+
+    $pattern = ($testType === 'MFERG')
+        ? '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
+        : '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
+
+    if (!preg_match($pattern, $originalName, $matches)) {
+        return ['success' => false, 'message' => "Invalid filename format ($originalName)"];
     }
+
+    $patientId = $matches[1];
+    $eye = strtoupper($matches[2]);
+    $dateStr = $matches[3];
+    $testDate = DateTime::createFromFormat('Ymd', $dateStr);
+    if (!$testDate) {
+        return ['success' => false, 'message' => "Invalid date format in filename: $dateStr"];
+    }
+    if (!getPatientById($patientId)) {
+        return ['success' => false, 'message' => "Patient $patientId not found"];
+    }
+
+    $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
+    if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
+
+    $targetFile = $targetDir . $originalName;
+
+    if (!move_uploaded_file($tmpName, $targetFile)) {
+        return ['success' => false, 'message' => "Failed to move file $originalName"];
+    }
+
+    $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
+    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
+    $stmt->bind_param("ss", $patientId, $testDate->format('Y-m-d'));
+    $stmt->execute();
+    $test = $stmt->get_result()->fetch_assoc();
+
+    $testId = $test ? $test['test_id'] :
+        $patientId . '_' . $testDate->format('Ymd') . '_' . substr(md5(uniqid()), 0, 4);
+
+    if ($test) {
+        $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
+        $stmt->bind_param("ss", $originalName, $testId);
+    } else {
+        $stmt = $conn->prepare("INSERT INTO tests 
+            (test_id, patient_id, date_of_test, $imageField) 
+            VALUES (?, ?, ?, ?)");
+        $stmt->bind_param("ssss", $testId, $patientId, $testDate->format('Y-m-d'), $originalName);
+    }
+    if (!$stmt->execute()) {
+        return ['success' => false, 'message' => "Database error: " . $conn->error];
+    }
+
+    return ['success' => true, 'message' => "$originalName processed"];
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
+    $testType = $_POST['test_type'] ?? '';
     if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
         echo json_encode(['status' => 'error', 'message' => 'Invalid test type']);
-        exit;
-    }
-    if (!in_array($eye, ['OD', 'OS'])) {
-        echo json_encode(['status' => 'error', 'message' => 'Invalid eye']);
         exit;
     }
     if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
@@ -32,29 +78,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
         exit;
     }
 
-    // Process file using your existing function
-    $success = importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name']);
-
-    if ($success) {
-        echo json_encode(['status' => 'success', 'message' => $_FILES['image']['name'] . ' uploaded']);
-    } else {
-        echo json_encode(['status' => 'error', 'message' => 'Failed to process ' . $_FILES['image']['name']]);
-    }
+    $res = handleSingleFile($testType, $_FILES['image']['tmp_name'], $_FILES['image']['name']);
+    echo json_encode($res['success']
+        ? ['status' => 'success', 'message' => $res['message']]
+        : ['status' => 'error', 'message' => $res['message']]);
     exit;
 }
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Full Folder Upload</title>
+    <title>Medical Image Bulk Upload</title>
     <style>
         #file-list li.success { color: green; }
         #file-list li.error { color: red; }
-        #progress { margin: 10px 0; font-weight: bold; }
+        #progress { font-weight: bold; margin: 10px 0; }
     </style>
 </head>
 <body>
-    <h1>Upload Entire Folder (Progressively)</h1>
+    <h1>Medical Image Bulk Upload</h1>
     <label>Test Type:
         <select id="test_type">
             <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
@@ -62,14 +104,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
             <?php endforeach; ?>
         </select>
     </label>
-    <label>Eye:
-        <select id="eye">
-            <option value="OD">OD</option>
-            <option value="OS">OS</option>
-        </select>
-    </label>
-    <label>Patient ID: <input type="text" id="patient_id"></label>
-    <label>Test Date: <input type="date" id="test_date"></label>
     <input type="file" id="bulk_files" webkitdirectory multiple>
     <button id="startUpload">Start Upload</button>
 
@@ -77,24 +111,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
     <ul id="file-list"></ul>
 
 <script>
-const filesInput = document.getElementById('bulk_files');
-const fileList = document.getElementById('file-list');
-const progress = document.getElementById('progress');
-
 document.getElementById('startUpload').addEventListener('click', async () => {
-    const files = filesInput.files;
+    const files = document.getElementById('bulk_files').files;
     if (files.length === 0) {
         alert('Please select a folder first');
         return;
     }
 
+    const test_type = document.getElementById('test_type').value;
+    const fileList = document.getElementById('file-list');
+    const progress = document.getElementById('progress');
+
     fileList.innerHTML = '';
     let successCount = 0, errorCount = 0;
-
-    const test_type = document.getElementById('test_type').value;
-    const eye = document.getElementById('eye').value;
-    const patient_id = document.getElementById('patient_id').value;
-    const test_date = document.getElementById('test_date').value;
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -103,11 +132,8 @@ document.getElementById('startUpload').addEventListener('click', async () => {
         fileList.appendChild(li);
 
         const formData = new FormData();
-        formData.append('import', '1');
+        formData.append('bulk_upload', '1');
         formData.append('test_type', test_type);
-        formData.append('eye', eye);
-        formData.append('patient_id', patient_id);
-        formData.append('test_date', test_date);
         formData.append('image', file, file.name);
 
         try {
@@ -127,7 +153,7 @@ document.getElementById('startUpload').addEventListener('click', async () => {
             errorCount++;
         }
 
-        progress.innerText = `Processed ${i+1}/${files.length} files | Success: ${successCount}, Errors: ${errorCount}`;
+        progress.innerText = `Processed ${i+1}/${files.length} | Success: ${successCount}, Errors: ${errorCount}`;
     }
 
     progress.innerText = `Upload finished! Success: ${successCount}, Errors: ${errorCount}`;
