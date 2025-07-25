@@ -127,7 +127,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!$testDate) throw new Exception("Invalid date format in filename: $dateStr");
                     if (!getPatientById($patientId)) throw new Exception("Patient $patientId not found");
 
-                    // Move file to permanent storage
                     $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
                     if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
                     $targetFile = $targetDir . $originalName;
@@ -136,7 +135,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         throw new Exception("Failed to move uploaded file: $originalName");
                     }
 
-                    // DB update or insert
                     $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
                     $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
                     $stmt->bind_param("ss", $patientId, $testDate->format('Y-m-d'));
@@ -168,7 +166,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $results['processed']++;
             }
 
-            // Build message output
             $message = "<div class='results-container'>";
             $message .= "<h3>Bulk Import Results</h3>";
             $message .= "<div class='stats-grid'>";
@@ -206,7 +203,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Medical Image Importer</title>
     <style>
-        /* Keep your existing CSS styles here */
         .preview-list { margin-top: 10px; font-size: 14px; }
         .preview-list li { margin-bottom: 3px; }
     </style>
