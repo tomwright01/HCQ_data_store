@@ -9,6 +9,9 @@ ini_set('max_file_uploads', '2000');
 $message = '';
 $messageType = '';
 
+/**
+ * Process uploaded folder using webkitdirectory
+ */
 function processUploadedFolder($testType, $files)
 {
     global $conn;
@@ -29,7 +32,6 @@ function processUploadedFolder($testType, $files)
         $tmpPath  = $files['tmp_name'][$i];
         $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
 
-        // Only accept allowed file types
         if (!in_array($extension, ['png', 'pdf', 'exp'])) {
             $results['errors'][] = [
                 'file'  => $filename,
@@ -42,13 +44,13 @@ function processUploadedFolder($testType, $files)
         $results['processed']++;
 
         try {
-            // Parse filename (patientid_eye_YYYYMMDD.ext)
+            // Validate filename format: patientid_eye_YYYYMMDD.ext
             $pattern = $testType === 'MFERG' ?
                 '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i' :
                 '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
 
             if (!preg_match($pattern, $filename, $matches)) {
-                throw new Exception("Invalid filename format. Expected patientid_eye_YYYYMMDD.ext");
+                throw new Exception("Invalid filename format (expected patientid_eye_YYYYMMDD.ext)");
             }
 
             $patientId = $matches[1];
@@ -68,7 +70,7 @@ function processUploadedFolder($testType, $files)
 
             $targetFile = $targetDir . $filename;
 
-            // Handle anonymization for VF/OCT PDF
+            // Anonymize VF/OCT PDF if required
             if (($testType === 'VF' || $testType === 'OCT' || $testType === 'MFERG') && $fileExt === 'pdf') {
                 $tempDir = sys_get_temp_dir() . '/vf_anon_' . uniqid();
                 mkdir($tempDir);
@@ -100,7 +102,7 @@ function processUploadedFolder($testType, $files)
                 }
             }
 
-            // Update database
+            // Update DB record
             $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
             $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id=? AND date_of_test=?");
             $stmt->bind_param("ss", $patientId, $testDate);
@@ -137,7 +139,38 @@ function processUploadedFolder($testType, $files)
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        if (isset($_POST['bulk_folder_import'])) {
+        if (isset($_POST['import'])) {
+            // --- Single file upload (unchanged) ---
+            $testType  = $_POST['test_type'] ?? '';
+            $eye       = $_POST['eye'] ?? '';
+            $patientId = $_POST['patient_id'] ?? '';
+            $testDate  = $_POST['test_date'] ?? '';
+
+            if (empty($testType) || empty($eye) || empty($patientId) || empty($testDate)) {
+                throw new Exception("All fields are required");
+            }
+
+            if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
+                throw new Exception("Invalid test type selected");
+            }
+
+            if (!in_array($eye, ['OD', 'OS'])) {
+                throw new Exception("Eye must be OD or OS");
+            }
+
+            if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+                throw new Exception("Please select a valid file");
+            }
+
+            if (importTestImage($testType, $eye, $patientId, $testDate, $_FILES['image']['tmp_name'])) {
+                $message = "Image uploaded and database updated successfully!";
+                $messageType = 'success';
+            } else {
+                throw new Exception("Failed to process image upload");
+            }
+
+        } elseif (isset($_POST['bulk_folder_import'])) {
+            // --- Folder upload ---
             $testType = $_POST['bulk_test_type'] ?? '';
             if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
                 throw new Exception("Invalid test type selected");
@@ -159,7 +192,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message .= "</ul>";
             }
 
-            $messageType = empty($results['errors']) ? 'success' : (count($results['success']) > 0 ? 'warning' : 'error');
+            $messageType = empty($results['errors']) ? 'success' :
+                ($results['success'] > 0 ? 'warning' : 'error');
         }
     } catch (Exception $e) {
         $message = "<strong>Error:</strong> " . $e->getMessage();
@@ -174,25 +208,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Medical Image Importer</title>
 </head>
 <body>
-    <h1>Bulk Import from Folder</h1>
+    <h1>Medical Image Importer</h1>
     <?php if ($message): ?>
         <div class="<?= $messageType ?>"><?= $message ?></div>
     <?php endif; ?>
+
+    <h2>Single File Upload</h2>
     <form method="POST" enctype="multipart/form-data">
-        <label for="bulk_test_type">Test Type:</label>
-        <select name="bulk_test_type" id="bulk_test_type" required>
-            <option value="">Select Test Type</option>
+        <label>Test Type:</label>
+        <select name="test_type" required>
+            <option value="">Select</option>
             <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
                 <option value="<?= $type ?>"><?= $type ?></option>
             <?php endforeach; ?>
-        </select>
-        <br><br>
+        </select><br><br>
+        <label>Eye:</label>
+        <select name="eye" required>
+            <option value="">Select</option>
+            <option value="OD">Right Eye (OD)</option>
+            <option value="OS">Left Eye (OS)</option>
+        </select><br><br>
+        <label>Patient ID:</label>
+        <input type="text" name="patient_id" required><br><br>
+        <label>Test Date:</label>
+        <input type="date" name="test_date" required><br><br>
+        <label>File:</label>
+        <input type="file" name="image" accept="image/png,.pdf,.exp" required><br><br>
+        <button type="submit" name="import">Upload File</button>
+    </form>
+
+    <h2>Bulk Folder Upload</h2>
+    <form method="POST" enctype="multipart/form-data">
+        <label>Test Type:</label>
+        <select name="bulk_test_type" required>
+            <option value="">Select</option>
+            <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                <option value="<?= $type ?>"><?= $type ?></option>
+            <?php endforeach; ?>
+        </select><br><br>
         <label>Select Folder:</label>
-        <input type="file" name="folder[]" webkitdirectory directory multiple required>
-        <br><br>
+        <input type="file" name="folder[]" webkitdirectory directory multiple required><br><br>
         <button type="submit" name="bulk_folder_import">Upload Folder</button>
     </form>
-    <br>
-    <a href="index.php">← Back to Dashboard</a>
+
+    <br><a href="index.php">← Back to Dashboard</a>
 </body>
 </html>
