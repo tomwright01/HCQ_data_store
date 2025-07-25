@@ -107,6 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             foreach ($_FILES['bulk_files']['tmp_name'] as $i => $tmpName) {
                 $originalName = $_FILES['bulk_files']['name'][$i];
+                $fileExt = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
 
                 try {
                     // Validate filename: patientid_eye_YYYYMMDD.ext
@@ -121,7 +122,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $patientId = $matches[1];
                     $eye = strtoupper($matches[2]);
                     $dateStr = $matches[3];
-                    $fileExt = strtolower($matches[4]);
 
                     $testDate = DateTime::createFromFormat('Ymd', $dateStr);
                     if (!$testDate) throw new Exception("Invalid date format in filename: $dateStr");
@@ -132,7 +132,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
                     $targetFile = $targetDir . $originalName;
 
-                    if (!copy($tmpName, $targetFile)) throw new Exception("Failed to copy file");
+                    if (!move_uploaded_file($tmpName, $targetFile)) {
+                        throw new Exception("Failed to move uploaded file: $originalName");
+                    }
 
                     // DB update or insert
                     $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
@@ -266,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 <div class="form-group">
                     <label for="bulk_files">Select Folder:</label>
-                    <input type="file" name="bulk_files[]" id="bulk_files" webkitdirectory multiple required>
+                    <input type="file" name="bulk_files[]" id="bulk_files" webkitdirectory multiple accept=".png,.pdf,.exp" required>
                 </div>
                 <button type="submit" name="bulk_import" class="bulk-import-btn">
                     Process All Files in Folder
