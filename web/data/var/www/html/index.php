@@ -698,13 +698,13 @@ function remove_filter_url($filter_to_remove) {
         
         .search-input-container {
             flex: 1;
-            min-width: 250px;
+            min-width: 300px;
             position: relative;
         }
         
         .search-input {
             width: 100%;
-            padding: 15px 20px 15px 50px;
+            padding: 12px 15px 15px 45px;
             font-size: 1rem;
             border: 1px solid #ced4da;
             border-radius: 8px;
