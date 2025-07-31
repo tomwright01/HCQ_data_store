@@ -250,6 +250,7 @@ function remove_filter_url($filter_to_remove) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title> Hydroxychloroquine Data Repository </title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
         body {
             font-family: 'Arial', sans-serif;
@@ -505,96 +506,169 @@ function remove_filter_url($filter_to_remove) {
             background-color: #f8d7da;
             color: #721c24;
         }
-        /* New filter panel styles */
+        /* Enhanced Filter Panel Styles */
         .filter-panel {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            border: 1px solid #dee2e6;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin: 25px 0;
+            border: 1px solid #e0e6ed;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.03);
         }
-        .filter-panel h3 {
+        .filter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e0e6ed;
+        }
+        .filter-header h3 {
             color: rgb(0, 168, 143);
-            margin-top: 0;
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-        .filter-group {
+            margin: 0;
+            font-size: 1.4rem;
             display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 10px;
-        }
-        .filter-control {
-            display: flex;
-            flex-direction: column;
-            min-width: 200px;
-        }
-        .filter-control label {
-            margin-bottom: 5px;
-            font-weight: 600;
-            color: #495057;
-        }
-        .filter-control select, 
-        .filter-control input {
-            padding: 8px 12px;
-            border: 1px solid #ced4da;
-            border-radius: 4px;
-            background-color: white;
-        }
-        .filter-actions {
-            display: flex;
+            align-items: center;
             gap: 10px;
-            margin-top: 10px;
         }
-        .filter-button {
-            padding: 8px 16px;
+        .filter-results-badge {
             background-color: rgb(0, 168, 143);
             color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
         }
-        .filter-button:hover {
-            background-color: rgb(0, 140, 120);
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
         }
-        .reset-button {
-            padding: 8px 16px;
-            background-color: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background-color 0.3s;
+        .filter-card {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s, box-shadow 0.3s;
+            border: 1px solid #e0e6ed;
         }
-        .reset-button:hover {
-            background-color: #5a6268;
+        .filter-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        .filter-icon {
+            width: 40px;
+            height: 40px;
+            background: rgba(0, 168, 143, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: rgb(0, 168, 143);
+            font-size: 1.1rem;
+        }
+        .filter-content {
+            flex: 1;
+        }
+        .filter-content label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.95rem;
+        }
+        .filter-select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            background-color: white;
+            font-size: 0.95rem;
+            color: #495057;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .filter-select:focus {
+            border-color: rgb(0, 168, 143);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(0, 168, 143, 0.2);
+        }
+        .filter-footer {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
         .active-filters {
             display: flex;
             flex-wrap: wrap;
+            align-items: center;
             gap: 10px;
-            margin-top: 15px;
+        }
+        .active-filters-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            font-weight: 500;
         }
         .filter-tag {
-            background-color: rgb(0, 168, 143);
+            background: linear-gradient(135deg, rgb(0, 168, 143) 0%, rgb(0, 140, 120) 100%);
             color: white;
-            padding: 5px 10px;
+            padding: 6px 12px;
             border-radius: 20px;
-            font-size: 14px;
+            font-size: 0.85rem;
             display: flex;
             align-items: center;
             gap: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         }
-        .filter-tag button {
-            background: none;
-            border: none;
+        .filter-tag-remove {
             color: white;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            margin-left: 5px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        .filter-tag-remove:hover {
+            opacity: 1;
+        }
+        .filter-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+        .filter-button, .reset-button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
             cursor: pointer;
-            font-weight: bold;
-            padding: 0;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .filter-button {
+            background: linear-gradient(135deg, rgb(0, 168, 143) 0%, rgb(0, 140, 120) 100%);
+            color: white;
+            box-shadow: 0 2px 10px rgba(0, 168, 143, 0.3);
+        }
+        .filter-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0, 168, 143, 0.4);
+        }
+        .reset-button {
+            background: white;
+            color: #6c757d;
+            border: 1px solid #dee2e6;
+        }
+        .reset-button:hover {
+            background: #f8f9fa;
+            border-color: #ced4da;
         }
     </style>
 </head>
@@ -611,80 +685,118 @@ function remove_filter_url($filter_to_remove) {
             <a href="export_csv.php" class="action-button export-button">Export to CSV</a>
         </div>
 
-        <!-- Filter Panel -->
+        <!-- Enhanced Filter Panel -->
         <div class="filter-panel">
-            <h3>Filter Patients</h3>
-            <form method="GET" action="index.php">
-                <div class="filter-group">
-                    <div class="filter-control">
-                        <label for="filter_location">Location:</label>
-                        <select name="filter_location" id="filter_location">
-                            <option value="">All Locations</option>
-                            <option value="KH" <?= $filter_location === 'KH' ? 'selected' : '' ?>>Kensington</option>
-                            <option value="CHUSJ" <?= $filter_location === 'CHUSJ' ? 'selected' : '' ?>>CHUSJ</option>
-                            <option value="IWK" <?= $filter_location === 'IWK' ? 'selected' : '' ?>>IWK</option>
-                            <option value="IVEY" <?= $filter_location === 'IVEY' ? 'selected' : '' ?>>Ivey</option>
-                        </select>
+            <div class="filter-header">
+                <h3><i class="fas fa-filter"></i> Filter Patients</h3>
+                <?php if ($filter_active && isset($result_patient)): ?>
+                    <div class="filter-results-badge">
+                        <?= $result_patient->num_rows ?> results
                     </div>
-                    
-                    <div class="filter-control">
-                        <label for="filter_eye">Eye:</label>
-                        <select name="filter_eye" id="filter_eye">
-                            <option value="">Both Eyes</option>
-                            <option value="OD" <?= $filter_eye === 'OD' ? 'selected' : '' ?>>OD (Right Eye)</option>
-                            <option value="OS" <?= $filter_eye === 'OS' ? 'selected' : '' ?>>OS (Left Eye)</option>
-                        </select>
-                    </div>
-                    
-                    <div class="filter-control">
-                        <label for="filter_merci_range">MERCI Score:</label>
-                        <select name="filter_merci_range" id="filter_merci_range">
-                            <option value="">All Scores</option>
-                            <option value="unable" <?= $filter_merci_range === 'unable' ? 'selected' : '' ?>>Unable</option>
-                            <option value="0-10" <?= $filter_merci_range === '0-10' ? 'selected' : '' ?>>0-10</option>
-                            <option value="11-20" <?= $filter_merci_range === '11-20' ? 'selected' : '' ?>>11-20</option>
-                            <option value="21-30" <?= $filter_merci_range === '21-30' ? 'selected' : '' ?>>21-30</option>
-                            <option value="31-40" <?= $filter_merci_range === '31-40' ? 'selected' : '' ?>>31-40</option>
-                            <option value="41-50" <?= $filter_merci_range === '41-50' ? 'selected' : '' ?>>41-50</option>
-                            <option value="51-60" <?= $filter_merci_range === '51-60' ? 'selected' : '' ?>>51-60</option>
-                            <option value="61-70" <?= $filter_merci_range === '61-70' ? 'selected' : '' ?>>61-70</option>
-                            <option value="71-80" <?= $filter_merci_range === '71-80' ? 'selected' : '' ?>>71-80</option>
-                            <option value="81-90" <?= $filter_merci_range === '81-90' ? 'selected' : '' ?>>81-90</option>
-                            <option value="91-100" <?= $filter_merci_range === '91-100' ? 'selected' : '' ?>>91-100</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="filter-actions">
-                    <button type="submit" class="filter-button">Apply Filters</button>
-                    <a href="index.php" class="reset-button">Reset All</a>
-                </div>
-                
-                <?php if ($filter_active): ?>
-                <div class="active-filters">
-                    <strong>Active Filters:</strong>
-                    <?php if ($filter_location): ?>
-                        <span class="filter-tag">
-                            Location: <?= htmlspecialchars($filter_location) ?>
-                            <a href="<?= remove_filter_url('filter_location') ?>">&times;</a>
-                        </span>
-                    <?php endif; ?>
-                    
-                    <?php if ($filter_eye): ?>
-                        <span class="filter-tag">
-                            Eye: <?= htmlspecialchars($filter_eye) ?>
-                            <a href="<?= remove_filter_url('filter_eye') ?>">&times;</a>
-                        </span>
-                    <?php endif; ?>
-                    
-                    <?php if ($filter_merci_range): ?>
-                        <span class="filter-tag">
-                            MERCI: <?= htmlspecialchars($filter_merci_range) ?>
-                            <a href="<?= remove_filter_url('filter_merci_range') ?>">&times;</a>
-                        </span>
-                    <?php endif; ?>
-                </div>
                 <?php endif; ?>
+            </div>
+            
+            <form method="GET" action="index.php" class="filter-form">
+                <div class="filter-grid">
+                    <!-- Location Filter -->
+                    <div class="filter-card">
+                        <div class="filter-icon">
+                            <i class="fas fa-map-marker-alt"></i>
+                        </div>
+                        <div class="filter-content">
+                            <label for="filter_location">Location</label>
+                            <select name="filter_location" id="filter_location" class="filter-select">
+                                <option value="">All Locations</option>
+                                <option value="KH" <?= $filter_location === 'KH' ? 'selected' : '' ?>>Kensington</option>
+                                <option value="CHUSJ" <?= $filter_location === 'CHUSJ' ? 'selected' : '' ?>>CHUSJ</option>
+                                <option value="IWK" <?= $filter_location === 'IWK' ? 'selected' : '' ?>>IWK</option>
+                                <option value="IVEY" <?= $filter_location === 'IVEY' ? 'selected' : '' ?>>Ivey</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- Eye Filter -->
+                    <div class="filter-card">
+                        <div class="filter-icon">
+                            <i class="fas fa-eye"></i>
+                        </div>
+                        <div class="filter-content">
+                            <label for="filter_eye">Eye</label>
+                            <select name="filter_eye" id="filter_eye" class="filter-select">
+                                <option value="">Both Eyes</option>
+                                <option value="OD" <?= $filter_eye === 'OD' ? 'selected' : '' ?>>OD (Right Eye)</option>
+                                <option value="OS" <?= $filter_eye === 'OS' ? 'selected' : '' ?>>OS (Left Eye)</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <!-- MERCI Score Filter -->
+                    <div class="filter-card">
+                        <div class="filter-icon">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="filter-content">
+                            <label for="filter_merci_range">MERCI Score</label>
+                            <select name="filter_merci_range" id="filter_merci_range" class="filter-select">
+                                <option value="">All Scores</option>
+                                <option value="unable" <?= $filter_merci_range === 'unable' ? 'selected' : '' ?>>Unable</option>
+                                <option value="0-10" <?= $filter_merci_range === '0-10' ? 'selected' : '' ?>>0-10</option>
+                                <option value="11-20" <?= $filter_merci_range === '11-20' ? 'selected' : '' ?>>11-20</option>
+                                <option value="21-30" <?= $filter_merci_range === '21-30' ? 'selected' : '' ?>>21-30</option>
+                                <option value="31-40" <?= $filter_merci_range === '31-40' ? 'selected' : '' ?>>31-40</option>
+                                <option value="41-50" <?= $filter_merci_range === '41-50' ? 'selected' : '' ?>>41-50</option>
+                                <option value="51-60" <?= $filter_merci_range === '51-60' ? 'selected' : '' ?>>51-60</option>
+                                <option value="61-70" <?= $filter_merci_range === '61-70' ? 'selected' : '' ?>>61-70</option>
+                                <option value="71-80" <?= $filter_merci_range === '71-80' ? 'selected' : '' ?>>71-80</option>
+                                <option value="81-90" <?= $filter_merci_range === '81-90' ? 'selected' : '' ?>>81-90</option>
+                                <option value="91-100" <?= $filter_merci_range === '91-100' ? 'selected' : '' ?>>91-100</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="filter-footer">
+                    <div class="active-filters">
+                        <?php if ($filter_active): ?>
+                            <div class="active-filters-label">Active filters:</div>
+                            <?php if ($filter_location): ?>
+                                <div class="filter-tag">
+                                    <span>Location: <?= htmlspecialchars($filter_location) ?></span>
+                                    <a href="<?= remove_filter_url('filter_location') ?>" class="filter-tag-remove">
+                                        <i class="fas fa-times"></i>
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if ($filter_eye): ?>
+                                <div class="filter-tag">
+                                    <span>Eye: <?= htmlspecialchars($filter_eye) ?></span>
+                                    <a href="<?= remove_filter_url('filter_eye') ?>" class="filter-tag-remove">
+                                        <i class="fas fa-times"></i>
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if ($filter_merci_range): ?>
+                                <div class="filter-tag">
+                                    <span>MERCI: <?= htmlspecialchars($filter_merci_range) ?></span>
+                                    <a href="<?= remove_filter_url('filter_merci_range') ?>" class="filter-tag-remove">
+                                        <i class="fas fa-times"></i>
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+                    
+                    <div class="filter-actions">
+                        <button type="submit" class="filter-button">
+                            <i class="fas fa-filter"></i> Apply Filters
+                        </button>
+                        <a href="index.php" class="reset-button">
+                            <i class="fas fa-redo"></i> Reset All
+                        </a>
+                    </div>
+                </div>
             </form>
         </div>
 
