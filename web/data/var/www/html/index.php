@@ -445,7 +445,7 @@ if ($search_patient_id) {
                         <th>Date</th>
                         <th>Age</th>
                         <th>Eye</th>
-                        <th>Report Diagnosis</th>
+                        <th>Impression</th>
                         <th>Exclusion</th>
                         <th>MERCI Score</th>
                         <th>MERCI Diagnosis</th>
