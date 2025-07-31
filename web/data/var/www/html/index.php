@@ -651,7 +651,7 @@ function remove_filter_url($filter_to_remove) {
             width: 100%;
             max-width: 700px;
             margin: 30px auto;
-            padding: 25px;
+            padding: 20px;
             background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
@@ -674,11 +674,11 @@ function remove_filter_url($filter_to_remove) {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
         }
         
         .search-title {
-            font-size: 1.5rem;
+            font-size: 1.4rem;
             color: rgb(0, 168, 143);
             margin: 0;
             display: flex;
@@ -687,25 +687,26 @@ function remove_filter_url($filter_to_remove) {
         }
         
         .search-title i {
-            font-size: 1.8rem;
+            font-size: 1.6rem;
         }
         
         .search-form {
             display: flex;
             gap: 10px;
             flex-wrap: wrap;
+            align-items: center;
         }
         
         .search-input-container {
             flex: 1;
-            min-width: 300px;
+            min-width: 250px;
             position: relative;
         }
         
         .search-input {
             width: 100%;
-            padding: 12px 15px 15px 45px;
-            font-size: 1rem;
+            padding: 12px 15px 12px 45px;
+            font-size: 0.95rem;
             border: 1px solid #ced4da;
             border-radius: 8px;
             background-color: white;
@@ -713,8 +714,8 @@ function remove_filter_url($filter_to_remove) {
             transition: all 0.3s;
             background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%23000a8f" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>');
             background-repeat: no-repeat;
-            background-position: 20px center;
-            background-size: 20px;
+            background-position: 15px center;
+            background-size: 18px;
         }
         
         .search-input:focus {
@@ -724,8 +725,8 @@ function remove_filter_url($filter_to_remove) {
         }
         
         .search-button {
-            padding: 12px 25    px;
-            font-size: 1rem;
+            padding: 12px 20px;
+            font-size: 0.95rem;
             font-weight: 600;
             background: linear-gradient(135deg, rgb(0, 168, 143) 0%, rgb(0, 140, 120) 100%);
             color: white;
@@ -752,7 +753,7 @@ function remove_filter_url($filter_to_remove) {
         }
         
         .edit-toggle-button {
-            padding: 10px 20px;
+            padding: 8px 15px;
             font-size: 0.9rem;
             background: linear-gradient(135deg, rgb(0, 109, 44) 0%, rgb(0, 89, 34) 100%);
             color: white;
@@ -771,7 +772,7 @@ function remove_filter_url($filter_to_remove) {
         }
         
         .cancel-edit-button {
-            padding: 10px 20px;
+            padding: 8px 15px;
             font-size: 0.9rem;
             background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
             color: white;
@@ -998,65 +999,65 @@ function remove_filter_url($filter_to_remove) {
                         <form method="POST" action="index.php?search_patient_id=<?= urlencode($search_patient_id) ?><?= $edit_mode ? '&edit=true' : '' ?>">
                             <input type="hidden" name="test_id" value="<?= htmlspecialchars($row['test_id']) ?>">
                             <tr>
-                                <td><?= htmlspecialchars($row["test_id"]) ?></td>
-                                <td><?= htmlspecialchars($row["location"] ?? 'KH') ?></td>
-                                <td><?= htmlspecialchars($row["date_of_test"]) ?></td>
+                                <td><?= htmlspecialchars($row['test_id']) ?></td>
+                                <td><?= htmlspecialchars($row['location'] ?? 'KH') ?></td>
+                                <td><?= htmlspecialchars($row['date_of_test']) ?></td>
                                 
                                 <?php if ($edit_mode): ?>
-                                    <td><input type="number" name="age" class="edit-input" value="<?= htmlspecialchars($row["age"] ?? '') ?>" min="0" max="100"></td>
+                                    <td><input type="number" name="age" class="edit-input" value="<?= htmlspecialchars($row['age'] ?? '') ?>" min="0" max="100"></td>
                                     <td>
                                         <select name="eye" class="edit-select">
                                             <option value="">Not Specified</option>
-                                            <option value="OD" <?= ($row["eye"] ?? '') === 'OD' ? 'selected' : '' ?>>OD</option>
-                                            <option value="OS" <?= ($row["eye"] ?? '') === 'OS' ? 'selected' : '' ?>>OS</option>
+                                            <option value="OD" <?= ($row['eye'] ?? '') === 'OD' ? 'selected' : '' ?>>OD</option>
+                                            <option value="OS" <?= ($row['eye'] ?? '') === 'OS' ? 'selected' : '' ?>>OS</option>
                                         </select>
                                     </td>
                                     <td>
                                         <select name="report_diagnosis" class="edit-select">
-                                            <option value="normal" <?= $row["report_diagnosis"] === 'normal' ? 'selected' : '' ?>>normal</option>
-                                            <option value="abnormal" <?= $row["report_diagnosis"] === 'abnormal' ? 'selected' : '' ?>>abnormal</option>
-                                            <option value="no input" <?= $row["report_diagnosis"] === 'no input' ? 'selected' : '' ?>>no input</option>
+                                            <option value="normal" <?= $row['report_diagnosis'] === 'normal' ? 'selected' : '' ?>>normal</option>
+                                            <option value="abnormal" <?= $row['report_diagnosis'] === 'abnormal' ? 'selected' : '' ?>>abnormal</option>
+                                            <option value="no input" <?= $row['report_diagnosis'] === 'no input' ? 'selected' : '' ?>>no input</option>
                                         </select>
                                     </td>
                                     <td>
                                         <select name="exclusion" class="edit-select">
-                                            <option value="none" <?= $row["exclusion"] === 'none' ? 'selected' : '' ?>>none</option>
-                                            <option value="retinal detachment" <?= $row["exclusion"] === 'retinal detachment' ? 'selected' : '' ?>>retinal detachment</option>
-                                            <option value="generalized retinal dysfunction" <?= $row["exclusion"] === 'generalized retinal dysfunction' ? 'selected' : '' ?>>generalized retinal dysfunction</option>
-                                            <option value="unilateral testing" <?= $row["exclusion"] === 'unilateral testing' ? 'selected' : '' ?>>unilateral testing</option>
+                                            <option value="none" <?= $row['exclusion'] === 'none' ? 'selected' : '' ?>>none</option>
+                                            <option value="retinal detachment" <?= $row['exclusion'] === 'retinal detachment' ? 'selected' : '' ?>>retinal detachment</option>
+                                            <option value="generalized retinal dysfunction" <?= $row['exclusion'] === 'generalized retinal dysfunction' ? 'selected' : '' ?>>generalized retinal dysfunction</option>
+                                            <option value="unilateral testing" <?= $row['exclusion'] === 'unilateral testing' ? 'selected' : '' ?>>unilateral testing</option>
                                         </select>
                                     </td>
-                                    <td><input type="text" name="merci_score" class="edit-input" value="<?= htmlspecialchars($row["merci_score"] ?? '') ?>"></td>
+                                    <td><input type="text" name="merci_score" class="edit-input" value="<?= htmlspecialchars($row['merci_score'] ?? '') ?>"></td>
                                     <td>
                                         <select name="merci_diagnosis" class="edit-select">
-                                            <option value="normal" <?= $row["merci_diagnosis"] === 'normal' ? 'selected' : '' ?>>normal</option>
-                                            <option value="abnormal" <?= $row["merci_diagnosis"] === 'abnormal' ? 'selected' : '' ?>>abnormal</option>
-                                            <option value="no value" <?= $row["merci_diagnosis"] === 'no value' ? 'selected' : '' ?>>no value</option>
+                                            <option value="normal" <?= $row['merci_diagnosis'] === 'normal' ? 'selected' : '' ?>>normal</option>
+                                            <option value="abnormal" <?= $row['merci_diagnosis'] === 'abnormal' ? 'selected' : '' ?>>abnormal</option>
+                                            <option value="no value" <?= $row['merci_diagnosis'] === 'no value' ? 'selected' : '' ?>>no value</option>
                                         </select>
                                     </td>
                                     <td>
                                         <select name="error_type" class="edit-select">
-                                            <option value="none" <?= ($row["error_type"] ?? '') === 'none' ? 'selected' : '' ?>>none</option>
-                                            <option value="TN" <?= ($row["error_type"] ?? '') === 'TN' ? 'selected' : '' ?>>TN</option>
-                                            <option value="FP" <?= ($row["error_type"] ?? '') === 'FP' ? 'selected' : '' ?>>FP</option>
-                                            <option value="TP" <?= ($row["error_type"] ?? '') === 'TP' ? 'selected' : '' ?>>TP</option>
-                                            <option value="FN" <?= ($row["error_type"] ?? '') === 'FN' ? 'selected' : '' ?>>FN</option>
+                                            <option value="none" <?= ($row['error_type'] ?? '') === 'none' ? 'selected' : '' ?>>none</option>
+                                            <option value="TN" <?= ($row['error_type'] ?? '') === 'TN' ? 'selected' : '' ?>>TN</option>
+                                            <option value="FP" <?= ($row['error_type'] ?? '') === 'FP' ? 'selected' : '' ?>>FP</option>
+                                            <option value="TP" <?= ($row['error_type'] ?? '') === 'TP' ? 'selected' : '' ?>>TP</option>
+                                            <option value="FN" <?= ($row['error_type'] ?? '') === 'FN' ? 'selected' : '' ?>>FN</option>
                                         </select>
                                     </td>
-                                    <td><input type="number" name="faf_grade" class="edit-input" value="<?= htmlspecialchars($row["faf_grade"] ?? '') ?>" min="1" max="4"></td>
-                                    <td><input type="number" step="0.01" name="oct_score" class="edit-input" value="<?= htmlspecialchars($row["oct_score"] ?? '') ?>"></td>
-                                    <td><input type="number" step="0.01" name="vf_score" class="edit-input" value="<?= htmlspecialchars($row["vf_score"] ?? '') ?>"></td>
+                                    <td><input type="number" name="faf_grade" class="edit-input" value="<?= htmlspecialchars($row['faf_grade'] ?? '') ?>" min="1" max="4"></td>
+                                    <td><input type="number" step="0.01" name="oct_score" class="edit-input" value="<?= htmlspecialchars($row['oct_score'] ?? '') ?>"></td>
+                                    <td><input type="number" step="0.01" name="vf_score" class="edit-input" value="<?= htmlspecialchars($row['vf_score'] ?? '') ?>"></td>
                                 <?php else: ?>
-                                    <td><?= htmlspecialchars($row["age"] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row["eye"] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row["report_diagnosis"]) ?></td>
-                                    <td><?= htmlspecialchars($row["exclusion"]) ?></td>
-                                    <td><?= htmlspecialchars($row["merci_score"] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row["merci_diagnosis"]) ?></td>
-                                    <td><?= htmlspecialchars($row["error_type"] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row["faf_grade"] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row["oct_score"] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row["vf_score"] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['age'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['eye'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['report_diagnosis']) ?></td>
+                                    <td><?= htmlspecialchars($row['exclusion']) ?></td>
+                                    <td><?= htmlspecialchars($row['merci_score'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['merci_diagnosis']) ?></td>
+                                    <td><?= htmlspecialchars($row['error_type'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['faf_grade'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['oct_score'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['vf_score'] ?? 'N/A') ?></td>
                                 <?php endif; ?>
                                 
                                 <td>
