@@ -115,6 +115,38 @@ while ($row = $result_location->fetch_assoc()) {
     $location_data[$row['location']] = $row['count'];
 }
 
+// MERCI Score distribution
+$sql_merci = "SELECT 
+    CASE 
+        WHEN merci_score = 'unable' THEN 'Unable'
+        WHEN merci_score IS NULL THEN 'Not Specified'
+        WHEN merci_score BETWEEN 0 AND 10 THEN '0-10'
+        WHEN merci_score BETWEEN 11 AND 20 THEN '11-20'
+        WHEN merci_score BETWEEN 21 AND 30 THEN '21-30'
+        WHEN merci_score BETWEEN 31 AND 40 THEN '31-40'
+        WHEN merci_score BETWEEN 41 AND 50 THEN '41-50'
+        WHEN merci_score BETWEEN 51 AND 60 THEN '51-60'
+        WHEN merci_score BETWEEN 61 AND 70 THEN '61-70'
+        WHEN merci_score BETWEEN 71 AND 80 THEN '71-80'
+        WHEN merci_score BETWEEN 81 AND 90 THEN '81-90'
+        WHEN merci_score BETWEEN 91 AND 100 THEN '91-100'
+        ELSE 'Other'
+    END AS score_range,
+    COUNT(*) AS count 
+    FROM tests 
+    GROUP BY score_range
+    ORDER BY 
+        CASE 
+            WHEN score_range = 'Unable' THEN 0
+            WHEN score_range = 'Not Specified' THEN 1
+            ELSE CAST(SUBSTRING_INDEX(score_range, '-', 1) AS UNSIGNED)
+        END";
+$result_merci = $conn->query($sql_merci);
+$merci_data = [];
+while ($row = $result_merci->fetch_assoc()) {
+    $merci_data[$row['score_range']] = $row['count'];
+}
+
 // Get patient data if search was performed
 $result_patient = null;
 if ($search_patient_id) {
@@ -267,11 +299,12 @@ if ($search_patient_id) {
             margin-bottom: 15px;
         }
         .stats-section {
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: center;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
             gap: 20px;
             margin-top: 30px;
+            width: 80%;
+            max-width: 1200px;
         }
         .metric-bar-container {
             margin-top: 30px;
@@ -572,6 +605,11 @@ if ($search_patient_id) {
             <h3 class="chart-title">Location Distribution</h3>
             <canvas id="locationChart"></canvas>
         </div>
+
+        <div class="chart-container">
+            <h3 class="chart-title">MERCI Score Distribution</h3>
+            <canvas id="merciChart"></canvas>
+        </div>
     </div>
 
     <div class="data-section">
@@ -699,6 +737,65 @@ if ($search_patient_id) {
                         beginAtZero: true,
                         ticks: {
                             stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+
+        // MERCI Score Distribution Chart
+        var merciCtx = document.getElementById('merciChart').getContext('2d');
+        var merciChart = new Chart(merciCtx, {
+            type: 'bar',
+            data: {
+                labels: <?= json_encode(array_keys($merci_data)) ?>,
+                datasets: [{
+                    label: 'Number of Tests',
+                    data: <?= json_encode(array_values($merci_data)) ?>,
+                    backgroundColor: [
+                        'rgba(0, 168, 143, 0.7)',
+                        'rgba(44, 162, 95, 0.7)',
+                        'rgba(102, 194, 164, 0.7)',
+                        'rgba(178, 226, 226, 0.7)',
+                        'rgba(0, 109, 44, 0.7)',
+                        'rgba(0, 168, 143, 0.7)',
+                        'rgba(44, 162, 95, 0.7)',
+                        'rgba(102, 194, 164, 0.7)',
+                        'rgba(178, 226, 226, 0.7)',
+                        'rgba(0, 109, 44, 0.7)',
+                        'rgba(200, 200, 200, 0.7)'
+                    ],
+                    borderColor: 'rgba(255, 255, 255, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return context.parsed.y + ' tests';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Tests'
+                        },
+                        ticks: {
+                            stepSize: 1
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'MERCI Score Range'
                         }
                     }
                 }
