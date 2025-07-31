@@ -724,7 +724,7 @@ function remove_filter_url($filter_to_remove) {
         }
         
         .search-button {
-            padding: 15px 30px;
+            padding: 12px 25    px;
             font-size: 1rem;
             font-weight: 600;
             background: linear-gradient(135deg, rgb(0, 168, 143) 0%, rgb(0, 140, 120) 100%);
