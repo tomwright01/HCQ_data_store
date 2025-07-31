@@ -157,12 +157,12 @@ while ($row = $result_merci->fetch_assoc()) {
 $result_patient = null;
 if ($search_patient_id || $filter_active) {
     $sql_patient_data = "SELECT 
-        t.test_id, t.location AS test_location, t.date_of_test, t.age, t.eye,
+        t.test_id, t.location, t.date_of_test, t.age, t.eye,
         t.report_diagnosis, t.exclusion, t.merci_score, t.merci_diagnosis,
         t.error_type, t.faf_grade, t.oct_score, t.vf_score,
         t.faf_reference_od, t.faf_reference_os, t.oct_reference_od, t.oct_reference_os,
         t.vf_reference_od, t.vf_reference_os, t.mferg_reference_od, t.mferg_reference_os,
-        p.patient_id, p.subject_id, p.date_of_birth, p.location AS patient_location
+        p.patient_id, p.subject_id, p.date_of_birth
         FROM tests t JOIN patients p ON t.patient_id = p.patient_id
         WHERE 1=1";
     
@@ -177,7 +177,7 @@ if ($search_patient_id || $filter_active) {
     
     // Apply filters
     if (!empty($filter_location)) {
-        $sql_patient_data .= " AND p.location = ?";
+        $sql_patient_data .= " AND t.location = ?";
         $params[] = $filter_location;
         $types .= "s";
     }
@@ -318,29 +318,6 @@ function remove_filter_url($filter_to_remove) {
         .form-button:hover { background-color: rgb(0, 140, 120); }
         .export-button { background-color: rgb(0, 109, 44); }
         .export-button:hover { background-color: rgb(0, 89, 34); }
-        .search-form {
-            margin: 20px;
-        }
-        .search-form input {
-            padding: 10px;
-            width: 300px;
-            font-size: 16px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-        }
-        .search-form button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: rgb(0, 168, 143);
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .search-form button:hover {
-            background-color: rgb(0, 140, 120);
-        }
         table {
             width: 100%;
             margin-top: 20px;
@@ -669,6 +646,150 @@ function remove_filter_url($filter_to_remove) {
             background: #f8f9fa;
             border-color: #ced4da;
         }
+        /* Enhanced Search Container */
+        .search-container {
+            width: 100%;
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 30px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e0e6ed;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .search-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 5px;
+            height: 100%;
+            background: linear-gradient(to bottom, rgb(0, 168, 143), rgb(0, 140, 120));
+        }
+        
+        .search-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .search-title {
+            font-size: 1.5rem;
+            color: rgb(0, 168, 143);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .search-title i {
+            font-size: 1.8rem;
+        }
+        
+        .search-form {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .search-input-container {
+            flex: 1;
+            min-width: 300px;
+            position: relative;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 15px 20px 15px 50px;
+            font-size: 1rem;
+            border: 1px solid #ced4da;
+            border-radius: 8px;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            transition: all 0.3s;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="%23000a8f" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>');
+            background-repeat: no-repeat;
+            background-position: 20px center;
+            background-size: 20px;
+        }
+        
+        .search-input:focus {
+            outline: none;
+            border-color: rgb(0, 168, 143);
+            box-shadow: 0 0 0 3px rgba(0, 168, 143, 0.2);
+        }
+        
+        .search-button {
+            padding: 15px 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, rgb(0, 168, 143) 0%, rgb(0, 140, 120) 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0, 168, 143, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .search-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 168, 143, 0.4);
+        }
+        
+        .search-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .edit-toggle-button {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            background: linear-gradient(135deg, rgb(0, 109, 44) 0%, rgb(0, 89, 34) 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .edit-toggle-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0, 109, 44, 0.3);
+        }
+        
+        .cancel-edit-button {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+        
+        .cancel-edit-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(220, 53, 69, 0.3);
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -799,18 +920,39 @@ function remove_filter_url($filter_to_remove) {
             </form>
         </div>
 
-        <div class="search-form">
-            <form method="POST" action="index.php">
-                <label for="search_patient_id">Enter Patient ID to Search for Tests:</label><br>
-                <input type="text" name="search_patient_id" id="search_patient_id" required 
-                       value="<?= htmlspecialchars($search_patient_id) ?>">
-                <button type="submit">Search</button>
+        <!-- Enhanced Search Container -->
+        <div class="search-container">
+            <div class="search-header">
+                <h2 class="search-title"><i class="fas fa-search"></i> Search Patient Tests</h2>
                 <?php if (($search_patient_id || $filter_active) && isset($result_patient) && $result_patient->num_rows > 0): ?>
-                    <?php if ($edit_mode): ?>
-                        <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="cancel-button">Cancel Edit</a>
-                    <?php else: ?>
-                        <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>&edit=true" class="edit-button">Edit Mode</a>
-                    <?php endif; ?>
+                    <div class="filter-results-badge">
+                        <?= $result_patient->num_rows ?> results found
+                    </div>
+                <?php endif; ?>
+            </div>
+            
+            <form method="POST" action="index.php" class="search-form">
+                <div class="search-input-container">
+                    <input type="text" name="search_patient_id" id="search_patient_id" 
+                           class="search-input" placeholder="Enter Patient ID..." 
+                           value="<?= htmlspecialchars($search_patient_id) ?>" required>
+                </div>
+                <button type="submit" class="search-button">
+                    <i class="fas fa-search"></i> Search
+                </button>
+                
+                <?php if (($search_patient_id || $filter_active) && isset($result_patient) && $result_patient->num_rows > 0): ?>
+                    <div class="search-actions">
+                        <?php if ($edit_mode): ?>
+                            <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="cancel-edit-button">
+                                <i class="fas fa-times"></i> Cancel Edit
+                            </a>
+                        <?php else: ?>
+                            <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>&edit=true" class="edit-toggle-button">
+                                <i class="fas fa-edit"></i> Edit Mode
+                            </a>
+                        <?php endif; ?>
+                    </div>
                 <?php endif; ?>
             </form>
         </div>
@@ -835,8 +977,7 @@ function remove_filter_url($filter_to_remove) {
                 <table>
                     <tr>
                         <th>Test ID</th>
-                        <th>Test Location</th>
-                        <th>Patient Location</th>
+                        <th>Location</th>
                         <th>Date</th>
                         <th>Age</th>
                         <th>Eye</th>
@@ -858,8 +999,7 @@ function remove_filter_url($filter_to_remove) {
                             <input type="hidden" name="test_id" value="<?= htmlspecialchars($row['test_id']) ?>">
                             <tr>
                                 <td><?= htmlspecialchars($row["test_id"]) ?></td>
-                                <td><?= htmlspecialchars($row["test_location"] ?? 'KH') ?></td>
-                                <td><?= htmlspecialchars($row["patient_location"] ?? 'KH') ?></td>
+                                <td><?= htmlspecialchars($row["location"] ?? 'KH') ?></td>
                                 <td><?= htmlspecialchars($row["date_of_test"]) ?></td>
                                 
                                 <?php if ($edit_mode): ?>
