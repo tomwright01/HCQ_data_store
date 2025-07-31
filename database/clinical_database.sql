@@ -31,6 +31,7 @@ CREATE TABLE tests (
     patient_id VARCHAR(25) NOT NULL,
     location ENUM('KH', 'Montreal', 'Dal', 'Ivey') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
+    test_number VARCHAR(6) NULL COMMENT '6-digit test ID number',
     age TINYINT UNSIGNED NULL COMMENT 'Patient age at time of test (0-100)',
     eye ENUM('OD', 'OS') NULL COMMENT 'OD=right eye, OS=left eye',
     report_diagnosis ENUM('normal', 'abnormal', 'no input') NOT NULL DEFAULT 'no input',
@@ -58,6 +59,7 @@ CREATE TABLE tests (
     INDEX idx_patient (patient_id),
     INDEX idx_date (date_of_test),
     INDEX idx_location (location),
+    INDEX idx_test_number (test_number),
     
     -- Indexes for image reference fields
     INDEX idx_faf_od (faf_reference_od),
@@ -75,5 +77,6 @@ CREATE TABLE tests (
         merci_score = 'unable' OR 
         (merci_score REGEXP '^[0-9]+$' AND CAST(merci_score AS UNSIGNED) BETWEEN 0 AND 100)
     ),
-    CONSTRAINT chk_faf_grade CHECK (faf_grade IS NULL OR (faf_grade BETWEEN 1 AND 4))
+    CONSTRAINT chk_faf_grade CHECK (faf_grade IS NULL OR (faf_grade BETWEEN 1 AND 4)),
+    CONSTRAINT chk_test_number CHECK (test_number IS NULL OR test_number REGEXP '^[0-9]{6}$')
 );
