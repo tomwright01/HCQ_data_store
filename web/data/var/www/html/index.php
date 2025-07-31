@@ -933,7 +933,7 @@ function remove_filter_url($filter_to_remove) {
                                         ];
                                         
                                         foreach ($testTypes as $prefix => $label) {
-                                            $columnName = $prefix . '_reference_' . $currentEye;
+                                            $columnName = $prefix . '_reference_' . strtolower($currentEye);
                                             if (!empty($row[$columnName])) {
                                                 $imageLinks[] = sprintf(
                                                     '<a href="view_%s.php?ref=%s&patient_id=%s&eye=%s" class="image-link">%s %s</a>',
