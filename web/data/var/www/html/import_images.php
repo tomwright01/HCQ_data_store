@@ -47,7 +47,7 @@ function handleSingleFile($testType, $tmpName, $originalName) {
     $test = $stmt->get_result()->fetch_assoc();
 
     // Uppercase eye in column names to match schema
-    $imageField = strtolower($testType) . '_reference_' . $eye; // Removed strtolower on eye
+    $imageField = strtolower($testType) . '_reference_' . strtolower($eye); // Removed strtolower on eye
 
     if ($test) {
         // Update only the specific eye's image field
