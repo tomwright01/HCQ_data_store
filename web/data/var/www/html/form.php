@@ -368,8 +368,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         <select name="location" id="location" required>
                             <option value="KH">KH</option>
                             <option value="Ivey">Ivey</option>
-                            <option value="Dal">Dal</option>
-                            <option value="Montreal">Montreal</option>
+                            <option value="CHUSJ">CHUSJ</option>
+                            <option value="IWK">IWK</option>
                         </select>
                     </div>
                 </div>
