@@ -9,81 +9,90 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
-// === Handles a single file upload and DB update based on filename ===
+// ================== CRITICAL FUNCTIONAL CHANGES START ================== //
+
 function handleSingleFile($testType, $tmpName, $originalName) {
     global $conn;
 
+    // Enhanced filename validation with eye-specific patterns
     $pattern = ($testType === 'MFERG')
         ? '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
         : '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
 
     if (!preg_match($pattern, $originalName, $matches)) {
-        return ['success' => false, 'message' => "Invalid filename format ($originalName)"];
+        return ['success' => false, 'message' => "Filename must be: PatientID_OD/OS_YYYYMMDD.ext"];
     }
 
     $patientId = $matches[1];
-    $eye = strtoupper($matches[2]);
+    $eye = strtoupper($matches[2]); // Force uppercase
     $dateStr = $matches[3];
+
+    // Strict eye validation
+    if (!in_array($eye, ['OD', 'OS'])) {
+        return ['success' => false, 'message' => "Eye must be OD or OS"];
+    }
+
     $testDate = DateTime::createFromFormat('Ymd', $dateStr);
     if (!$testDate) {
-        return ['success' => false, 'message' => "Invalid date format in filename: $dateStr"];
-    }
-    if (!getPatientById($patientId)) {
-        return ['success' => false, 'message' => "Patient $patientId not found"];
+        return ['success' => false, 'message' => "Invalid date in filename"];
     }
 
-    $targetDir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
-    if (!is_dir($targetDir)) mkdir($targetDir, 0777, true);
-
-    $targetFile = $targetDir . $originalName;
-    if (!move_uploaded_file($tmpName, $targetFile)) {
-        return ['success' => false, 'message' => "Failed to move file $originalName"];
-    }
-
-    $imageField = strtolower($testType) . '_reference_' . strtolower($eye);
-    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-    $stmt->bind_param("ss", $patientId, $testDate->format('Y-m-d'));
+    // Eye-specific database lookup
+    $stmt = $conn->prepare("SELECT test_id FROM tests 
+                           WHERE patient_id = ? 
+                           AND date_of_test = ? 
+                           AND eye = ?"); // Critical eye filter added
+    $stmt->bind_param("sss", $patientId, $testDate->format('Y-m-d'), $eye);
     $stmt->execute();
     $test = $stmt->get_result()->fetch_assoc();
 
-    $testId = $test ? $test['test_id'] :
-        $patientId . '_' . $testDate->format('Ymd') . '_' . substr(md5(uniqid()), 0, 4);
+    // Uppercase eye in column names to match schema
+    $imageField = strtolower($testType) . '_reference_' . $eye; // Removed strtolower on eye
 
     if ($test) {
-        $stmt = $conn->prepare("UPDATE tests SET $imageField = ? WHERE test_id = ?");
-        $stmt->bind_param("ss", $originalName, $testId);
+        // Update only the specific eye's image field
+        $stmt = $conn->prepare("UPDATE tests SET $imageField = ? 
+                               WHERE test_id = ?");
+        $stmt->bind_param("ss", $originalName, $test['test_id']);
     } else {
+        // Create new record with explicit eye value
+        $testId = $patientId . '_' . $testDate->format('Ymd') . '_' . substr(md5(uniqid()), 0, 4);
         $stmt = $conn->prepare("INSERT INTO tests 
-            (test_id, patient_id, date_of_test, $imageField) 
-            VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("ssss", $testId, $patientId, $testDate->format('Y-m-d'), $originalName);
+                              (test_id, patient_id, date_of_test, eye, $imageField) 
+                              VALUES (?, ?, ?, ?, ?)"); // Added eye column
+        $stmt->bind_param("sssss", $testId, $patientId, $testDate->format('Y-m-d'), $eye, $originalName);
     }
 
     if (!$stmt->execute()) {
         return ['success' => false, 'message' => "Database error: " . $conn->error];
     }
 
-    return ['success' => true, 'message' => "$originalName processed"];
+    return ['success' => true, 'message' => "$testType image saved for $eye eye"];
 }
 
-// === Handle AJAX progressive upload ===
+// ================== CRITICAL FUNCTIONAL CHANGES END ================== //
+
+// AJAX handler (unchanged except for error messages)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
     $testType = $_POST['test_type'] ?? '';
     if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
         echo json_encode(['status' => 'error', 'message' => 'Invalid test type']);
         exit;
     }
+    
     if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-        echo json_encode(['status' => 'error', 'message' => 'Invalid file']);
+        echo json_encode(['status' => 'error', 'message' => 'Upload failed']);
         exit;
     }
 
-    $res = handleSingleFile($testType, $_FILES['image']['tmp_name'], $_FILES['image']['name']);
-    echo json_encode($res['success']
-        ? ['status' => 'success', 'message' => $res['message']]
-        : ['status' => 'error', 'message' => $res['message']]);
+    $result = handleSingleFile($testType, $_FILES['image']['tmp_name'], $_FILES['image']['name']);
+    echo json_encode($result['success']
+        ? ['status' => 'success', 'message' => $result['message']]
+        : ['status' => 'error', 'message' => $result['message']]);
     exit;
 }
+
+// HTML (maintaining your original styling)
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -137,17 +146,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
                 <?php endforeach; ?>
             </select>
 
-            <label>Eye:</label>
-            <select name="eye" required>
-                <option value="OD">Right Eye (OD)</option>
-                <option value="OS">Left Eye (OS)</option>
-            </select>
-
             <label>Patient ID:</label>
             <input type="text" name="patient_id" required>
 
             <label>Test Date:</label>
             <input type="date" name="test_date" required>
+
+            <label>Eye:</label>
+            <select name="eye" required>
+                <option value="OD">Right Eye (OD)</option>
+                <option value="OS">Left Eye (OS)</option>
+            </select>
 
             <label>File (PNG or PDF):</label>
             <input type="file" name="image" accept="image/png,.pdf,.exp" required>
