@@ -649,9 +649,9 @@ function remove_filter_url($filter_to_remove) {
         /* Enhanced Search Container */
         .search-container {
             width: 100%;
-            max-width: 800px;
+            max-width: 700px;
             margin: 30px auto;
-            padding: 30px;
+            padding: 25px;
             background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
@@ -692,13 +692,13 @@ function remove_filter_url($filter_to_remove) {
         
         .search-form {
             display: flex;
-            gap: 15px;
+            gap: 10px;
             flex-wrap: wrap;
         }
         
         .search-input-container {
             flex: 1;
-            min-width: 300px;
+            min-width: 250px;
             position: relative;
         }
         
