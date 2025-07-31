@@ -248,7 +248,7 @@ function remove_filter_url($filter_to_remove) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title> Hydroxychloroquine Data Repository </title>
+    <title>Hydroxychloroquine Data Repository</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
@@ -506,7 +506,6 @@ function remove_filter_url($filter_to_remove) {
             background-color: #f8d7da;
             color: #721c24;
         }
-        /* Enhanced Filter Panel Styles */
         .filter-panel {
             background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
             padding: 25px;
@@ -922,17 +921,43 @@ function remove_filter_url($filter_to_remove) {
                                 
                                 <td>
                                     <?php 
+                                    $currentEye = $row['eye'] ?? '';
                                     $imageLinks = [];
-                                    if (!empty($row['faf_reference_od'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_od']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OD" class="image-link">FAF OD</a>';
-                                    if (!empty($row['faf_reference_os'])) $imageLinks[] = '<a href="view_faf.php?ref='.htmlspecialchars($row['faf_reference_os']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OS" class="image-link">FAF OS</a>';
-                                    if (!empty($row['oct_reference_od'])) $imageLinks[] = '<a href="view_oct.php?ref='.htmlspecialchars($row['oct_reference_od']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OD" class="image-link">OCT OD</a>';
-                                    if (!empty($row['oct_reference_os'])) $imageLinks[] = '<a href="view_oct.php?ref='.htmlspecialchars($row['oct_reference_os']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OS" class="image-link">OCT OS</a>';
-                                    if (!empty($row['vf_reference_od']))  $imageLinks[] = '<a href="view_vf.php?ref='.htmlspecialchars($row['vf_reference_od']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OD" class="image-link">VF OD</a>';
-                                    if (!empty($row['vf_reference_os']))  $imageLinks[] = '<a href="view_vf.php?ref='.htmlspecialchars($row['vf_reference_os']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OS" class="image-link">VF OS</a>';
-                                    if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="view_mferg.php?ref='.htmlspecialchars($row['mferg_reference_od']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OD" class="image-link">MFERG OD</a>';
-                                    if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="view_mferg.php?ref='.htmlspecialchars($row['mferg_reference_os']).'&patient_id='.htmlspecialchars($row['patient_id']).'&eye=OS" class="image-link">MFERG OS</a>';
-                                    if (!empty($row['mferg_reference_od'])) $imageLinks[] = '<a href="'.IMAGE_BASE_URL.'MFERG/'.rawurlencode($row['mferg_reference_od']).'" class="image-link" download>MFERG OD</a>';
-                                    if (!empty($row['mferg_reference_os'])) $imageLinks[] = '<a href="'.IMAGE_BASE_URL.'MFERG/'.rawurlencode($row['mferg_reference_os']).'" class="image-link" download>MFERG OS</a>';
+                                    
+                                    if (in_array($currentEye, ['OD', 'OS'])) {
+                                        $testTypes = [
+                                            'faf' => 'FAF',
+                                            'oct' => 'OCT',
+                                            'vf' => 'VF',
+                                            'mferg' => 'MFERG'
+                                        ];
+                                        
+                                        foreach ($testTypes as $prefix => $label) {
+                                            $columnName = $prefix . '_reference_' . $currentEye;
+                                            if (!empty($row[$columnName])) {
+                                                $imageLinks[] = sprintf(
+                                                    '<a href="view_%s.php?ref=%s&patient_id=%s&eye=%s" class="image-link">%s %s</a>',
+                                                    $prefix,
+                                                    htmlspecialchars($row[$columnName]),
+                                                    htmlspecialchars($row['patient_id']),
+                                                    $currentEye,
+                                                    $label,
+                                                    $currentEye
+                                                );
+                                                
+                                                if ($prefix === 'mferg') {
+                                                    $imageLinks[] = sprintf(
+                                                        '<a href="%sMFERG/%s" class="image-link" download>Download %s %s</a>',
+                                                        IMAGE_BASE_URL,
+                                                        rawurlencode($row[$columnName]),
+                                                        $label,
+                                                        $currentEye
+                                                    );
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
                                     echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
                                     ?>
                                 </td>
