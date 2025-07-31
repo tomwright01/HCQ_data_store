@@ -19,6 +19,12 @@ $error_message = '';
 $search_patient_id = isset($_REQUEST['search_patient_id']) ? $_REQUEST['search_patient_id'] : '';
 $edit_mode = isset($_GET['edit']) && $_GET['edit'] === 'true';
 
+// Initialize filter variables
+$filter_location = isset($_GET['filter_location']) ? $_GET['filter_location'] : '';
+$filter_merci_range = isset($_GET['filter_merci_range']) ? $_GET['filter_merci_range'] : '';
+$filter_eye = isset($_GET['filter_eye']) ? $_GET['filter_eye'] : '';
+$filter_active = !empty($filter_location) || !empty($filter_merci_range) || !empty($filter_eye);
+
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['update_test'])) {
@@ -147,9 +153,9 @@ while ($row = $result_merci->fetch_assoc()) {
     $merci_data[$row['score_range']] = $row['count'];
 }
 
-// Get patient data if search was performed
+// Get patient data if search was performed or filters are active
 $result_patient = null;
-if ($search_patient_id) {
+if ($search_patient_id || $filter_active) {
     $sql_patient_data = "SELECT 
         t.test_id, t.location AS test_location, t.date_of_test, t.age, t.eye,
         t.report_diagnosis, t.exclusion, t.merci_score, t.merci_diagnosis,
@@ -158,12 +164,83 @@ if ($search_patient_id) {
         t.vf_reference_od, t.vf_reference_os, t.mferg_reference_od, t.mferg_reference_os,
         p.patient_id, p.subject_id, p.date_of_birth, p.location AS patient_location
         FROM tests t JOIN patients p ON t.patient_id = p.patient_id
-        WHERE p.patient_id = ?";
+        WHERE 1=1";
+    
+    $params = [];
+    $types = '';
+    
+    if ($search_patient_id) {
+        $sql_patient_data .= " AND p.patient_id = ?";
+        $params[] = $search_patient_id;
+        $types .= "s";
+    }
+    
+    // Apply filters
+    if (!empty($filter_location)) {
+        $sql_patient_data .= " AND p.location = ?";
+        $params[] = $filter_location;
+        $types .= "s";
+    }
+    
+    if (!empty($filter_eye)) {
+        $sql_patient_data .= " AND t.eye = ?";
+        $params[] = $filter_eye;
+        $types .= "s";
+    }
+    
+    if (!empty($filter_merci_range)) {
+        switch ($filter_merci_range) {
+            case 'unable':
+                $sql_patient_data .= " AND t.merci_score = 'unable'";
+                break;
+            case '0-10':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 0 AND 10";
+                break;
+            case '11-20':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 11 AND 20";
+                break;
+            case '21-30':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 21 AND 30";
+                break;
+            case '31-40':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 31 AND 40";
+                break;
+            case '41-50':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 41 AND 50";
+                break;
+            case '51-60':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 51 AND 60";
+                break;
+            case '61-70':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 61 AND 70";
+                break;
+            case '71-80':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 71 AND 80";
+                break;
+            case '81-90':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 81 AND 90";
+                break;
+            case '91-100':
+                $sql_patient_data .= " AND t.merci_score BETWEEN 91 AND 100";
+                break;
+        }
+    }
     
     $stmt = $conn->prepare($sql_patient_data);
-    $stmt->bind_param("s", $search_patient_id);
+    
+    if (!empty($params)) {
+        $stmt->bind_param($types, ...$params);
+    }
+    
     $stmt->execute();
     $result_patient = $stmt->get_result();
+}
+
+// Helper function to generate URL with one filter removed
+function remove_filter_url($filter_to_remove) {
+    $params = $_GET;
+    unset($params[$filter_to_remove]);
+    return 'index.php?' . http_build_query($params);
 }
 ?>
 <!DOCTYPE html>
@@ -428,6 +505,97 @@ if ($search_patient_id) {
             background-color: #f8d7da;
             color: #721c24;
         }
+        /* New filter panel styles */
+        .filter-panel {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .filter-panel h3 {
+            color: rgb(0, 168, 143);
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .filter-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+        .filter-control {
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+        }
+        .filter-control label {
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #495057;
+        }
+        .filter-control select, 
+        .filter-control input {
+            padding: 8px 12px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            background-color: white;
+        }
+        .filter-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .filter-button {
+            padding: 8px 16px;
+            background-color: rgb(0, 168, 143);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .filter-button:hover {
+            background-color: rgb(0, 140, 120);
+        }
+        .reset-button {
+            padding: 8px 16px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .reset-button:hover {
+            background-color: #5a6268;
+        }
+        .active-filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .filter-tag {
+            background-color: rgb(0, 168, 143);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .filter-tag button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-weight: bold;
+            padding: 0;
+        }
     </style>
 </head>
 <body>
@@ -443,13 +611,90 @@ if ($search_patient_id) {
             <a href="export_csv.php" class="action-button export-button">Export to CSV</a>
         </div>
 
+        <!-- Filter Panel -->
+        <div class="filter-panel">
+            <h3>Filter Patients</h3>
+            <form method="GET" action="index.php">
+                <div class="filter-group">
+                    <div class="filter-control">
+                        <label for="filter_location">Location:</label>
+                        <select name="filter_location" id="filter_location">
+                            <option value="">All Locations</option>
+                            <option value="KH" <?= $filter_location === 'KH' ? 'selected' : '' ?>>Kensington</option>
+                            <option value="CHUSJ" <?= $filter_location === 'CHUSJ' ? 'selected' : '' ?>>CHUSJ</option>
+                            <option value="IWK" <?= $filter_location === 'IWK' ? 'selected' : '' ?>>IWK</option>
+                            <option value="IVEY" <?= $filter_location === 'IVEY' ? 'selected' : '' ?>>Ivey</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-control">
+                        <label for="filter_eye">Eye:</label>
+                        <select name="filter_eye" id="filter_eye">
+                            <option value="">Both Eyes</option>
+                            <option value="OD" <?= $filter_eye === 'OD' ? 'selected' : '' ?>>OD (Right Eye)</option>
+                            <option value="OS" <?= $filter_eye === 'OS' ? 'selected' : '' ?>>OS (Left Eye)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-control">
+                        <label for="filter_merci_range">MERCI Score:</label>
+                        <select name="filter_merci_range" id="filter_merci_range">
+                            <option value="">All Scores</option>
+                            <option value="unable" <?= $filter_merci_range === 'unable' ? 'selected' : '' ?>>Unable</option>
+                            <option value="0-10" <?= $filter_merci_range === '0-10' ? 'selected' : '' ?>>0-10</option>
+                            <option value="11-20" <?= $filter_merci_range === '11-20' ? 'selected' : '' ?>>11-20</option>
+                            <option value="21-30" <?= $filter_merci_range === '21-30' ? 'selected' : '' ?>>21-30</option>
+                            <option value="31-40" <?= $filter_merci_range === '31-40' ? 'selected' : '' ?>>31-40</option>
+                            <option value="41-50" <?= $filter_merci_range === '41-50' ? 'selected' : '' ?>>41-50</option>
+                            <option value="51-60" <?= $filter_merci_range === '51-60' ? 'selected' : '' ?>>51-60</option>
+                            <option value="61-70" <?= $filter_merci_range === '61-70' ? 'selected' : '' ?>>61-70</option>
+                            <option value="71-80" <?= $filter_merci_range === '71-80' ? 'selected' : '' ?>>71-80</option>
+                            <option value="81-90" <?= $filter_merci_range === '81-90' ? 'selected' : '' ?>>81-90</option>
+                            <option value="91-100" <?= $filter_merci_range === '91-100' ? 'selected' : '' ?>>91-100</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="filter-actions">
+                    <button type="submit" class="filter-button">Apply Filters</button>
+                    <a href="index.php" class="reset-button">Reset All</a>
+                </div>
+                
+                <?php if ($filter_active): ?>
+                <div class="active-filters">
+                    <strong>Active Filters:</strong>
+                    <?php if ($filter_location): ?>
+                        <span class="filter-tag">
+                            Location: <?= htmlspecialchars($filter_location) ?>
+                            <a href="<?= remove_filter_url('filter_location') ?>">&times;</a>
+                        </span>
+                    <?php endif; ?>
+                    
+                    <?php if ($filter_eye): ?>
+                        <span class="filter-tag">
+                            Eye: <?= htmlspecialchars($filter_eye) ?>
+                            <a href="<?= remove_filter_url('filter_eye') ?>">&times;</a>
+                        </span>
+                    <?php endif; ?>
+                    
+                    <?php if ($filter_merci_range): ?>
+                        <span class="filter-tag">
+                            MERCI: <?= htmlspecialchars($filter_merci_range) ?>
+                            <a href="<?= remove_filter_url('filter_merci_range') ?>">&times;</a>
+                        </span>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+            </form>
+        </div>
+
         <div class="search-form">
             <form method="POST" action="index.php">
                 <label for="search_patient_id">Enter Patient ID to Search for Tests:</label><br>
                 <input type="text" name="search_patient_id" id="search_patient_id" required 
                        value="<?= htmlspecialchars($search_patient_id) ?>">
                 <button type="submit">Search</button>
-                <?php if ($search_patient_id && isset($result_patient) && $result_patient->num_rows > 0): ?>
+                <?php if (($search_patient_id || $filter_active) && isset($result_patient) && $result_patient->num_rows > 0): ?>
                     <?php if ($edit_mode): ?>
                         <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="cancel-button">Cancel Edit</a>
                     <?php else: ?>
@@ -467,9 +712,15 @@ if ($search_patient_id) {
             <div class="message error"><?= htmlspecialchars($error_message) ?></div>
         <?php endif; ?>
 
-        <?php if ($search_patient_id && isset($result_patient)): ?>
+        <?php if (($search_patient_id || $filter_active) && isset($result_patient)): ?>
             <?php if ($result_patient->num_rows > 0): ?>
-                <h3>Tests for Patient ID: <?= htmlspecialchars($search_patient_id) ?></h3>
+                <h3>
+                    <?php if ($search_patient_id): ?>
+                        Tests for Patient ID: <?= htmlspecialchars($search_patient_id) ?>
+                    <?php else: ?>
+                        Filtered Tests (<?= $result_patient->num_rows ?> results)
+                    <?php endif; ?>
+                </h3>
                 <table>
                     <tr>
                         <th>Test ID</th>
@@ -585,7 +836,7 @@ if ($search_patient_id) {
                     <?php endwhile; ?>
                 </table>
             <?php else: ?>
-                <p>No tests found for Patient ID: <?= htmlspecialchars($search_patient_id) ?></p>
+                <p>No tests found matching your criteria</p>
             <?php endif; ?>
         <?php endif; ?>
     </div>
