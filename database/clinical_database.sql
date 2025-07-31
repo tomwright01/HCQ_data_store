@@ -6,7 +6,7 @@ USE PatientData;
 CREATE TABLE patients (
     patient_id VARCHAR(20) PRIMARY KEY,
     subject_id VARCHAR(50) NOT NULL,
-    location ENUM('KH', 'Montreal', 'Dal', 'Ivey') DEFAULT 'KH',
+    location ENUM('KH', 'CHUSJ', 'IWK', 'IVEY') DEFAULT 'KH',
     date_of_birth DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
