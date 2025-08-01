@@ -53,7 +53,7 @@ CREATE TABLE tests (
     faf_grade TINYINT UNSIGNED NULL COMMENT 'Fundus Autofluorescence grade (1-4)',
     oct_score DECIMAL(10,2) NULL COMMENT 'Optical Coherence Tomography score',
     vf_score DECIMAL(10,2) NULL COMMENT 'Visual Field score',
-    actual_diagnosis VARCHAR(100) NULL COMMENT 'Clinical diagnosis of the condition',
+    actual_diagnosis ENUM('RA', 'SLE', 'Sjorgens', 'other') NULL COMMENT 'Clinical diagnosis of the condition',
     medication_name VARCHAR(100) NULL COMMENT 'Name of prescribed medication',
     dosage DECIMAL(10,2) NULL COMMENT 'Medication dosage in mg',
     dosage_unit VARCHAR(10) DEFAULT 'mg',
