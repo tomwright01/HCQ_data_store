@@ -106,7 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 return ($v === '' || strtolower($v) === 'null' || strtolower($v) === 'no value' || strtolower($v) === 'missing') ? null : $v; 
                             }, $data);
 
-                            // Process Patient (Subject ID and DoB)
+                            // Process Patient (Subject ID [0] and DoB [1])
                             $subjectId = $data[0] ?? '';
                             $dob = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
                             if (!$dob) {
@@ -126,7 +126,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             // Process Test data
                             $testDate = DateTime::createFromFormat('m/d/Y', $data[2] ?? '');
                             if (!$testDate) {
-                                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected MM-DD-YYYY");
+                                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected MM/DD/YYYY");
                             }
                             
                             // Process Age (column 4/[3])
@@ -253,13 +253,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             if (isset($data[18]) && $data[18] !== '') {
                                 if (is_numeric($data[18])) {
                                     // Assume it's a year if it's just a number
-                                    $discontinuationDate = DateTime::createFromFormat('m/d/Y', $data[18]);
+                                    $discontinuationDate = DateTime::createFromFormat('Y', $data[18]);
                                     if ($discontinuationDate) {
                                         $discontinuationDate = $discontinuationDate->format('Y-m-d');
                                     }
                                 } else {
                                     // Try to parse as date
-                                    $discontinuationDate = DateTime::createFromFormat('m-d-Y', $data[18]);
+                                    $discontinuationDate = DateTime::createFromFormat('m/d/Y', $data[18]);
                                     if ($discontinuationDate) {
                                         $discontinuationDate = $discontinuationDate->format('Y-m-d');
                                     }
