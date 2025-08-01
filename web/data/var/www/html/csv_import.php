@@ -191,8 +191,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             $vfScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
 
                             $actualDiagnosis = normalize_actual_diagnosis($data[14] ?? null);
-                            if ($data[14] !== null && $actualDiagnosis === null) {
-                                $actualDiagnosis = 'other';
+                            if ($actualDiagnosis === null) {
+                                $actualDiagnosis = 'other'; // or 'none' if you revised the enum to include it
                             }
 
                             $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
