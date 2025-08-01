@@ -249,6 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'patient_id' => $patientId,
                                 'location' => $location,
                                 'date_of_test' => $testDate->format('Y-m-d'),
+                                'test_number' => $testNumber ?? $testId, // Using test_id if test_number is null
                                 'age' => $age,
                                 'eye' => $eye,
                                 'report_diagnosis' => $reportDiagnosis,
@@ -327,25 +328,33 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            test_id, patient_id, location, date_of_test, age, eye, 
-            report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type, 
-            faf_grade, oct_score, vf_score, actual_diagnosis, dosage, duration_days, 
-            cumulative_dosage, date_of_continuation
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            test_id, patient_id, location, date_of_test, test_number, age, eye,
+            report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
+            faf_grade, oct_score, vf_score,
+            faf_reference_od, faf_reference_os, oct_reference_od, oct_reference_os,
+            vf_reference_od, vf_reference_os, mferg_reference_od, mferg_reference_os,
+            actual_diagnosis, medication_name, dosage, dosage_unit, duration_days,
+            cumulative_dosage, date_of_continuation, treatment_notes
+        ) VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+            NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+            ?, NULL, ?, 'mg', ?, ?, ?, NULL
+        )
     ");
     
     // Convert values for database
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
-    $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
+    $errorTypeForDb = $testData['error_type'];
     
     $stmt->bind_param(
-        "ssssisssssddddsiiis",
+        "sssssisssssddddssssssssssssssis",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['location'],
         $testData['date_of_test'],
+        $testData['test_number'],
         $testData['age'],
         $testData['eye'],
         $testData['report_diagnosis'],
@@ -356,6 +365,7 @@ function insertTest($conn, $testData) {
         $testData['faf_grade'],
         $testData['oct_score'],
         $testData['vf_score'],
+        // Image references (set to NULL)
         $testData['actual_diagnosis'],
         $testData['dosage'],
         $testData['duration_days'],
