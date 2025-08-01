@@ -56,7 +56,7 @@ CREATE TABLE tests (
     mferg_reference_od VARCHAR(255) NULL COMMENT 'Reference to MFERG image for right eye (OD)',
     mferg_reference_os VARCHAR(255) NULL COMMENT 'Reference to MFERG image for left eye (OS)',
     
-    -- Treatment information fields (newly added)
+    -- Treatment information fields
     actual_diagnosis VARCHAR(100) NULL COMMENT 'Clinical diagnosis of the condition',
     medication_name VARCHAR(100) NULL COMMENT 'Name of prescribed medication',
     dosage DECIMAL(10,2) NULL COMMENT 'Medication dosage in mg',
