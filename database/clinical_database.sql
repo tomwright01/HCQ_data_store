@@ -54,13 +54,11 @@ CREATE TABLE tests (
     oct_score DECIMAL(10,2) NULL COMMENT 'Optical Coherence Tomography score',
     vf_score DECIMAL(10,2) NULL COMMENT 'Visual Field score',
     actual_diagnosis ENUM('RA', 'SLE', 'Sjorgens', 'other') NULL COMMENT 'Clinical diagnosis of the condition',
-    medication_name VARCHAR(100) NULL COMMENT 'Name of prescribed medication',
     dosage DECIMAL(10,2) NULL COMMENT 'Medication dosage in mg',
     dosage_unit VARCHAR(10) DEFAULT 'mg',
     duration_days SMALLINT UNSIGNED NULL COMMENT 'Treatment duration in days',
     cumulative_dosage DECIMAL(10,2) NULL COMMENT 'Total cumulative dosage in mg',
     date_of_continuation DATE NULL COMMENT 'Date when treatment was continued',
-    treatment_notes TEXT NULL COMMENT 'Additional notes about treatment',
 
     -- Image reference fields
     faf_reference_od VARCHAR(255) NULL,
