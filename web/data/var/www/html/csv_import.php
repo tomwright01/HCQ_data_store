@@ -94,48 +94,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             // Skip empty rows
                             if (count(array_filter($data)) === 0) continue;
                             
-                            // Validate minimum columns (now 13 with location)
-                            if (count($data) < 13) {
-                                throw new Exception("Row has only " . count($data) . " columns (minimum 13 required with location)");
+                            // Validate minimum columns (now 18 with new fields)
+                            if (count($data) < 18) {
+                                throw new Exception("Row has only " . count($data) . " columns (minimum 18 required)");
                             }
 
                             // Clean and format data
                             $data = array_map('trim', $data);
                             $data = array_map(function($v) { 
                                 $v = trim($v ?? '');
-                                return ($v === '' || strtolower($v) === 'null' || strtolower($v) === 'no value') ? null : $v; 
+                                return ($v === '' || strtolower($v) === 'null' || strtolower($v) === 'no value' || strtolower($v) === 'missing') ? null : $v; 
                             }, $data);
 
                             // Process Patient (Subject ID and DoB)
                             $subjectId = $data[0] ?? '';
-                            $dob = DateTime::createFromFormat('Y-m-d', $data[1] ?? '');
+                            $dob = DateTime::createFromFormat('m-d-Y', $data[1] ?? '');
                             if (!$dob) {
-                                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected YYYY-MM-DD");
+                                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected MM-DD-YYYY");
                             }
                             $dobFormatted = $dob->format('Y-m-d');
 
-                            // Get location from last column
-                            $location = $data[count($data)-1] ?? 'KH'; // Default to 'KH' if not specified
-                            $location = str_replace(['"', "'"], '', $location); // Clean any quotes
-                            $location = in_array($location, ['KH', 'Montreal', 'Dal', 'Ivey']) ? $location : 'KH';
+                            // Default location
+                            $location = 'KH';
 
-                            // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
+                            // Generate patient_id (use subjectId)
                             $patientId = $subjectId;
                             
                             // Insert or get existing patient
                             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location);
                             
                             // Process Test data
-                            $testDate = DateTime::createFromFormat('Y-m-d', $data[2] ?? '');
+                            $testDate = DateTime::createFromFormat('m-d-Y', $data[2] ?? '');
                             if (!$testDate) {
-                                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected YYYY-MM-DD");
+                                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected MM-DD-YYYY");
                             }
                             
+                            // Process Age (column 4/[3])
+                            $ageValue = $data[3] ?? null;
+                            $age = (isset($ageValue) && is_numeric($ageValue) && $ageValue >= 0 && $ageValue <= 100) 
+                                ? (int)round($ageValue) 
+                                : null;
+
+                            // Process TEST_ID (column 5/[4])
+                            $testNumber = $data[4] ?? null;
+                            if ($testNumber !== null) {
+                                if (!is_numeric($testNumber)) {
+                                    throw new Exception("Invalid TEST_ID: must be a number");
+                                }
+                                $testNumber = str_pad($testNumber, 6, '0', STR_PAD_LEFT);
+                                if (strlen($testNumber) > 6) {
+                                    $testNumber = substr($testNumber, 0, 6);
+                                }
+                            }
+
+                            // Process Eye (column 6/[5])
+                            $eyeValue = $data[5] ?? null;
+                            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+
                             // Generate test_id (date + eye + letter if duplicate)
                             $testDateFormatted = $testDate->format('Ymd'); // Format as YYYYMMDD
-                            $eyeValue = $data[4] ?? null;
-                            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
-                            $baseTestId = $testDateFormatted . ($eye ? $eye : '');
+                            $baseTestId = $testDateFormatted . ($eye ? $eye : '') . ($testNumber ? substr($testNumber, -2) : '');
 
                             // Handle duplicates by appending a, b, c, etc.
                             if (!isset($testCounts[$baseTestId])) {
@@ -147,25 +165,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 $testId = $baseTestId . $letter;
                             }
 
-                            // Process Age (column 4/[3])
-                            $ageValue = $data[3] ?? null;
-                            $age = (isset($ageValue) && is_numeric($ageValue) && $ageValue >= 0 && $ageValue <= 100) 
-                                ? (int)round($ageValue) 
-                                : null;
+                            // Process report diagnosis (column 7/[6])
+                            $reportDiagnosisValue = $data[6] ?? null;
+                            $reportDiagnosis = 'no input';
+                            if ($reportDiagnosisValue !== null) {
+                                $lowerValue = strtolower($reportDiagnosisValue);
+                                if (in_array($lowerValue, ['normal', 'abnormal', 'exclude'])) {
+                                    $reportDiagnosis = $lowerValue;
+                                } elseif ($lowerValue !== 'missing' && $lowerValue !== '') {
+                                    $reportDiagnosis = 'no input';
+                                }
+                            }
 
-                            $reportDiagnosisValue = $data[5] ?? null;
-                            $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
-                                ? strtolower($reportDiagnosisValue) 
-                                : 'no input';
+                            // Process exclusion (column 8/[7])
+                            $exclusionValue = $data[7] ?? null;
+                            $exclusion = 'none';
+                            if ($exclusionValue !== null) {
+                                $lowerValue = strtolower($exclusionValue);
+                                if (in_array($lowerValue, ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) {
+                                    $exclusion = $lowerValue;
+                                }
+                            }
 
-                            $exclusionValue = $data[6] ?? null;
-                            $exclusion = ($exclusionValue !== null && in_array(strtolower($exclusionValue), 
-                                ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) 
-                                ? strtolower($exclusionValue) 
-                                : 'none';
-
-                            // Handle MERCI score (0-100 range or 'unable')
-                            $merciScoreValue = $data[7] ?? null;
+                            // Process MERCI score (column 9/[8])
+                            $merciScoreValue = $data[8] ?? null;
                             $merciScore = null;
                             if (isset($merciScoreValue)) {
                                 if (strtolower($merciScoreValue) === 'unable') {
@@ -175,15 +198,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 }
                             }
 
-                            $merciDiagnosisValue = $data[8] ?? null;
-                            $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
-                                ? strtolower($merciDiagnosisValue) 
-                                : 'no value';
+                            // Process MERCI diagnosis (column 10/[9])
+                            $merciDiagnosisValue = $data[9] ?? null;
+                            $merciDiagnosis = 'no value';
+                            if ($merciDiagnosisValue !== null) {
+                                $lowerValue = strtolower($merciDiagnosisValue);
+                                if (in_array($lowerValue, ['normal', 'abnormal'])) {
+                                    $merciDiagnosis = $lowerValue;
+                                }
+                            }
 
-                            // FIXED: error_type with NULL handling
-                            $errorTypeValue = $data[9] ?? null;
+                            // Process error type (column 11/[10])
+                            $errorTypeValue = $data[10] ?? null;
                             $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
-                            $errorType = null; // Default to NULL
+                            $errorType = null;
                             
                             if ($errorTypeValue !== null && $errorTypeValue !== '') {
                                 $upperValue = strtoupper(trim($errorTypeValue));
@@ -194,15 +222,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 }
                             }
 
-                            $fafGrade = (isset($data[10]) && is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4) ? (int)$data[10] : null;
-                            $octScore = isset($data[11]) && is_numeric($data[11]) ? round(floatval($data[11]), 2) : null;
-                            $vfScore = isset($data[12]) && is_numeric($data[12]) ? round(floatval($data[12]), 2) : null;
+                            // Process FAF grade (column 12/[11])
+                            $fafGrade = (isset($data[11]) && is_numeric($data[11]) && $data[11] >= 1 && $data[11] <= 4) ? (int)$data[11] : null;
+
+                            // Process OCT score (column 13/[12])
+                            $octScore = isset($data[12]) && is_numeric($data[12]) ? round(floatval($data[12]), 2) : null;
+
+                            // Process VF score (column 14/[13])
+                            $vfScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
+
+                            // Process Diagnosis (column 15/[14])
+                            $actualDiagnosis = $data[14] ?? null;
+                            if ($actualDiagnosis !== null && $actualDiagnosis !== '') {
+                                $actualDiagnosis = substr($actualDiagnosis, 0, 100);
+                            } else {
+                                $actualDiagnosis = null;
+                            }
+
+                            // Process dosage (column 16/[15])
+                            $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
+
+                            // Process duration (column 17/[16])
+                            $durationDays = isset($data[16]) && is_numeric($data[16]) ? (int)$data[16] : null;
+
+                            // Process cumulative dosage (column 18/[17])
+                            $cumulativeDosage = isset($data[17]) && is_numeric($data[17]) ? round(floatval($data[17]), 2) : null;
+
+                            // Process discontinuation date (column 19/[18])
+                            $discontinuationDate = null;
+                            if (isset($data[18]) && $data[18] !== '') {
+                                if (is_numeric($data[18])) {
+                                    // Assume it's a year if it's just a number
+                                    $discontinuationDate = DateTime::createFromFormat('Y', $data[18]);
+                                    if ($discontinuationDate) {
+                                        $discontinuationDate = $discontinuationDate->format('Y-m-d');
+                                    }
+                                } else {
+                                    // Try to parse as date
+                                    $discontinuationDate = DateTime::createFromFormat('m-d-Y', $data[18]);
+                                    if ($discontinuationDate) {
+                                        $discontinuationDate = $discontinuationDate->format('Y-m-d');
+                                    }
+                                }
+                            }
 
                             $testData = [
                                 'test_id' => $testId,
                                 'patient_id' => $patientId,
                                 'location' => $location,
                                 'date_of_test' => $testDate->format('Y-m-d'),
+                                'test_number' => $testNumber,
                                 'age' => $age,
                                 'eye' => $eye,
                                 'report_diagnosis' => $reportDiagnosis,
@@ -212,7 +281,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'error_type' => $errorType,
                                 'faf_grade' => $fafGrade,
                                 'oct_score' => $octScore,
-                                'vf_score' => $vfScore
+                                'vf_score' => $vfScore,
+                                'actual_diagnosis' => $actualDiagnosis,
+                                'medication_name' => null, // Not in CSV
+                                'dosage' => $dosage,
+                                'duration_days' => $durationDays,
+                                'cumulative_dosage' => $cumulativeDosage,
+                                'date_of_continuation' => $discontinuationDate,
+                                'treatment_notes' => null // Not in CSV
                             ];
 
                             // Insert Test
@@ -249,7 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     }
 }
 
-// Database functions (remain the same as before)
+// Database functions
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH') {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
@@ -276,9 +352,11 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            test_id, patient_id, location, date_of_test, age, eye, report_diagnosis, exclusion,
-            merci_score, merci_diagnosis, error_type, faf_grade, oct_score, vf_score
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            test_id, patient_id, location, date_of_test, test_number, age, eye, 
+            report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type, 
+            faf_grade, oct_score, vf_score, actual_diagnosis, dosage, duration_days, 
+            cumulative_dosage, date_of_continuation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
     // Convert values for database
@@ -288,11 +366,12 @@ function insertTest($conn, $testData) {
     $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
     $stmt->bind_param(
-        "ssssisssissddd",
+        "sssssisssssddddsiiis",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['location'],
         $testData['date_of_test'],
+        $testData['test_number'],
         $testData['age'],
         $testData['eye'],
         $testData['report_diagnosis'],
@@ -302,7 +381,12 @@ function insertTest($conn, $testData) {
         $errorTypeForDb,
         $testData['faf_grade'],
         $testData['oct_score'],
-        $testData['vf_score']
+        $testData['vf_score'],
+        $testData['actual_diagnosis'],
+        $testData['dosage'],
+        $testData['duration_days'],
+        $testData['cumulative_dosage'],
+        $testData['date_of_continuation']
     );
     
     if (!$stmt->execute()) {
