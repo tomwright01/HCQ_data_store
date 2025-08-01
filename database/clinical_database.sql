@@ -34,7 +34,6 @@ CREATE TABLE tests (
     patient_id VARCHAR(25) NOT NULL,
     location ENUM('KH', 'Montreal', 'Dal', 'Ivey') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
-    test_number VARCHAR(20) NULL COMMENT '20-digit test ID number',
     age TINYINT UNSIGNED NULL COMMENT 'Patient age at time of test (0-100)',
     eye ENUM('OD', 'OS') NULL COMMENT 'OD=right eye, OS=left eye',
     report_diagnosis ENUM('normal', 'abnormal', 'no input') NOT NULL DEFAULT 'no input',
