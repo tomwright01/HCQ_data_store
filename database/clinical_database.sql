@@ -14,6 +14,7 @@ CREATE TABLE patients (
     INDEX idx_location (location)
 );
 
+-- Audit log table
 CREATE TABLE audit_log (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     table_name VARCHAR(50) NOT NULL,
@@ -22,10 +23,12 @@ CREATE TABLE audit_log (
     old_values TEXT,
     new_values TEXT,
     changed_by VARCHAR(100),
-    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_record (table_name, record_id),
+    INDEX idx_changed_at (changed_at)
 );
 
--- Tests table with location and all image reference fields
+-- Tests table with location, image references, and treatment information
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
     patient_id VARCHAR(25) NOT NULL,
@@ -53,6 +56,16 @@ CREATE TABLE tests (
     mferg_reference_od VARCHAR(255) NULL COMMENT 'Reference to MFERG image for right eye (OD)',
     mferg_reference_os VARCHAR(255) NULL COMMENT 'Reference to MFERG image for left eye (OS)',
     
+    -- Treatment information fields (newly added)
+    actual_diagnosis VARCHAR(100) NULL COMMENT 'Clinical diagnosis of the condition',
+    medication_name VARCHAR(100) NULL COMMENT 'Name of prescribed medication',
+    dosage DECIMAL(10,2) NULL COMMENT 'Medication dosage in mg',
+    dosage_unit VARCHAR(10) DEFAULT 'mg' COMMENT 'Unit of dosage measurement',
+    duration_days SMALLINT UNSIGNED NULL COMMENT 'Treatment duration in days',
+    cumulative_dosage DECIMAL(10,2) NULL COMMENT 'Total cumulative dosage in mg',
+    date_of_continuation DATE NULL COMMENT 'Date when treatment was continued',
+    treatment_notes TEXT NULL COMMENT 'Additional notes about treatment',
+    
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
@@ -71,6 +84,12 @@ CREATE TABLE tests (
     INDEX idx_mferg_od (mferg_reference_od),
     INDEX idx_mferg_os (mferg_reference_os),
     
+    -- Indexes for treatment fields
+    INDEX idx_diagnosis (actual_diagnosis),
+    INDEX idx_medication (medication_name),
+    INDEX idx_continuation (date_of_continuation),
+    
+    -- Constraints
     CONSTRAINT chk_age CHECK (age IS NULL OR (age BETWEEN 0 AND 100)),
     CONSTRAINT chk_merci_score CHECK (
         merci_score IS NULL OR 
@@ -78,5 +97,42 @@ CREATE TABLE tests (
         (merci_score REGEXP '^[0-9]+$' AND CAST(merci_score AS UNSIGNED) BETWEEN 0 AND 100)
     ),
     CONSTRAINT chk_faf_grade CHECK (faf_grade IS NULL OR (faf_grade BETWEEN 1 AND 4)),
-    CONSTRAINT chk_test_number CHECK (test_number IS NULL OR test_number REGEXP '^[0-9]{6}$')
+    CONSTRAINT chk_test_number CHECK (test_number IS NULL OR test_number REGEXP '^[0-9]{6}$'),
+    CONSTRAINT chk_dosage CHECK (dosage IS NULL OR dosage > 0),
+    CONSTRAINT chk_duration CHECK (duration_days IS NULL OR duration_days > 0),
+    CONSTRAINT chk_cumulative_dosage CHECK (cumulative_dosage IS NULL OR cumulative_dosage > 0)
 );
+
+-- Audit trigger for tests table
+DELIMITER //
+CREATE TRIGGER tests_after_insert
+AFTER INSERT ON tests
+FOR EACH ROW
+BEGIN
+    INSERT INTO audit_log (table_name, record_id, action, new_values, changed_by)
+    VALUES ('tests', NEW.test_id, 'INSERT', 
+            CONCAT('{"test_id":"', NEW.test_id, '", "patient_id":"', NEW.patient_id, '"}'), 
+            CURRENT_USER());
+END//
+
+CREATE TRIGGER tests_after_update
+AFTER UPDATE ON tests
+FOR EACH ROW
+BEGIN
+    INSERT INTO audit_log (table_name, record_id, action, old_values, new_values, changed_by)
+    VALUES ('tests', NEW.test_id, 'UPDATE', 
+            CONCAT('{"test_id":"', OLD.test_id, '", "patient_id":"', OLD.patient_id, '"}'),
+            CONCAT('{"test_id":"', NEW.test_id, '", "patient_id":"', NEW.patient_id, '"}'), 
+            CURRENT_USER());
+END//
+
+CREATE TRIGGER tests_after_delete
+AFTER DELETE ON tests
+FOR EACH ROW
+BEGIN
+    INSERT INTO audit_log (table_name, record_id, action, old_values, changed_by)
+    VALUES ('tests', OLD.test_id, 'DELETE', 
+            CONCAT('{"test_id":"', OLD.test_id, '", "patient_id":"', OLD.patient_id, '"}'), 
+            CURRENT_USER());
+END//
+DELIMITER ;
