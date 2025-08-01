@@ -1,5 +1,5 @@
 <?php
-// Enable error reporting
+// Enable error reporting.
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
@@ -24,154 +24,155 @@ $results = [
     'errors' => []
 ];
 
-// Check if form was submitted
+// ----------------------
+// Normalization helpers
+// ----------------------
+function normalize_actual_diagnosis($raw) {
+    $map = [
+        'ra' => 'RA',
+        'sle' => 'SLE',
+        'sjogren' => 'Sjogren',
+        'sjögren' => 'Sjogren',
+        'sjorgens' => 'Sjogren' // tolerate legacy spelling
+    ];
+    $k = strtolower(trim($raw ?? ''));
+    return $map[$k] ?? null;
+}
+
+function normalize_exclusion($raw) {
+    $allowed = [
+        'retinal detachment' => 'retinal detachment',
+        'generalized retinal dysfunction' => 'generalized retinal dysfunction',
+        'unilateral testing' => 'unilateral testing',
+        'none' => 'none'
+    ];
+    $k = strtolower(trim($raw ?? ''));
+    return $allowed[$k] ?? 'none';
+}
+
+function normalize_report_diagnosis($raw) {
+    $allowed = ['normal', 'abnormal', 'no input'];
+    $k = strtolower(trim($raw ?? ''));
+    return in_array($k, $allowed) ? $k : 'no input';
+}
+
+function normalize_merci_diagnosis($raw) {
+    $allowed = ['normal', 'abnormal'];
+    $k = strtolower(trim($raw ?? ''));
+    return in_array($k, $allowed) ? $k : 'no value';
+}
+
+function normalize_error_type($raw) {
+    $allowed = ['TN', 'FP', 'TP', 'FN', 'none'];
+    $u = strtoupper(trim($raw ?? ''));
+    if ($u === '') return null;
+    if (in_array($u, $allowed)) {
+        return ($u === 'NONE') ? 'none' : $u;
+    }
+    return null;
+}
+
+// ----------------------
+// Main import logic
+// ----------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
-    // Check if file was uploaded without errors
     if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         $message = "Error uploading file: " . ($_FILES['csv_file']['error'] ?? 'No file selected');
         $messageClass = 'error';
     } else {
         $fileTmpPath = $_FILES['csv_file']['tmp_name'];
         $fileName = $_FILES['csv_file']['name'];
-        $fileSize = $_FILES['csv_file']['size'];
-        $fileType = $_FILES['csv_file']['type'];
-        
-        // Sanitize file name
         $fileNameClean = preg_replace("/[^A-Za-z0-9 \.\-_]/", '', $fileName);
-        
-        // Verify file extension
         $fileExt = strtolower(pathinfo($fileNameClean, PATHINFO_EXTENSION));
         if ($fileExt !== 'csv') {
             $message = "Only CSV files are allowed";
             $messageClass = 'error';
         } else {
-            // Create unique filename to prevent overwrites
             $newFileName = uniqid('', true) . '.' . $fileExt;
             $destPath = $uploadDir . $newFileName;
-            
-            // Move the uploaded file
             if (!move_uploaded_file($fileTmpPath, $destPath)) {
                 $message = "Failed to move uploaded file";
                 $messageClass = 'error';
             } else {
-                // Proceed with import if file is valid
                 $conn = new mysqli($servername, $username, $password, $dbname);
-
-                // Check connection
                 if ($conn->connect_error) {
                     die("Connection failed: " . $conn->connect_error);
                 }
 
                 try {
-                    // Verify file exists and is readable
                     if (!file_exists($destPath)) {
                         throw new Exception("CSV file not found at: $destPath");
                     }
                     if (!is_readable($destPath)) {
                         throw new Exception("CSV file is not readable. Check permissions.");
                     }
-
-                    // Open CSV file
                     if (($handle = fopen($destPath, "r")) === FALSE) {
                         throw new Exception("Could not open CSV file");
                     }
 
-                    // Start transaction
                     $conn->begin_transaction();
 
-                    // Skip header row if exists
+                    // Skip header if present (assumes first row is header)
                     fgetcsv($handle, 0, ",", '"', "\0");
-                    
-                    $lineNumber = 1; // Start counting from 1 (header is line 0)
-                    
+                    $lineNumber = 1;
+
                     while (($data = fgetcsv($handle, 0, ",", '"', "\0")) !== FALSE) {
                         $lineNumber++;
-                        
                         try {
-                            // Skip empty rows
                             if (count(array_filter($data)) === 0) continue;
-                            
-                            // Validate minimum columns (18 columns expected)
                             if (count($data) < 18) {
                                 throw new Exception("Row has only " . count($data) . " columns (minimum 18 required)");
                             }
 
-                            // Clean and format data
+                            // Trim and normalize null-like tokens
                             $data = array_map('trim', $data);
-                            $data = array_map(function($v) { 
-                                $v = trim($v ?? '');
-                                return ($v === '' || strtolower($v) === 'null' || strtolower($v) === 'no value' || strtolower($v) === 'missing') ? null : $v; 
+                            $data = array_map(function($v) {
+                                $vl = strtolower($v ?? '');
+                                return ($v === '' || in_array($vl, ['null', 'no value', 'missing'])) ? null : $v;
                             }, $data);
 
-                            // Process Patient (Subject ID [0] and DoB [1])
+                            // -------- Patient ----------
                             $subjectId = $data[0] ?? '';
-                            $dob = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
+                            $dobRaw = $data[1] ?? '';
+                            $dob = DateTime::createFromFormat('m/d/Y', $dobRaw);
                             if (!$dob) {
-                                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected MM/DD/YYYY");
+                                throw new Exception("Invalid date format for DoB: " . ($dobRaw ?? 'NULL') . " - Expected MM/DD/YYYY");
                             }
                             $dobFormatted = $dob->format('Y-m-d');
-
-                            // Default location
                             $location = 'KH';
-
-                            // Generate patient_id (use subjectId)
                             $patientId = $subjectId;
-                            
-                            // Insert or get existing patient
                             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location);
-                            
-                            // Process Test data
-                            $testDate = DateTime::createFromFormat('m/d/Y', $data[2] ?? '');
+
+                            // -------- Test ----------
+                            $testDateRaw = $data[2] ?? '';
+                            $testDate = DateTime::createFromFormat('m/d/Y', $testDateRaw);
                             if (!$testDate) {
-                                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected MM/DD/YYYY");
+                                throw new Exception("Invalid date format for test date: " . ($testDateRaw ?? 'NULL') . " - Expected MM/DD/YYYY");
                             }
-                            
-                            // Process Age (column 4/[3])
+
                             $ageValue = $data[3] ?? null;
-                            $age = (isset($ageValue) && is_numeric($ageValue) && $ageValue >= 0 && $ageValue <= 100) 
-                                ? (int)round($ageValue) 
+                            $age = (isset($ageValue) && is_numeric($ageValue) && $ageValue >= 0 && $ageValue <= 100)
+                                ? (int)round($ageValue)
                                 : null;
 
-                            // Process TEST_ID (column 5/[4])
                             $testNumber = $data[4] ?? null;
                             if ($testNumber !== null && !is_numeric($testNumber)) {
                                 throw new Exception("Invalid TEST_ID: must be a number");
                             }
 
-                            // Process Eye (column 6/[5])
                             $eyeValue = $data[5] ?? null;
                             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
 
-                            // Generate test_id (date + eye + test number)
                             $testDateFormatted = $testDate->format('Ymd');
                             $testId = $testDateFormatted . ($eye ? $eye : '') . ($testNumber ? $testNumber : '');
 
-                            // Process report diagnosis (column 7/[6])
-                            $reportDiagnosisValue = $data[6] ?? null;
-                            $reportDiagnosis = 'no input';
-                            if ($reportDiagnosisValue !== null) {
-                                $lowerValue = strtolower($reportDiagnosisValue);
-                                if (in_array($lowerValue, ['normal', 'abnormal', 'exclude'])) {
-                                    $reportDiagnosis = $lowerValue;
-                                } elseif ($lowerValue !== 'missing' && $lowerValue !== '') {
-                                    $reportDiagnosis = 'no input';
-                                }
-                            }
+                            $reportDiagnosis = normalize_report_diagnosis($data[6] ?? null);
+                            $exclusion = normalize_exclusion($data[7] ?? null);
 
-                            // Process exclusion (column 8/[7])
-                            $exclusionValue = $data[7] ?? null;
-                            $exclusion = 'none';
-                            if ($exclusionValue !== null) {
-                                $lowerValue = strtolower($exclusionValue);
-                                if (in_array($lowerValue, ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) {
-                                    $exclusion = $lowerValue;
-                                }
-                            }
-
-                            // Process MERCI score (column 9/[8])
+                            // MERCI
                             $merciScoreValue = $data[8] ?? null;
                             $merciScore = null;
-                            if (isset($merciScoreValue)) {
+                            if (!is_null($merciScoreValue)) {
                                 if (strtolower($merciScoreValue) === 'unable') {
                                     $merciScore = 'unable';
                                 } elseif (is_numeric($merciScoreValue) && $merciScoreValue >= 0 && $merciScoreValue <= 100) {
@@ -179,71 +180,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 }
                             }
 
-                            // Process MERCI diagnosis (column 10/[9])
-                            $merciDiagnosisValue = $data[9] ?? null;
-                            $merciDiagnosis = 'no value';
-                            if ($merciDiagnosisValue !== null) {
-                                $lowerValue = strtolower($merciDiagnosisValue);
-                                if (in_array($lowerValue, ['normal', 'abnormal'])) {
-                                    $merciDiagnosis = $lowerValue;
-                                }
+                            $merciDiagnosis = normalize_merci_diagnosis($data[9] ?? null);
+                            $errorType = normalize_error_type($data[10] ?? null);
+                            if ($data[10] !== null && $errorType === null) {
+                                $results['errors'][] = "Line $lineNumber: Invalid error_type '{$data[10]}' - set to NULL";
                             }
 
-                            // Process error type (column 11/[10])
-                            $errorTypeValue = $data[10] ?? null;
-                            $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
-                            $errorType = null;
-                            
-                            if ($errorTypeValue !== null && $errorTypeValue !== '') {
-                                $upperValue = strtoupper(trim($errorTypeValue));
-                                if (in_array($upperValue, $allowedErrorTypes)) {
-                                    $errorType = ($upperValue === 'NONE') ? 'none' : $upperValue;
-                                } else {
-                                    $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeValue}' - set to NULL";
-                                }
-                            }
-
-                            // Process FAF grade (column 12/[11])
                             $fafGrade = (isset($data[11]) && is_numeric($data[11]) && $data[11] >= 1 && $data[11] <= 4) ? (int)$data[11] : null;
-
-                            // Process OCT score (column 13/[12])
                             $octScore = isset($data[12]) && is_numeric($data[12]) ? round(floatval($data[12]), 2) : null;
-
-                            // Process VF score (column 14/[13])
                             $vfScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
 
-                            // Process Diagnosis (column 15/[14])
-                            $allowedDiagnosis = ['RA', 'SLE', 'Sjorgens', 'other'];
-                            if (!empty($data[14])) {
-                                $diag = ucfirst(strtolower(trim($data[14]))); // normalize
-                                $actualDiagnosis = in_array($diag, $allowedDiagnosis) ? $diag : 'other';
-                            } else {
-                                $actualDiagnosis = null;
+                            $actualDiagnosis = normalize_actual_diagnosis($data[14] ?? null);
+                            if ($data[14] !== null && $actualDiagnosis === null) {
+                                $actualDiagnosis = 'other';
                             }
 
-                            // Process dosage (column 16/[15])
                             $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
-
-                            // Process duration (column 17/[16])
                             $durationDays = isset($data[16]) && is_numeric($data[16]) ? (int)$data[16] : null;
-
-                            // Process cumulative dosage (column 18/[17])
                             $cumulativeDosage = isset($data[17]) && is_numeric($data[17]) ? round(floatval($data[17]), 2) : null;
 
-                            // Process discontinuation date (column 19/[18])
                             $discontinuationDate = null;
                             if (isset($data[18]) && $data[18] !== '') {
                                 if (is_numeric($data[18])) {
-                                    // Assume it's a year if it's just a number
-                                    $discontinuationDate = DateTime::createFromFormat('Y', $data[18]);
-                                    if ($discontinuationDate) {
-                                        $discontinuationDate = $discontinuationDate->format('Y-m-d');
+                                    $tmp = DateTime::createFromFormat('Y', $data[18]);
+                                    if ($tmp) {
+                                        $discontinuationDate = $tmp->format('Y-m-d');
                                     }
                                 } else {
-                                    // Try to parse as date
-                                    $discontinuationDate = DateTime::createFromFormat('m/d/Y', $data[18]);
-                                    if ($discontinuationDate) {
-                                        $discontinuationDate = $discontinuationDate->format('Y-m-d');
+                                    $tmp = DateTime::createFromFormat('m/d/Y', $data[18]);
+                                    if ($tmp) {
+                                        $discontinuationDate = $tmp->format('Y-m-d');
                                     }
                                 }
                             }
@@ -270,18 +236,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'date_of_continuation' => $discontinuationDate
                             ];
 
-                            // Insert Test
                             insertTest($conn, $testData);
                             $results['tests']++;
-                            
                         } catch (Exception $e) {
                             $results['errors'][] = "Line $lineNumber: " . $e->getMessage();
                         }
                     }
-                    
+
                     fclose($handle);
-                    
-                    // Commit or rollback
+
                     if (empty($results['errors'])) {
                         $conn->commit();
                         $message = "Successfully processed {$results['patients']} patients and {$results['tests']} tests";
@@ -291,7 +254,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                         $message = "Completed with " . count($results['errors']) . " errors. No data was imported.";
                         $messageClass = 'error';
                     }
-                    
                 } catch (Exception $e) {
                     $message = "Fatal error: " . $e->getMessage();
                     $messageClass = 'error';
@@ -304,27 +266,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     }
 }
 
-// Database functions
+// ----------------------
+// DB helper functions
+// ----------------------
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH') {
+    global $results;
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
     $stmt->execute();
     $result = $stmt->get_result();
-    
+
     if ($result->num_rows > 0) {
         return $patientId;
     }
-    
+
     $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth, location) VALUES (?, ?, ?, ?)");
     $stmt->bind_param("ssss", $patientId, $subjectId, $dob, $location);
-    
+
     if (!$stmt->execute()) {
         throw new Exception("Patient insert failed: " . $stmt->error);
     }
-    
-    global $results;
+
     $results['patients']++;
-    
     return $patientId;
 }
 
@@ -337,10 +300,14 @@ function insertTest($conn, $testData) {
             cumulative_dosage, date_of_continuation
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    
-    $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
-                      (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
-    
+
+    $merciScoreForDb = null;
+    if ($testData['merci_score'] === 'unable') {
+        $merciScoreForDb = 'unable';
+    } elseif (!is_null($testData['merci_score'])) {
+        $merciScoreForDb = $testData['merci_score'];
+    }
+
     $stmt->bind_param(
         "ssssissssssdddsdids",
         $testData['test_id'],
@@ -363,9 +330,14 @@ function insertTest($conn, $testData) {
         $testData['cumulative_dosage'],
         $testData['date_of_continuation']
     );
-    
+
     if (!$stmt->execute()) {
-        throw new Exception("Test insert failed: " . $stmt->error);
+        $context = json_encode([
+            'test_id' => $testData['test_id'],
+            'patient_id' => $testData['patient_id'],
+            'error' => $stmt->error
+        ]);
+        throw new Exception("Test insert failed: " . $stmt->error . " | Context: " . $context);
     }
 }
 ?>
@@ -394,34 +366,34 @@ function insertTest($conn, $testData) {
 <body>
     <div class="container">
         <h1>CSV Import Tool</h1>
-        
+
         <form method="post" action="" enctype="multipart/form-data">
             <label for="csv_file">Select CSV File to Upload:</label>
             <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
             <input type="submit" name="submit" value="Import File">
         </form>
-        
+
         <?php if ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
             <div class="results">
-                <h2 class="<?= $messageClass ?>"><?= $message ?></h2>
-                
+                <h2 class="<?= htmlspecialchars($messageClass) ?>"><?= htmlspecialchars($message) ?></h2>
+
                 <?php if (!empty($fileName)): ?>
                     <p>File uploaded: <?= htmlspecialchars($fileName) ?></p>
                 <?php endif; ?>
-                
+
                 <?php if (!empty($results['patients']) || !empty($results['tests'])): ?>
                     <table>
                         <tr>
                             <th>Patients Processed</th>
-                            <td><?= $results['patients'] ?></td>
+                            <td><?= htmlspecialchars($results['patients']) ?></td>
                         </tr>
                         <tr>
                             <th>Tests Imported</th>
-                            <td><?= $results['tests'] ?></td>
+                            <td><?= htmlspecialchars($results['tests']) ?></td>
                         </tr>
                     </table>
                 <?php endif; ?>
-                
+
                 <?php if (!empty($results['errors'])): ?>
                     <h3>Errors Encountered:</h3>
                     <div class="error-list">
@@ -432,7 +404,7 @@ function insertTest($conn, $testData) {
                 <?php endif; ?>
             </div>
         <?php endif; ?>
-        
+
         <p><a href="index.php">Return to Dashboard</a></p>
     </div>
 </body>
