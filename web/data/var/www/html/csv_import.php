@@ -214,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 
                             // Process Diagnosis (column 15/[14])
                             $actualDiagnosis = isset($data[14]) && $data[14] !== '' ? 
-                                               substr(trim((string)$data[14]), 0, 100) : 
+                                               substr(trim(preg_replace('/[^\p{L}\p{N}\s\-]/u', '', $data[14])), 0, 100) : 
                                                null;
 
                             // Process dosage (column 16/[15])
