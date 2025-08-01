@@ -132,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 ? (int)round($ageValue) 
                                 : null;
 
-                            // Process TEST_ID (column 5/[4]) - Now part of test_id
+                            // Process TEST_ID (column 5/[4])
                             $testNumber = $data[4] ?? null;
                             if ($testNumber !== null && !is_numeric($testNumber)) {
                                 throw new Exception("Invalid TEST_ID: must be a number");
@@ -143,8 +143,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
 
                             // Generate test_id (date + eye + test number)
-                            $testDateFormatted = $testDate->format('Ymd'); // Format as YYYYMMDD
-                            $testId = $testDateFormatted . ($eye ? $eye : '') . ($testId ? $testId : '');
+                            $testDateFormatted = $testDate->format('Ymd');
+                            $testId = $testDateFormatted . ($eye ? $eye : '') . ($testNumber ? $testNumber : '');
 
                             // Process report diagnosis (column 7/[6])
                             $reportDiagnosisValue = $data[6] ?? null;
@@ -327,44 +327,32 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            subject_id, date_of_birth, date_of_test, age, test_id, eye,
+            test_id, patient_id, location, date_of_test, age, eye,
             report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
-            faf_grade, oct_score, vf_score,
-            faf_reference_od, faf_reference_os, oct_reference_od, oct_reference_os,
-            vf_reference_od, vf_reference_os, mferg_reference_od, mferg_reference_os,
-            actual_diagnosis, medication_name, dosage, dosage_unit, duration_days,
-            cumulative_dosage, date_of_continuation, treatment_notes
-        ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-            NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
-            ?, NULL, ?, 'mg', ?, ?, ?, NULL
-        )
+            faf_grade, oct_score, vf_score, actual_diagnosis, dosage, duration_days,
+            cumulative_dosage, date_of_continuation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
-    // Convert values for database
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
-    $errorTypeForDb = $testData['error_type'];
-    
     $stmt->bind_param(
-        "sssssisssssddddssssssssssssssis",
+        "ssssisssssddddsiiis",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['location'],
         $testData['date_of_test'],
-        $testData['test_number'],
         $testData['age'],
         $testData['eye'],
         $testData['report_diagnosis'],
         $testData['exclusion'],
         $merciScoreForDb,
         $testData['merci_diagnosis'],
-        $errorTypeForDb,
+        $testData['error_type'],
         $testData['faf_grade'],
         $testData['oct_score'],
         $testData['vf_score'],
-        // Image references (set to NULL)
         $testData['actual_diagnosis'],
         $testData['dosage'],
         $testData['duration_days'],
