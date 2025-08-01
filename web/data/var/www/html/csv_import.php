@@ -214,6 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 
                             // Process Diagnosis (column 15/[14])
                             $actualDiagnosis = $data[14] ?? '';
+                            $actualDiagnosis = trim((string)$actualDiagnosis); // Force string type and trim whitespace
                             $actualDiagnosis = substr(trim($actualDiagnosis), 0, 100);
 
                             // Process dosage (column 16/[15])
