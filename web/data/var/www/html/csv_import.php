@@ -62,9 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                     die("Connection failed: " . $conn->connect_error);
                 }
 
-                // Initialize test counter for duplicate handling
-                $testCounts = [];
-
                 try {
                     // Verify file exists and is readable
                     if (!file_exists($destPath)) {
@@ -94,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             // Skip empty rows
                             if (count(array_filter($data)) === 0) continue;
                             
-                            // Validate minimum columns (now 18 with new fields)
+                            // Validate minimum columns (18 columns expected)
                             if (count($data) < 18) {
                                 throw new Exception("Row has only " . count($data) . " columns (minimum 18 required)");
                             }
@@ -135,35 +132,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 ? (int)round($ageValue) 
                                 : null;
 
-                            // Process TEST_ID (column 5/[4])
+                            // Process TEST_ID (column 5/[4]) - Now part of test_id
                             $testNumber = $data[4] ?? null;
-                            if ($testNumber !== null) {
-                                if (!is_numeric($testNumber)) {
-                                    throw new Exception("Invalid TEST_ID: must be a number");
-                                }
-                                $testNumber = str_pad($testNumber, 6, '0', STR_PAD_LEFT);
-                                if (strlen($testNumber) > 6) {
-                                    $testNumber = substr($testNumber, 0, 6);
-                                }
+                            if ($testNumber !== null && !is_numeric($testNumber)) {
+                                throw new Exception("Invalid TEST_ID: must be a number");
                             }
 
                             // Process Eye (column 6/[5])
                             $eyeValue = $data[5] ?? null;
                             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
 
-                            // Generate test_id (date + eye + letter if duplicate)
+                            // Generate test_id (date + eye + test number)
                             $testDateFormatted = $testDate->format('Ymd'); // Format as YYYYMMDD
-                            $baseTestId = $testDateFormatted . ($eye ? $eye : '') . ($testNumber ? substr($testNumber, -2) : '');
-
-                            // Handle duplicates by appending a, b, c, etc.
-                            if (!isset($testCounts[$baseTestId])) {
-                                $testCounts[$baseTestId] = 0;
-                                $testId = $baseTestId;
-                            } else {
-                                $testCounts[$baseTestId]++;
-                                $letter = chr(97 + $testCounts[$baseTestId]); // 97 = 'a' in ASCII
-                                $testId = $baseTestId . $letter;
-                            }
+                            $testId = $testDateFormatted . ($eye ? $eye : '') . ($testNumber ? $testNumber : '');
 
                             // Process report diagnosis (column 7/[6])
                             $reportDiagnosisValue = $data[6] ?? null;
@@ -271,7 +252,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'patient_id' => $patientId,
                                 'location' => $location,
                                 'date_of_test' => $testDate->format('Y-m-d'),
-                                'test_number' => $testNumber,
                                 'age' => $age,
                                 'eye' => $eye,
                                 'report_diagnosis' => $reportDiagnosis,
@@ -283,12 +263,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'oct_score' => $octScore,
                                 'vf_score' => $vfScore,
                                 'actual_diagnosis' => $actualDiagnosis,
-                                'medication_name' => null, // Not in CSV
                                 'dosage' => $dosage,
                                 'duration_days' => $durationDays,
                                 'cumulative_dosage' => $cumulativeDosage,
-                                'date_of_continuation' => $discontinuationDate,
-                                'treatment_notes' => null // Not in CSV
+                                'date_of_continuation' => $discontinuationDate
                             ];
 
                             // Insert Test
@@ -352,11 +330,11 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            test_id, patient_id, location, date_of_test, test_number, age, eye, 
+            test_id, patient_id, location, date_of_test, age, eye, 
             report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type, 
             faf_grade, oct_score, vf_score, actual_diagnosis, dosage, duration_days, 
             cumulative_dosage, date_of_continuation
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
     
     // Convert values for database
@@ -366,12 +344,11 @@ function insertTest($conn, $testData) {
     $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
     $stmt->bind_param(
-        "sssssisssssddddsiiis",
+        "ssssisssssddddsiiis",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['location'],
         $testData['date_of_test'],
-        $testData['test_number'],
         $testData['age'],
         $testData['eye'],
         $testData['report_diagnosis'],
