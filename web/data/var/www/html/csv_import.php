@@ -327,7 +327,7 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH
 function insertTest($conn, $testData) {
     $stmt = $conn->prepare("
         INSERT INTO tests (
-            test_id, patient_id, location, date_of_test, test_number, age, eye,
+            subject_id, date_of_birth, date_of_test, age, test_id, eye,
             report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
             faf_grade, oct_score, vf_score,
             faf_reference_od, faf_reference_os, oct_reference_od, oct_reference_os,
