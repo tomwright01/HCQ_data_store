@@ -4,11 +4,6 @@
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
--- Drop existing to ensure schema matches exactly (WARNING: destructive if you have data)
-DROP TABLE IF EXISTS audit_log;
-DROP TABLE IF EXISTS tests;
-DROP TABLE IF EXISTS patients;
-
 -- ==========================
 -- PATIENTS TABLE
 -- ==========================
