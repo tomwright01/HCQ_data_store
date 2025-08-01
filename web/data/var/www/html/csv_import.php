@@ -364,7 +364,8 @@ function insertTest($conn, $testData) {
         
         .header-content {
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
+            justify-content: center;
             align-items: center;
             max-width: 1200px;
             margin: 0 auto;
