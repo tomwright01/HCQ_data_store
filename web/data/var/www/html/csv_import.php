@@ -249,7 +249,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'patient_id' => $patientId,
                                 'location' => $location,
                                 'date_of_test' => $testDate->format('Y-m-d'),
-                                'test_number' => $testNumber ?? $testId, // Using test_id if test_number is null
                                 'age' => $age,
                                 'eye' => $eye,
                                 'report_diagnosis' => $reportDiagnosis,
