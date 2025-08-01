@@ -213,9 +213,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             $vfScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
 
                             // Process Diagnosis (column 15/[14])
-                            $actualDiagnosis = $data[14] ?? '';
-                            $actualDiagnosis = trim((string)$actualDiagnosis); // Force string type and trim whitespace
-                            $actualDiagnosis = substr(trim($actualDiagnosis), 0, 100);
+                            $actualDiagnosis = isset($data[14]) && $data[14] !== '' ? 
+                                               substr(trim((string)$data[14]), 0, 100) : 
+                                               null;
 
                             // Process dosage (column 16/[15])
                             $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
