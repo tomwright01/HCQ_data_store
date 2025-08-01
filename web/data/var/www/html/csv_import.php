@@ -338,7 +338,7 @@ function insertTest($conn, $testData) {
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
     $stmt->bind_param(
-        "ssssisssssddddsiiis",
+        "ssssissssssdddsdids",
         $testData['test_id'],
         $testData['patient_id'],
         $testData['location'],
