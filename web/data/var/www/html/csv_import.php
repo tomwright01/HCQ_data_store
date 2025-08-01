@@ -283,7 +283,7 @@ function insertTest($conn, $testData) {
     
     // Convert values for database
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
-                      (is_null($testData['merci_score']) ? NULL : $testData['merci_score'];
+                      (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
     
     $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
@@ -312,333 +312,46 @@ function insertTest($conn, $testData) {
 ?>
 
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV Import Tool | Hydroxychloroquine Data Repository</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <title>CSV Import Tool</title>
     <style>
-        :root {
-            --primary-color: #00a88f;
-            --primary-dark: #006d5b;
-            --primary-light: #e0f2ef;
-            --secondary-color: #6c757d;
-            --success-color: #28a745;
-            --danger-color: #dc3545;
-            --warning-color: #ffc107;
-            --light-color: #f8f9fa;
-            --dark-color: #343a40;
-            --border-radius: 8px;
-            --box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-            --transition: all 0.3s ease;
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f7fa;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
-            padding: 30px;
-        }
-
-        h1 {
-            color: var(--primary-color);
-            margin-bottom: 20px;
-            font-size: 2rem;
-            border-bottom: 2px solid var(--primary-light);
-            padding-bottom: 10px;
-        }
-
-        .upload-section {
-            margin-bottom: 30px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: var(--dark-color);
-        }
-
-        .file-input-wrapper {
-            position: relative;
-            display: inline-block;
-            width: 100%;
-        }
-
-        .file-input-button {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 12px 20px;
-            border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: var(--transition);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-        }
-
-        .file-input-button:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 168, 143, 0.3);
-        }
-
-        .file-input-button i {
-            margin-right: 10px;
-        }
-
-        #file-name {
-            margin-top: 10px;
-            font-size: 14px;
-            color: var(--secondary-color);
-            font-style: italic;
-        }
-
-        input[type="file"] {
-            position: absolute;
-            left: 0;
-            top: 0;
-            opacity: 0;
-            width: 100%;
-            height: 100%;
-            cursor: pointer;
-        }
-
-        .submit-btn {
-            background-color: var(--primary-dark);
-            color: white;
-            padding: 12px 30px;
-            border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: var(--transition);
-            display: inline-flex;
-            align-items: center;
-        }
-
-        .submit-btn:hover {
-            background-color: var(--primary-color);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 168, 143, 0.3);
-        }
-
-        .submit-btn i {
-            margin-right: 10px;
-        }
-
-        .results-section {
-            margin-top: 30px;
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: var(--border-radius);
-            margin-bottom: 20px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-        }
-
-        .alert i {
-            margin-right: 10px;
-            font-size: 1.2rem;
-        }
-
-        .alert-success {
-            background-color: rgba(40, 167, 69, 0.1);
-            border-left: 4px solid var(--success-color);
-            color: var(--success-color);
-        }
-
-        .alert-error {
-            background-color: rgba(220, 53, 69, 0.1);
-            border-left: 4px solid var(--danger-color);
-            color: var(--danger-color);
-        }
-
-        .results-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 20px 0;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        }
-
-        .results-table th {
-            background-color: var(--primary-color);
-            color: white;
-            padding: 12px 15px;
-            text-align: left;
-            font-weight: 600;
-        }
-
-        .results-table td {
-            padding: 12px 15px;
-            border-bottom: 1px solid #eee;
-        }
-
-        .results-table tr:nth-child(even) {
-            background-color: var(--light-color);
-        }
-
-        .results-table tr:hover {
-            background-color: var(--primary-light);
-        }
-
-        .error-list {
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #eee;
-            border-radius: var(--border-radius);
-            padding: 15px;
-            margin-top: 15px;
-            background-color: white;
-        }
-
-        .error-item {
-            padding: 10px;
-            border-bottom: 1px solid #f5f5f5;
-            color: var(--danger-color);
-            font-family: monospace;
-        }
-
-        .error-item:last-child {
-            border-bottom: none;
-        }
-
-        .back-link {
-            display: inline-flex;
-            align-items: center;
-            color: var(--primary-color);
-            text-decoration: none;
-            margin-top: 20px;
-            font-weight: 600;
-            transition: var(--transition);
-        }
-
-        .back-link i {
-            margin-right: 8px;
-            transition: var(--transition);
-        }
-
-        .back-link:hover {
-            color: var(--primary-dark);
-        }
-
-        .back-link:hover i {
-            transform: translateX(-3px);
-        }
-
-        .file-info {
-            background-color: var(--light-color);
-            padding: 15px;
-            border-radius: var(--border-radius);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-        }
-
-        .file-info i {
-            color: var(--primary-color);
-            font-size: 1.5rem;
-            margin-right: 15px;
-        }
-
-        .file-info-text {
-            flex: 1;
-        }
-
-        .file-info-name {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .file-info-size {
-            color: var(--secondary-color);
-            font-size: 0.9rem;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-            }
-            
-            h1 {
-                font-size: 1.5rem;
-            }
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        .results { background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .success { color: #28a745; border-left: 4px solid #28a745; padding-left: 10px; }
+        .error { color: #dc3545; border-left: 4px solid #dc3545; padding-left: 10px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: #f2f2f2; }
+        .error-list { max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
+        form { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; }
+        input[type="file"], input[type="submit"] { padding: 8px 12px; font-size: 16px; }
+        input[type="submit"] { background-color: #007bff; color: white; border: none; cursor: pointer; }
+        input[type="submit"]:hover { background-color: #0069d9; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1><i class="fas fa-file-import"></i> CSV Import Tool</h1>
+        <h1>CSV Import Tool</h1>
         
-        <div class="upload-section">
-            <form method="post" action="" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="csv_file">Select CSV File to Upload:</label>
-                    <div class="file-input-wrapper">
-                        <button type="button" class="file-input-button">
-                            <i class="fas fa-file-csv"></i> Choose CSV File
-                        </button>
-                        <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
-                    </div>
-                    <div id="file-name"></div>
-                </div>
-                
-                <button type="submit" name="submit" class="submit-btn">
-                    <i class="fas fa-upload"></i> Import File
-                </button>
-            </form>
-        </div>
+        <form method="post" action="" enctype="multipart/form-data">
+            <label for="csv_file">Select CSV File to Upload:</label>
+            <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
+            <input type="submit" name="submit" value="Import File">
+        </form>
         
         <?php if ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
-            <div class="results-section">
-                <?php if ($message): ?>
-                    <div class="alert <?= $messageClass === 'success' ? 'alert-success' : 'alert-error' ?>">
-                        <i class="fas <?= $messageClass === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle' ?>"></i>
-                        <?= htmlspecialchars($message) ?>
-                    </div>
-                <?php endif; ?>
+            <div class="results">
+                <h2 class="<?= $messageClass ?>"><?= $message ?></h2>
                 
                 <?php if (!empty($fileName)): ?>
-                    <div class="file-info">
-                        <i class="fas fa-file-csv"></i>
-                        <div class="file-info-text">
-                            <div class="file-info-name"><?= htmlspecialchars($fileName) ?></div>
-                            <div class="file-info-size"><?= round($fileSize / 1024, 2) ?> KB</div>
-                        </div>
-                    </div>
+                    <p>File uploaded: <?= htmlspecialchars($fileName) ?></p>
                 <?php endif; ?>
                 
                 <?php if (!empty($results['patients']) || !empty($results['tests'])): ?>
-                    <table class="results-table">
+                    <table>
                         <tr>
                             <th>Patients Processed</th>
                             <td><?= $results['patients'] ?></td>
@@ -651,31 +364,17 @@ function insertTest($conn, $testData) {
                 <?php endif; ?>
                 
                 <?php if (!empty($results['errors'])): ?>
-                    <h3><i class="fas fa-exclamation-triangle"></i> Errors Encountered:</h3>
+                    <h3>Errors Encountered:</h3>
                     <div class="error-list">
                         <?php foreach ($results['errors'] as $error): ?>
-                            <div class="error-item"><?= htmlspecialchars($error) ?></div>
+                            <p><?= htmlspecialchars($error) ?></p>
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
         
-        <a href="index.php" class="back-link">
-            <i class="fas fa-arrow-left"></i> Return to Dashboard
-        </a>
+        <p><a href="index.php">Return to Dashboard</a></p>
     </div>
-
-    <script>
-        // Show selected file name
-        document.getElementById('csv_file').addEventListener('change', function(e) {
-            const fileNameDisplay = document.getElementById('file-name');
-            if (this.files.length > 0) {
-                fileNameDisplay.textContent = 'Selected file: ' + this.files[0].name;
-            } else {
-                fileNameDisplay.textContent = '';
-            }
-        });
-    </script>
 </body>
 </html>
