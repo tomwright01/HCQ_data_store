@@ -144,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 
                             // Generate test_id (date + eye + test number)
                             $testDateFormatted = $testDate->format('Ymd'); // Format as YYYYMMDD
-                            $testId = $testDateFormatted . ($eye ? $eye : '') . ($testNumber ? $testNumber : '');
+                            $testId = $testDateFormatted . ($eye ? $eye : '') . ($testId ? $testId : '');
 
                             // Process report diagnosis (column 7/[6])
                             $reportDiagnosisValue = $data[6] ?? null;
