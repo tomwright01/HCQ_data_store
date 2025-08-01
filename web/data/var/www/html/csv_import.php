@@ -214,10 +214,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 
                             // Process Diagnosis (column 15/[14])
                             $actualDiagnosis = $data[14] ?? null;
-                            if ($actualDiagnosis !== null && $actualDiagnosis !== '') {
-                                $actualDiagnosis = substr($actualDiagnosis, 0, 100);
+                            if ($actualDiagnosis === '') {
+                                $actualDiagnosis = 'no value';
                             } else {
-                                $actualDiagnosis = null;
+                                substr($actualDiagnosis, 0, 100);
                             }
 
                             // Process dosage (column 16/[15])
