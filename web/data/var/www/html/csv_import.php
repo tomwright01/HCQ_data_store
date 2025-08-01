@@ -62,9 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                     die("Connection failed: " . $conn->connect_error);
                 }
 
-                // Initialize test counter for duplicate handling
-                $testCounts = [];
-
                 try {
                     // Verify file exists and is readable
                     if (!file_exists($destPath)) {
@@ -108,9 +105,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 
                             // Process Patient (Subject ID and DoB)
                             $subjectId = $data[0] ?? '';
-                            $dob = DateTime::createFromFormat('Y-m-d', $data[1] ?? '');
+                            $dob = DateTime::createFromFormat('m-d-Y', $data[1] ?? '');
                             if (!$dob) {
-                                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected YYYY-MM-DD");
+                                throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected MM-DD-YYYY");
                             }
                             $dobFormatted = $dob->format('Y-m-d');
 
@@ -125,47 +122,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             // Insert or get existing patient
                             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location);
                             
-                            // Process Test data
-                            $testDate = DateTime::createFromFormat('Y-m-d', $data[2] ?? '');
+                            // Process Test data - use test_id directly from the file
+                            $testId = $data[2] ?? null;
+                            if (empty($testId)) {
+                                throw new Exception("Test ID is required");
+                            }
+
+                            $testDate = DateTime::createFromFormat('m-d-Y', $data[3] ?? '');
                             if (!$testDate) {
-                                throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected YYYY-MM-DD");
+                                throw new Exception("Invalid date format for test date: " . ($data[3] ?? 'NULL') . " - Expected MM-DD-YYYY");
                             }
                             
-                            // Generate test_id (date + eye + letter if duplicate)
-                            $testDateFormatted = $testDate->format('Ymd'); // Format as YYYYMMDD
-                            $eyeValue = $data[4] ?? null;
-                            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
-                            $baseTestId = $testDateFormatted . ($eye ? $eye : '');
-
-                            // Handle duplicates by appending a, b, c, etc.
-                            if (!isset($testCounts[$baseTestId])) {
-                                $testCounts[$baseTestId] = 0;
-                                $testId = $baseTestId;
-                            } else {
-                                $testCounts[$baseTestId]++;
-                                $letter = chr(97 + $testCounts[$baseTestId]); // 97 = 'a' in ASCII
-                                $testId = $baseTestId . $letter;
-                            }
-
                             // Process Age (column 4/[3])
-                            $ageValue = $data[3] ?? null;
+                            $ageValue = $data[4] ?? null;
                             $age = (isset($ageValue) && is_numeric($ageValue) && $ageValue >= 0 && $ageValue <= 100) 
                                 ? (int)round($ageValue) 
                                 : null;
 
-                            $reportDiagnosisValue = $data[5] ?? null;
+                            $eyeValue = $data[5] ?? null;
+                            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+
+                            $reportDiagnosisValue = $data[6] ?? null;
                             $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
                                 ? strtolower($reportDiagnosisValue) 
                                 : 'no input';
 
-                            $exclusionValue = $data[6] ?? null;
+                            $exclusionValue = $data[7] ?? null;
                             $exclusion = ($exclusionValue !== null && in_array(strtolower($exclusionValue), 
                                 ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) 
                                 ? strtolower($exclusionValue) 
                                 : 'none';
 
                             // Handle MERCI score (0-100 range or 'unable')
-                            $merciScoreValue = $data[7] ?? null;
+                            $merciScoreValue = $data[8] ?? null;
                             $merciScore = null;
                             if (isset($merciScoreValue)) {
                                 if (strtolower($merciScoreValue) === 'unable') {
@@ -175,13 +164,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 }
                             }
 
-                            $merciDiagnosisValue = $data[8] ?? null;
+                            $merciDiagnosisValue = $data[9] ?? null;
                             $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
                                 ? strtolower($merciDiagnosisValue) 
                                 : 'no value';
 
                             // FIXED: error_type with NULL handling
-                            $errorTypeValue = $data[9] ?? null;
+                            $errorTypeValue = $data[10] ?? null;
                             $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
                             $errorType = null; // Default to NULL
                             
@@ -194,9 +183,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 }
                             }
 
-                            $fafGrade = (isset($data[10]) && is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4) ? (int)$data[10] : null;
-                            $octScore = isset($data[11]) && is_numeric($data[11]) ? round(floatval($data[11]), 2) : null;
-                            $vfScore = isset($data[12]) && is_numeric($data[12]) ? round(floatval($data[12]), 2) : null;
+                            $fafGrade = (isset($data[11]) && is_numeric($data[11]) && $data[11] >= 1 && $data[11] <= 4) ? (int)$data[11] : null;
+                            $octScore = isset($data[12]) && is_numeric($data[12]) ? round(floatval($data[12]), 2) : null;
+                            $vfScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
 
                             $testData = [
                                 'test_id' => $testId,
