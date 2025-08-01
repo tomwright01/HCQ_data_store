@@ -40,7 +40,7 @@ CREATE TABLE audit_log (
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
     patient_id VARCHAR(25) NOT NULL,
-    location ENUM('KH', 'Montreal', 'Dal', 'Ivey') DEFAULT 'KH',
+    location ENUM('KH', 'CHUSJ', 'IWK', 'IVEY') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
     age TINYINT UNSIGNED NULL COMMENT 'Patient age at time of test (0-100)',
     eye ENUM('OD', 'OS') NULL COMMENT 'OD=right eye, OS=left eye',
