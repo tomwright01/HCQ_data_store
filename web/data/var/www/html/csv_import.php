@@ -213,9 +213,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             $vfScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
 
                             // Process Diagnosis (column 15/[14])
-                            $actualDiagnosis = isset($data[14]) && $data[14] !== '' ? 
-                                               substr(trim(preg_replace('/[^\p{L}\p{N}\s\-]/u', '', $data[14])), 0, 100) : 
-                                               null;
+                            $allowedDiagnosis = ['RA', 'SLE', 'Sjorgens', 'other'];
+                            if (!empty($data[14])) {
+                                $diag = ucfirst(strtolower(trim($data[14]))); // normalize
+                                $actualDiagnosis = in_array($diag, $allowedDiagnosis) ? $diag : 'other';
+                            } else {
+                                $actualDiagnosis = null;
+                            }
 
                             // Process dosage (column 16/[15])
                             $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
