@@ -213,12 +213,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             $vfScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
 
                             // Process Diagnosis (column 15/[14])
-                            $actualDiagnosis = $data[14] ?? null;
-                            if ($actualDiagnosis === '') {
-                                $actualDiagnosis = 'no value';
-                            } else {
-                                substr($actualDiagnosis, 0, 100);
-                            }
+                            $actualDiagnosis = $data[14] ?? '';
+                            $actualDiagnosis = substr(trim($actualDiagnosis), 0, 100);
 
                             // Process dosage (column 16/[15])
                             $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
