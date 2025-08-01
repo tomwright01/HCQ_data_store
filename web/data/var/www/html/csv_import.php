@@ -249,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     }
 }
 
-// Database functions
+// Database functions (remain the same as before)
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH') {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
@@ -345,179 +345,162 @@ function insertTest($conn, $testData) {
             line-height: 1.6;
             color: #333;
             background-color: #f5f7fa;
-            padding: 0;
-            margin: 0;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
             padding: 20px;
         }
 
-        header {
-            background-color: white;
-            box-shadow: var(--box-shadow);
-            padding: 20px 0;
-            margin-bottom: 30px;
-        }
-
-        .header-content {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            max-width: 1200px;
+        .container {
+            max-width: 1000px;
             margin: 0 auto;
-            padding: 0 20px;
-        }
-
-        .logo {
-            height: 60px;
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            padding: 30px;
         }
 
         h1 {
             color: var(--primary-color);
             margin-bottom: 20px;
-            font-size: 2.2rem;
+            font-size: 2rem;
+            border-bottom: 2px solid var(--primary-light);
+            padding-bottom: 10px;
         }
 
-        h2 {
-            color: var(--primary-dark);
-            margin-bottom: 15px;
-            font-size: 1.8rem;
-        }
-
-        .card {
-            background-color: white;
-            border-radius: var(--border-radius);
-            box-shadow: var(--box-shadow);
-            padding: 30px;
+        .upload-section {
             margin-bottom: 30px;
-            transition: var(--transition);
-        }
-
-        .card:hover {
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
-        }
-
-        .upload-area {
-            border: 2px dashed var(--secondary-color);
-            border-radius: var(--border-radius);
-            padding: 40px;
-            text-align: center;
-            margin-bottom: 30px;
-            background-color: var(--light-color);
-            transition: var(--transition);
-        }
-
-        .upload-area:hover {
-            border-color: var(--primary-color);
-            background-color: var(--primary-light);
-        }
-
-        .upload-area i {
-            font-size: 3rem;
-            color: var(--primary-color);
-            margin-bottom: 15px;
-        }
-
-        .upload-area p {
-            margin-bottom: 20px;
-            color: var(--secondary-color);
-        }
-
-        .btn {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: var(--border-radius);
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: var(--transition);
-            text-decoration: none;
-            text-align: center;
-        }
-
-        .btn:hover {
-            background-color: var(--primary-dark);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 168, 143, 0.3);
-        }
-
-        .btn-outline {
-            background-color: transparent;
-            border: 2px solid var(--primary-color);
-            color: var(--primary-color);
-        }
-
-        .btn-outline:hover {
-            background-color: var(--primary-color);
-            color: white;
-        }
-
-        .btn-block {
-            display: block;
-            width: 100%;
         }
 
         .form-group {
             margin-bottom: 20px;
         }
 
-        .form-control {
-            width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: var(--border-radius);
-            font-size: 1rem;
-            transition: var(--transition);
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--dark-color);
         }
 
-        .form-control:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(0, 168, 143, 0.2);
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+        }
+
+        .file-input-button {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 20px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .file-input-button:hover {
+            background-color: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 168, 143, 0.3);
+        }
+
+        .file-input-button i {
+            margin-right: 10px;
+        }
+
+        #file-name {
+            margin-top: 10px;
+            font-size: 14px;
+            color: var(--secondary-color);
+            font-style: italic;
+        }
+
+        input[type="file"] {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+
+        .submit-btn {
+            background-color: var(--primary-dark);
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--primary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 168, 143, 0.3);
+        }
+
+        .submit-btn i {
+            margin-right: 10px;
+        }
+
+        .results-section {
+            margin-top: 30px;
         }
 
         .alert {
             padding: 15px;
             border-radius: var(--border-radius);
             margin-bottom: 20px;
-            border-left: 5px solid;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+        }
+
+        .alert i {
+            margin-right: 10px;
+            font-size: 1.2rem;
         }
 
         .alert-success {
             background-color: rgba(40, 167, 69, 0.1);
-            border-left-color: var(--success-color);
+            border-left: 4px solid var(--success-color);
             color: var(--success-color);
         }
 
         .alert-error {
             background-color: rgba(220, 53, 69, 0.1);
-            border-left-color: var(--danger-color);
+            border-left: 4px solid var(--danger-color);
             color: var(--danger-color);
         }
 
         .results-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        .results-table th, 
-        .results-table td {
-            padding: 12px 15px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
+            margin: 20px 0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
         }
 
         .results-table th {
             background-color: var(--primary-color);
             color: white;
+            padding: 12px 15px;
+            text-align: left;
             font-weight: 600;
+        }
+
+        .results-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
         }
 
         .results-table tr:nth-child(even) {
@@ -531,81 +514,22 @@ function insertTest($conn, $testData) {
         .error-list {
             max-height: 300px;
             overflow-y: auto;
-            border: 1px solid #ddd;
+            border: 1px solid #eee;
             border-radius: var(--border-radius);
             padding: 15px;
-            margin-top: 20px;
+            margin-top: 15px;
             background-color: white;
         }
 
         .error-item {
             padding: 10px;
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #f5f5f5;
             color: var(--danger-color);
+            font-family: monospace;
         }
 
         .error-item:last-child {
             border-bottom: none;
-        }
-
-        .file-info {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            background-color: white;
-            padding: 15px;
-            border-radius: var(--border-radius);
-            margin-bottom: 20px;
-            box-shadow: var(--box-shadow);
-        }
-
-        .file-info-icon {
-            color: var(--primary-color);
-            font-size: 1.5rem;
-            margin-right: 15px;
-        }
-
-        .file-info-text {
-            flex: 1;
-        }
-
-        .file-info-name {
-            font-weight: 600;
-            margin-bottom: 5px;
-        }
-
-        .file-info-size {
-            color: var(--secondary-color);
-            font-size: 0.9rem;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-card {
-            background-color: white;
-            border-radius: var(--border-radius);
-            padding: 20px;
-            text-align: center;
-            box-shadow: var(--box-shadow);
-        }
-
-        .stat-value {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: var(--primary-color);
-            margin: 10px 0;
-        }
-
-        .stat-label {
-            color: var(--secondary-color);
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
         }
 
         .back-link {
@@ -631,171 +555,125 @@ function insertTest($conn, $testData) {
             transform: translateX(-3px);
         }
 
+        .file-info {
+            background-color: var(--light-color);
+            padding: 15px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .file-info i {
+            color: var(--primary-color);
+            font-size: 1.5rem;
+            margin-right: 15px;
+        }
+
+        .file-info-text {
+            flex: 1;
+        }
+
+        .file-info-name {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .file-info-size {
+            color: var(--secondary-color);
+            font-size: 0.9rem;
+        }
+
         @media (max-width: 768px) {
-            .header-content {
-                flex-direction: column;
-                text-align: center;
-            }
-
-            .logo {
-                margin-bottom: 15px;
-            }
-
-            .upload-area {
+            .container {
                 padding: 20px;
             }
-
-            .stats-grid {
-                grid-template-columns: 1fr;
+            
+            h1 {
+                font-size: 1.5rem;
             }
         }
     </style>
 </head>
 <body>
-    <header>
-        <div class="header-content">
-            <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
-            <h1>Hydroxychloroquine Data Repository</h1>
-        </div>
-    </header>
-
     <div class="container">
-        <div class="card">
-            <h2><i class="fas fa-file-import"></i> CSV Import Tool</h2>
-            <p>Upload a CSV file containing patient data to import into the database.</p>
-            
-            <form method="post" action="" enctype="multipart/form-data" class="upload-form">
-                <div class="upload-area">
-                    <i class="fas fa-cloud-upload-alt"></i>
-                    <p>Drag & drop your CSV file here or click to browse</p>
-                    <input type="file" name="csv_file" id="csv_file" accept=".csv" required class="form-control" style="display: none;">
-                    <label for="csv_file" class="btn btn-outline">
-                        <i class="fas fa-folder-open"></i> Select File
-                    </label>
+        <h1><i class="fas fa-file-import"></i> CSV Import Tool</h1>
+        
+        <div class="upload-section">
+            <form method="post" action="" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="csv_file">Select CSV File to Upload:</label>
+                    <div class="file-input-wrapper">
+                        <button type="button" class="file-input-button">
+                            <i class="fas fa-file-csv"></i> Choose CSV File
+                        </button>
+                        <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
+                    </div>
+                    <div id="file-name"></div>
                 </div>
                 
-                <button type="submit" name="submit" class="btn">
+                <button type="submit" name="submit" class="submit-btn">
                     <i class="fas fa-upload"></i> Import File
                 </button>
             </form>
         </div>
-
+        
         <?php if ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
-            <div class="card">
-                <h2>Import Results</h2>
-                
+            <div class="results-section">
                 <?php if ($message): ?>
                     <div class="alert <?= $messageClass === 'success' ? 'alert-success' : 'alert-error' ?>">
                         <i class="fas <?= $messageClass === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle' ?>"></i>
                         <?= htmlspecialchars($message) ?>
                     </div>
                 <?php endif; ?>
-
+                
                 <?php if (!empty($fileName)): ?>
                     <div class="file-info">
-                        <div style="display: flex; align-items: center;">
-                            <i class="fas fa-file-csv file-info-icon"></i>
-                            <div class="file-info-text">
-                                <div class="file-info-name"><?= htmlspecialchars($fileName) ?></div>
-                                <div class="file-info-size"><?= round($fileSize / 1024, 2) ?> KB</div>
-                            </div>
+                        <i class="fas fa-file-csv"></i>
+                        <div class="file-info-text">
+                            <div class="file-info-name"><?= htmlspecialchars($fileName) ?></div>
+                            <div class="file-info-size"><?= round($fileSize / 1024, 2) ?> KB</div>
                         </div>
-                        <i class="fas fa-check-circle" style="color: var(--success-color); font-size: 1.5rem;"></i>
                     </div>
                 <?php endif; ?>
-
+                
                 <?php if (!empty($results['patients']) || !empty($results['tests'])): ?>
-                    <div class="stats-grid">
-                        <div class="stat-card">
-                            <div class="stat-label">Patients Processed</div>
-                            <div class="stat-value"><?= $results['patients'] ?></div>
-                            <i class="fas fa-user-injured" style="color: var(--primary-color); font-size: 2rem;"></i>
-                        </div>
-                        <div class="stat-card">
-                            <div class="stat-label">Tests Imported</div>
-                            <div class="stat-value"><?= $results['tests'] ?></div>
-                            <i class="fas fa-flask" style="color: var(--primary-color); font-size: 2rem;"></i>
-                        </div>
-                    </div>
+                    <table class="results-table">
+                        <tr>
+                            <th>Patients Processed</th>
+                            <td><?= $results['patients'] ?></td>
+                        </tr>
+                        <tr>
+                            <th>Tests Imported</th>
+                            <td><?= $results['tests'] ?></td>
+                        </tr>
+                    </table>
                 <?php endif; ?>
-
+                
                 <?php if (!empty($results['errors'])): ?>
-                    <h3><i class="fas fa-exclamation-triangle"></i> Errors Encountered (<?= count($results['errors']) ?>)</h3>
+                    <h3><i class="fas fa-exclamation-triangle"></i> Errors Encountered:</h3>
                     <div class="error-list">
                         <?php foreach ($results['errors'] as $error): ?>
-                            <div class="error-item">
-                                <i class="fas fa-times-circle"></i> <?= htmlspecialchars($error) ?>
-                            </div>
+                            <div class="error-item"><?= htmlspecialchars($error) ?></div>
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
             </div>
         <?php endif; ?>
-
+        
         <a href="index.php" class="back-link">
             <i class="fas fa-arrow-left"></i> Return to Dashboard
         </a>
     </div>
 
     <script>
-        // Enhance file input with preview
+        // Show selected file name
         document.getElementById('csv_file').addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            if (file) {
-                const uploadArea = document.querySelector('.upload-area');
-                const fileName = document.querySelector('.file-info-name');
-                const fileSize = document.querySelector('.file-info-size');
-                
-                // Update upload area appearance
-                uploadArea.innerHTML = `
-                    <i class="fas fa-file-csv"></i>
-                    <p>${file.name} ready for import</p>
-                    <span class="btn btn-outline">
-                        <i class="fas fa-sync-alt"></i> Change File
-                    </span>
-                `;
-                
-                // Add click event to the new button
-                uploadArea.querySelector('span').addEventListener('click', function() {
-                    document.getElementById('csv_file').click();
-                });
-                
-                // Show file info
-                if (fileName && fileSize) {
-                    fileName.textContent = file.name;
-                    fileSize.textContent = (file.size / 1024).toFixed(2) + ' KB';
-                }
-            }
-        });
-
-        // Drag and drop functionality
-        const uploadArea = document.querySelector('.upload-area');
-        
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = 'var(--primary-color)';
-            uploadArea.style.backgroundColor = 'var(--primary-light)';
-        });
-        
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.style.borderColor = 'var(--secondary-color)';
-            uploadArea.style.backgroundColor = 'var(--light-color)';
-        });
-        
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.style.borderColor = 'var(--secondary-color)';
-            uploadArea.style.backgroundColor = 'var(--light-color)';
-            
-            const file = e.dataTransfer.files[0];
-            if (file && file.name.endsWith('.csv')) {
-                document.getElementById('csv_file').files = e.dataTransfer.files;
-                
-                // Trigger change event
-                const event = new Event('change');
-                document.getElementById('csv_file').dispatchEvent(event);
+            const fileNameDisplay = document.getElementById('file-name');
+            if (this.files.length > 0) {
+                fileNameDisplay.textContent = 'Selected file: ' + this.files[0].name;
             } else {
-                alert('Please upload a CSV file only.');
+                fileNameDisplay.textContent = '';
             }
         });
     </script>
