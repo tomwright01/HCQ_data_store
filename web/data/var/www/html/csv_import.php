@@ -94,9 +94,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             // Skip empty rows
                             if (count(array_filter($data)) === 0) continue;
                             
-                            // Validate minimum columns (now 14 with test_id and location)
-                            if (count($data) < 14) {
-                                throw new Exception("Row has only " . count($data) . " columns (minimum 14 required with test_id and location)");
+                            // Validate minimum columns (now 13 with location)
+                            if (count($data) < 13) {
+                                throw new Exception("Row has only " . count($data) . " columns (minimum 13 required with location)");
                             }
 
                             // Clean and format data
@@ -119,11 +119,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             $location = str_replace(['"', "'"], '', $location); // Clean any quotes
                             $location = in_array($location, ['KH', 'Montreal', 'Dal', 'Ivey']) ? $location : 'KH';
 
-                            // Use the patient_id from column 2 (index 1)
-                            $patientId = $data[1] ?? '';
-                            if (empty($patientId)) {
-                                throw new Exception("Patient ID is required");
-                            }
+                            // Generate patient_id (first 8 chars of subjectId + last 2 of DoB year)
+                            $patientId = $subjectId;
                             
                             // Insert or get existing patient
                             $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location);
@@ -134,34 +131,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected YYYY-MM-DD");
                             }
                             
-                            // Get test_id from column 5 (index 4)
-                            $testId = $data[4] ?? null;
-                            if (empty($testId)) {
-                                throw new Exception("Test ID is required");
+                            // Generate test_id (date + eye + letter if duplicate)
+                            $testDateFormatted = $testDate->format('Ymd'); // Format as YYYYMMDD
+                            $eyeValue = $data[4] ?? null;
+                            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+                            $baseTestId = $testDateFormatted . ($eye ? $eye : '');
+
+                            // Handle duplicates by appending a, b, c, etc.
+                            if (!isset($testCounts[$baseTestId])) {
+                                $testCounts[$baseTestId] = 0;
+                                $testId = $baseTestId;
+                            } else {
+                                $testCounts[$baseTestId]++;
+                                $letter = chr(97 + $testCounts[$baseTestId]); // 97 = 'a' in ASCII
+                                $testId = $baseTestId . $letter;
                             }
 
-                            // Process Age (column 6/[5])
-                            $ageValue = $data[5] ?? null;
+                            // Process Age (column 4/[3])
+                            $ageValue = $data[3] ?? null;
                             $age = (isset($ageValue) && is_numeric($ageValue) && $ageValue >= 0 && $ageValue <= 100) 
                                 ? (int)round($ageValue) 
                                 : null;
 
-                            $eyeValue = $data[6] ?? null;
-                            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
-
-                            $reportDiagnosisValue = $data[7] ?? null;
+                            $reportDiagnosisValue = $data[5] ?? null;
                             $reportDiagnosis = ($reportDiagnosisValue !== null && in_array(strtolower($reportDiagnosisValue), ['normal', 'abnormal'])) 
                                 ? strtolower($reportDiagnosisValue) 
                                 : 'no input';
 
-                            $exclusionValue = $data[8] ?? null;
+                            $exclusionValue = $data[6] ?? null;
                             $exclusion = ($exclusionValue !== null && in_array(strtolower($exclusionValue), 
                                 ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) 
                                 ? strtolower($exclusionValue) 
                                 : 'none';
 
                             // Handle MERCI score (0-100 range or 'unable')
-                            $merciScoreValue = $data[9] ?? null;
+                            $merciScoreValue = $data[7] ?? null;
                             $merciScore = null;
                             if (isset($merciScoreValue)) {
                                 if (strtolower($merciScoreValue) === 'unable') {
@@ -171,13 +175,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 }
                             }
 
-                            $merciDiagnosisValue = $data[10] ?? null;
+                            $merciDiagnosisValue = $data[8] ?? null;
                             $merciDiagnosis = ($merciDiagnosisValue !== null && in_array(strtolower($merciDiagnosisValue), ['normal', 'abnormal'])) 
                                 ? strtolower($merciDiagnosisValue) 
                                 : 'no value';
 
                             // FIXED: error_type with NULL handling
-                            $errorTypeValue = $data[11] ?? null;
+                            $errorTypeValue = $data[9] ?? null;
                             $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
                             $errorType = null; // Default to NULL
                             
@@ -190,9 +194,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 }
                             }
 
-                            $fafGrade = (isset($data[12]) && is_numeric($data[12]) && $data[12] >= 1 && $data[12] <= 4) ? (int)$data[12] : null;
-                            $octScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
-                            $vfScore = isset($data[14]) && is_numeric($data[14]) ? round(floatval($data[14]), 2) : null;
+                            $fafGrade = (isset($data[10]) && is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4) ? (int)$data[10] : null;
+                            $octScore = isset($data[11]) && is_numeric($data[11]) ? round(floatval($data[11]), 2) : null;
+                            $vfScore = isset($data[12]) && is_numeric($data[12]) ? round(floatval($data[12]), 2) : null;
 
                             $testData = [
                                 'test_id' => $testId,
@@ -245,7 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
     }
 }
 
-// Database functions
+// Database functions (remain the same as before)
 function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH') {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
@@ -279,7 +283,7 @@ function insertTest($conn, $testData) {
     
     // Convert values for database
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' : 
-                      (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
+                      (is_null($testData['merci_score']) ? NULL : $testData['merci_score'];
     
     $errorTypeForDb = $testData['error_type']; // Already NULL or valid value
     
@@ -308,59 +312,278 @@ function insertTest($conn, $testData) {
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>CSV Import Tool</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        .container { max-width: 1000px; margin: 0 auto; }
-        .results { background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
-        .success { color: #28a745; border-left: 4px solid #28a745; padding-left: 10px; }
-        .error { color: #dc3545; border-left: 4px solid #dc3545; padding-left: 10px; }
-        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-        th { background-color: #f2f2f2; }
-        .error-list { max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
-        form { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-weight: bold; }
-        input[type="file"], input[type="submit"] { padding: 8px 12px; font-size: 16px; }
-        input[type="submit"] { background-color: #007bff; color: white; border: none; cursor: pointer; }
-        input[type="submit"]:hover { background-color: #0069d9; }
+        :root {
+            --primary-color: #3498db;
+            --success-color: #2ecc71;
+            --error-color: #e74c3c;
+            --warning-color: #f39c12;
+            --light-gray: #f8f9fa;
+            --medium-gray: #e9ecef;
+            --dark-gray: #343a40;
+            --text-color: #212529;
+            --border-radius: 6px;
+            --box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: #f5f7fa;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+        }
+        
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 25px;
+            font-weight: 600;
+            text-align: center;
+        }
+        
+        h2 {
+            font-size: 1.4rem;
+            margin-bottom: 15px;
+        }
+        
+        h3 {
+            font-size: 1.2rem;
+            margin: 20px 0 10px;
+            color: var(--dark-gray);
+        }
+        
+        .upload-area {
+            background: var(--light-gray);
+            border: 2px dashed var(--primary-color);
+            border-radius: var(--border-radius);
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+            transition: all 0.3s ease;
+        }
+        
+        .upload-area:hover {
+            background: var(--medium-gray);
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: var(--dark-gray);
+        }
+        
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: var(--border-radius);
+            background: white;
+            font-size: 16px;
+        }
+        
+        .btn {
+            display: inline-block;
+            background: var(--primary-color);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+        
+        .btn:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        
+        .btn-block {
+            display: block;
+            width: 100%;
+        }
+        
+        .results {
+            background: var(--light-gray);
+            padding: 25px;
+            border-radius: var(--border-radius);
+            margin-bottom: 30px;
+        }
+        
+        .message {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+        }
+        
+        .success {
+            background-color: rgba(46, 204, 113, 0.2);
+            color: var(--success-color);
+            border-left: 4px solid var(--success-color);
+        }
+        
+        .error {
+            background-color: rgba(231, 76, 60, 0.2);
+            color: var(--error-color);
+            border-left: 4px solid var(--error-color);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid var(--medium-gray);
+        }
+        
+        th {
+            background-color: var(--primary-color);
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background-color: rgba(52, 152, 219, 0.1);
+        }
+        
+        .error-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid var(--medium-gray);
+            border-radius: var(--border-radius);
+            padding: 15px;
+            background: white;
+        }
+        
+        .error-list p {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            color: var(--error-color);
+        }
+        
+        .error-list p:last-child {
+            border-bottom: none;
+        }
+        
+        .back-link {
+            display: inline-block;
+            margin-top: 20px;
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: 600;
+            transition: color 0.3s ease;
+        }
+        
+        .back-link:hover {
+            color: #2980b9;
+            text-decoration: underline;
+        }
+        
+        .file-info {
+            background: white;
+            padding: 15px;
+            border-radius: var(--border-radius);
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            h1 {
+                font-size: 1.8rem;
+            }
+            
+            .upload-area {
+                padding: 20px;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>CSV Import Tool</h1>
         
-        <form method="post" action="" enctype="multipart/form-data">
-            <label for="csv_file">Select CSV File to Upload:</label>
-            <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
-            <input type="submit" name="submit" value="Import File">
-        </form>
+        <div class="upload-area">
+            <form method="post" action="" enctype="multipart/form-data" class="form-group">
+                <label for="csv_file">Select CSV File to Upload</label>
+                <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
+                <button type="submit" name="submit" class="btn btn-block" style="margin-top: 20px;">
+                    <i class="fas fa-upload"></i> Import File
+                </button>
+            </form>
+        </div>
         
         <?php if ($_SERVER['REQUEST_METHOD'] === 'POST'): ?>
             <div class="results">
-                <h2 class="<?= $messageClass ?>"><?= $message ?></h2>
+                <div class="message <?= $messageClass ?>"><?= $message ?></div>
                 
                 <?php if (!empty($fileName)): ?>
-                    <p>File uploaded: <?= htmlspecialchars($fileName) ?></p>
+                    <div class="file-info">
+                        <p><strong>File uploaded:</strong> <?= htmlspecialchars($fileName) ?></p>
+                        <p><strong>File size:</strong> <?= round($fileSize / 1024, 2) ?> KB</p>
+                    </div>
                 <?php endif; ?>
                 
                 <?php if (!empty($results['patients']) || !empty($results['tests'])): ?>
                     <table>
-                        <tr>
-                            <th>Patients Processed</th>
-                            <td><?= $results['patients'] ?></td>
-                        </tr>
-                        <tr>
-                            <th>Tests Imported</th>
-                            <td><?= $results['tests'] ?></td>
-                        </tr>
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Patients Processed</td>
+                                <td><?= $results['patients'] ?></td>
+                            </tr>
+                            <tr>
+                                <td>Tests Imported</td>
+                                <td><?= $results['tests'] ?></td>
+                            </tr>
+                        </tbody>
                     </table>
                 <?php endif; ?>
                 
                 <?php if (!empty($results['errors'])): ?>
-                    <h3>Errors Encountered:</h3>
+                    <h3>Errors Encountered (<?= count($results['errors']) ?>):</h3>
                     <div class="error-list">
                         <?php foreach ($results['errors'] as $error): ?>
                             <p><?= htmlspecialchars($error) ?></p>
@@ -370,7 +593,10 @@ function insertTest($conn, $testData) {
             </div>
         <?php endif; ?>
         
-        <p><a href="index.php">Return to Dashboard</a></p>
+        <a href="index.php" class="back-link">&larr; Return to Dashboard</a>
     </div>
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
 </body>
 </html>
