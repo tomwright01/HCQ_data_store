@@ -97,7 +97,7 @@ CREATE TABLE tests (
         (merci_score REGEXP '^[0-9]+$' AND CAST(merci_score AS UNSIGNED) BETWEEN 0 AND 100)
     ),
     CONSTRAINT chk_faf_grade CHECK (faf_grade IS NULL OR (faf_grade BETWEEN 1 AND 4)),
-    CONSTRAINT chk_test_number CHECK (test_number IS NULL OR test_number REGEXP '^[0-9]{6}$'),
+    CONSTRAINT chk_test_number CHECK (test_number IS NULL OR test_number REGEXP '^[0-9]+$'),
     CONSTRAINT chk_dosage CHECK (dosage IS NULL OR dosage > 0),
     CONSTRAINT chk_duration CHECK (duration_days IS NULL OR duration_days > 0),
     CONSTRAINT chk_cumulative_dosage CHECK (cumulative_dosage IS NULL OR cumulative_dosage > 0)
