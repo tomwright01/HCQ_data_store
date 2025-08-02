@@ -1,12 +1,10 @@
+
 <?php
-// Database configuration
 $servername = "mariadb";
 $username = "root";
-// Read the MariaDB root password from the Docker secret file
-$password = file_exists('/run/secrets/mariadb_root_password')
-    ? trim(file_get_contents('/run/secrets/mariadb_root_password'))
-    : 'fallback_if_missing'; // optional fallback for dev; remove or error out in prod
+$password = "notgood";
 $dbname = "PatientData";
+
 
 // Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
