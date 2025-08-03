@@ -14,6 +14,7 @@ CREATE TABLE patients (
     date_of_birth DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    actual_diagnosis ENUM('RA', 'SLE', 'Sjogren', 'other') NOT NULL DEFAULT 'other',
     INDEX idx_subject (subject_id),
     INDEX idx_location (location)
 );
@@ -55,7 +56,6 @@ CREATE TABLE tests (
     faf_grade TINYINT UNSIGNED NULL COMMENT 'Fundus Autofluorescence grade (1-4)',
     oct_score DECIMAL(10,2) NULL COMMENT 'Optical Coherence Tomography score',
     vf_score DECIMAL(10,2) NULL COMMENT 'Visual Field score',
-    actual_diagnosis ENUM('RA', 'SLE', 'Sjogren', 'other') NOT NULL DEFAULT 'other',
     medication_name VARCHAR(100) NULL COMMENT 'Name of prescribed medication',
     dosage DECIMAL(10,2) NULL COMMENT 'Medication dosage in mg',
     dosage_unit VARCHAR(10) DEFAULT 'mg',
