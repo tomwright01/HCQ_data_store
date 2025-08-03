@@ -23,19 +23,8 @@ $edit_mode = isset($_GET['edit']) && $_GET['edit'] === 'true';
 $filter_location = isset($_GET['filter_location']) ? $_GET['filter_location'] : '';
 $filter_merci_range = isset($_GET['filter_merci_range']) ? $_GET['filter_merci_range'] : '';
 $filter_eye = isset($_GET['filter_eye']) ? $_GET['filter_eye'] : '';
-$filter_active = !empty($filter_location) || !empty($filter_merci_range) || !empty($filter_eye);
-
-// Check for import results
-$import_results = [];
-if (isset($_GET['import_success'])) {
-    $success_message = "CSV import completed successfully!";
-    if (isset($_GET['patients'])) {
-        $import_results['patients'] = intval($_GET['patients']);
-    }
-    if (isset($_GET['tests'])) {
-        $import_results['tests'] = intval($_GET['tests']);
-    }
-}
+$filter_diagnosis = isset($_GET['filter_diagnosis']) ? $_GET['filter_diagnosis'] : '';
+$filter_active = !empty($filter_location) || !empty($filter_merci_range) || !empty($filter_eye) || !empty($filter_diagnosis);
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -75,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 cumulative_dosage = ?
                 WHERE test_id = ?");
             
-            $stmt->bind_param("isssssssddssdds", 
+            $stmt->bind_param("isssssssddssids", 
                 $age, $eye, $report_diagnosis, $exclusion, $merci_score, 
                 $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score,
                 $actual_diagnosis, $dosage, $duration_days, $cumulative_dosage, $test_id);
@@ -140,6 +129,14 @@ $result_location = $conn->query($sql_location);
 $location_data = [];
 while ($row = $result_location->fetch_assoc()) {
     $location_data[$row['location']] = $row['count'];
+}
+
+// Actual Diagnosis distribution
+$sql_actual_diagnosis = "SELECT actual_diagnosis, COUNT(*) AS count FROM tests GROUP BY actual_diagnosis";
+$result_actual_diagnosis = $conn->query($sql_actual_diagnosis);
+$actual_diagnosis_data = [];
+while ($row = $result_actual_diagnosis->fetch_assoc()) {
+    $actual_diagnosis_data[$row['actual_diagnosis']] = $row['count'];
 }
 
 // MERCI Score distribution
@@ -211,6 +208,12 @@ if ($search_patient_id || $filter_active) {
         $types .= "s";
     }
     
+    if (!empty($filter_diagnosis)) {
+        $sql_patient_data .= " AND t.actual_diagnosis = ?";
+        $params[] = $filter_diagnosis;
+        $types .= "s";
+    }
+    
     if (!empty($filter_merci_range)) {
         switch ($filter_merci_range) {
             case 'unable':
@@ -258,12 +261,11 @@ if ($search_patient_id || $filter_active) {
     $stmt->execute();
     $result_patient = $stmt->get_result();
     
-    // Get patient diagnosis if searching by patient ID
+    // Get patient diagnosis if searching by patient_id
     if ($search_patient_id && $result_patient->num_rows > 0) {
         $first_row = $result_patient->fetch_assoc();
         $patient_diagnosis = $first_row['actual_diagnosis'];
-        // Reset pointer back to start
-        $result_patient->data_seek(0);
+        $result_patient->data_seek(0); // Reset pointer to beginning
     }
 }
 
@@ -272,6 +274,17 @@ function remove_filter_url($filter_to_remove) {
     $params = $_GET;
     unset($params[$filter_to_remove]);
     return 'index.php?' . http_build_query($params);
+}
+
+// Helper function to get diagnosis display name
+function get_diagnosis_display_name($diagnosis) {
+    $diagnosis_map = [
+        'RA' => 'Rheumatoid Arthritis',
+        'SLE' => 'Systemic Lupus Erythematosus',
+        'Sjogren' => 'Sjögren\'s Syndrome',
+        'other' => 'Other'
+    ];
+    return $diagnosis_map[$diagnosis] ?? $diagnosis;
 }
 ?>
 <!DOCTYPE html>
@@ -823,14 +836,13 @@ function remove_filter_url($filter_to_remove) {
             color: white;
         }
         
-        /* Diagnosis badge */
         .diagnosis-badge {
             position: absolute;
             top: 20px;
             left: 20px;
-            background: linear-gradient(135deg, rgb(0, 109, 44) 0%, rgb(0, 89, 34) 100%);
-            color: white;
             padding: 8px 15px;
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            color: white;
             border-radius: 20px;
             font-size: 0.9rem;
             font-weight: 600;
@@ -838,67 +850,29 @@ function remove_filter_url($filter_to_remove) {
             z-index: 10;
         }
         
-        /* Import results card */
-        .import-results-card {
-            background: white;
-            border-radius: 10px;
-            padding: 20px;
-            margin: 20px 0;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-            border: 1px solid #e0e6ed;
+        .diagnosis-badge.ra {
+            background: linear-gradient(135deg, #ff6b6b 0%, #f06595 100%);
         }
         
-        .import-results-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 1px solid #e0e6ed;
+        .diagnosis-badge.sle {
+            background: linear-gradient(135deg, #74c0fc 0%, #4dabf7 100%);
         }
         
-        .import-results-title {
-            font-size: 1.2rem;
-            color: rgb(0, 168, 143);
-            margin: 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+        .diagnosis-badge.sjogren {
+            background: linear-gradient(135deg, #63e6be 0%, #20c997 100%);
         }
         
-        .import-stats {
-            display: flex;
-            gap: 15px;
-            margin-top: 15px;
-        }
-        
-        .import-stat {
-            flex: 1;
-            text-align: center;
-            padding: 15px;
-            background: rgba(0, 168, 143, 0.1);
-            border-radius: 8px;
-        }
-        
-        .import-stat-value {
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: rgb(0, 168, 143);
-            margin-bottom: 5px;
-        }
-        
-        .import-stat-label {
-            font-size: 0.9rem;
-            color: #6c757d;
+        .diagnosis-badge.other {
+            background: linear-gradient(135deg, #adb5bd 0%, #6c757d 100%);
         }
     </style>
 </head>
 <body>
     <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
-
+    
     <?php if ($patient_diagnosis): ?>
-        <div class="diagnosis-badge">
-            Diagnosis: <?= strtoupper(htmlspecialchars($patient_diagnosis)) ?>
+        <div class="diagnosis-badge <?= strtolower($patient_diagnosis) ?>">
+            Diagnosis: <?= get_diagnosis_display_name($patient_diagnosis) ?>
         </div>
     <?php endif; ?>
 
@@ -911,30 +885,6 @@ function remove_filter_url($filter_to_remove) {
             <a href="import_images.php" class="action-button image-button">Import Medical Images</a>
             <a href="export_csv.php" class="action-button export-button">Export to CSV</a>
         </div>
-
-        <?php if (!empty($import_results)): ?>
-            <div class="import-results-card">
-                <div class="import-results-header">
-                    <h3 class="import-results-title">
-                        <i class="fas fa-file-import"></i> CSV Import Results
-                    </h3>
-                    <span class="filter-results-badge">
-                        <?= $import_results['patients'] + $import_results['tests'] ?> records processed
-                    </span>
-                </div>
-                
-                <div class="import-stats">
-                    <div class="import-stat">
-                        <div class="import-stat-value"><?= $import_results['patients'] ?></div>
-                        <div class="import-stat-label">Patients</div>
-                    </div>
-                    <div class="import-stat">
-                        <div class="import-stat-value"><?= $import_results['tests'] ?></div>
-                        <div class="import-stat-label">Tests</div>
-                    </div>
-                </div>
-            </div>
-        <?php endif; ?>
 
         <!-- Enhanced Filter Panel -->
         <div class="filter-panel">
@@ -981,6 +931,23 @@ function remove_filter_url($filter_to_remove) {
                         </div>
                     </div>
                     
+                    <!-- Diagnosis Filter -->
+                    <div class="filter-card">
+                        <div class="filter-icon">
+                            <i class="fas fa-heartbeat"></i>
+                        </div>
+                        <div class="filter-content">
+                            <label for="filter_diagnosis">Diagnosis</label>
+                            <select name="filter_diagnosis" id="filter_diagnosis" class="filter-select">
+                                <option value="">All Diagnoses</option>
+                                <option value="RA" <?= $filter_diagnosis === 'RA' ? 'selected' : '' ?>>Rheumatoid Arthritis</option>
+                                <option value="SLE" <?= $filter_diagnosis === 'SLE' ? 'selected' : '' ?>>Systemic Lupus Erythematosus</option>
+                                <option value="Sjogren" <?= $filter_diagnosis === 'Sjogren' ? 'selected' : '' ?>>Sjögren's Syndrome</option>
+                                <option value="other" <?= $filter_diagnosis === 'other' ? 'selected' : '' ?>>Other</option>
+                            </select>
+                        </div>
+                    </div>
+                    
                     <!-- MERCI Score Filter -->
                     <div class="filter-card">
                         <div class="filter-icon">
@@ -1023,6 +990,15 @@ function remove_filter_url($filter_to_remove) {
                                 <div class="filter-tag">
                                     <span>Eye: <?= htmlspecialchars($filter_eye) ?></span>
                                     <a href="<?= remove_filter_url('filter_eye') ?>" class="filter-tag-remove">
+                                        <i class="fas fa-times"></i>
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+                            
+                            <?php if ($filter_diagnosis): ?>
+                                <div class="filter-tag">
+                                    <span>Diagnosis: <?= htmlspecialchars($filter_diagnosis) ?></span>
+                                    <a href="<?= remove_filter_url('filter_diagnosis') ?>" class="filter-tag-remove">
                                         <i class="fas fa-times"></i>
                                     </a>
                                 </div>
@@ -1278,6 +1254,11 @@ function remove_filter_url($filter_to_remove) {
             <h3 class="chart-title">MERCI Score Distribution</h3>
             <canvas id="merciChart"></canvas>
         </div>
+        
+        <div class="chart-container">
+            <h3 class="chart-title">Actual Diagnosis Distribution</h3>
+            <canvas id="actualDiagnosisChart"></canvas>
+        </div>
     </div>
 
     <div class="data-section">
@@ -1464,6 +1445,43 @@ function remove_filter_url($filter_to_remove) {
                         title: {
                             display: true,
                             text: 'MERCI Score Range'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Actual Diagnosis Distribution Chart
+        var actualDiagnosisCtx = document.getElementById('actualDiagnosisChart').getContext('2d');
+        var actualDiagnosisChart = new Chart(actualDiagnosisCtx, {
+            type: 'pie',
+            data: {
+                labels: <?= json_encode(array_map('get_diagnosis_display_name', array_keys($actual_diagnosis_data))) ?>,
+                datasets: [{
+                    data: <?= json_encode(array_values($actual_diagnosis_data)) ?>,
+                    backgroundColor: [
+                        'rgb(255, 107, 107)',
+                        'rgb(116, 192, 252)',
+                        'rgb(99, 230, 190)',
+                        'rgb(173, 181, 189)'
+                    ],
+                    borderColor: '#fff',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { position: 'top' },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                var label = context.label || '';
+                                var value = context.raw || 0;
+                                var total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                var percentage = Math.round((value / total) * 100);
+                                return label + ': ' + value + ' (' + percentage + '%)';
+                            }
                         }
                     }
                 }
