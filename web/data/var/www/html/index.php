@@ -5,7 +5,6 @@ $username = "root";
 $password = "notgood";
 $dbname = "PatientData";
 
-
 // Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
 
@@ -26,6 +25,18 @@ $filter_merci_range = isset($_GET['filter_merci_range']) ? $_GET['filter_merci_r
 $filter_eye = isset($_GET['filter_eye']) ? $_GET['filter_eye'] : '';
 $filter_active = !empty($filter_location) || !empty($filter_merci_range) || !empty($filter_eye);
 
+// Check for import results
+$import_results = [];
+if (isset($_GET['import_success'])) {
+    $success_message = "CSV import completed successfully!";
+    if (isset($_GET['patients'])) {
+        $import_results['patients'] = intval($_GET['patients']);
+    }
+    if (isset($_GET['tests'])) {
+        $import_results['tests'] = intval($_GET['tests']);
+    }
+}
+
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['update_test'])) {
@@ -41,6 +52,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $faf_grade = isset($_POST['faf_grade']) && $_POST['faf_grade'] !== '' ? (int)$_POST['faf_grade'] : NULL;
         $oct_score = isset($_POST['oct_score']) && $_POST['oct_score'] !== '' ? (float)$_POST['oct_score'] : NULL;
         $vf_score = isset($_POST['vf_score']) && $_POST['vf_score'] !== '' ? (float)$_POST['vf_score'] : NULL;
+        $actual_diagnosis = $_POST['actual_diagnosis'] ?? 'other';
+        $dosage = isset($_POST['dosage']) && $_POST['dosage'] !== '' ? (float)$_POST['dosage'] : NULL;
+        $duration_days = isset($_POST['duration_days']) && $_POST['duration_days'] !== '' ? (int)$_POST['duration_days'] : NULL;
+        $cumulative_dosage = isset($_POST['cumulative_dosage']) && $_POST['cumulative_dosage'] !== '' ? (float)$_POST['cumulative_dosage'] : NULL;
         
         try {
             $stmt = $conn->prepare("UPDATE tests SET 
@@ -53,12 +68,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_type = ?, 
                 faf_grade = ?, 
                 oct_score = ?, 
-                vf_score = ? 
+                vf_score = ?,
+                actual_diagnosis = ?,
+                dosage = ?,
+                duration_days = ?,
+                cumulative_dosage = ?
                 WHERE test_id = ?");
             
-            $stmt->bind_param("isssssssdds", 
+            $stmt->bind_param("isssssssddssdds", 
                 $age, $eye, $report_diagnosis, $exclusion, $merci_score, 
-                $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score, $test_id);
+                $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score,
+                $actual_diagnosis, $dosage, $duration_days, $cumulative_dosage, $test_id);
             
             if ($stmt->execute()) {
                 $success_message = "Test record updated successfully!";
@@ -156,6 +176,7 @@ while ($row = $result_merci->fetch_assoc()) {
 
 // Get patient data if search was performed or filters are active
 $result_patient = null;
+$patient_diagnosis = null;
 if ($search_patient_id || $filter_active) {
     $sql_patient_data = "SELECT 
         t.test_id, t.location, t.date_of_test, t.age, t.eye,
@@ -163,6 +184,7 @@ if ($search_patient_id || $filter_active) {
         t.error_type, t.faf_grade, t.oct_score, t.vf_score,
         t.faf_reference_od, t.faf_reference_os, t.oct_reference_od, t.oct_reference_os,
         t.vf_reference_od, t.vf_reference_os, t.mferg_reference_od, t.mferg_reference_os,
+        t.actual_diagnosis, t.dosage, t.duration_days, t.cumulative_dosage,
         p.patient_id, p.subject_id, p.date_of_birth
         FROM tests t JOIN patients p ON t.patient_id = p.patient_id
         WHERE 1=1";
@@ -235,6 +257,14 @@ if ($search_patient_id || $filter_active) {
     
     $stmt->execute();
     $result_patient = $stmt->get_result();
+    
+    // Get patient diagnosis if searching by patient ID
+    if ($search_patient_id && $result_patient->num_rows > 0) {
+        $first_row = $result_patient->fetch_assoc();
+        $patient_diagnosis = $first_row['actual_diagnosis'];
+        // Reset pointer back to start
+        $result_patient->data_seek(0);
+    }
 }
 
 // Helper function to generate URL with one filter removed
@@ -792,10 +822,85 @@ function remove_filter_url($filter_to_remove) {
             box-shadow: 0 4px 10px rgba(220, 53, 69, 0.3);
             color: white;
         }
+        
+        /* Diagnosis badge */
+        .diagnosis-badge {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: linear-gradient(135deg, rgb(0, 109, 44) 0%, rgb(0, 89, 34) 100%);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 10;
+        }
+        
+        /* Import results card */
+        .import-results-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e0e6ed;
+        }
+        
+        .import-results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #e0e6ed;
+        }
+        
+        .import-results-title {
+            font-size: 1.2rem;
+            color: rgb(0, 168, 143);
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .import-stats {
+            display: flex;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        
+        .import-stat {
+            flex: 1;
+            text-align: center;
+            padding: 15px;
+            background: rgba(0, 168, 143, 0.1);
+            border-radius: 8px;
+        }
+        
+        .import-stat-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: rgb(0, 168, 143);
+            margin-bottom: 5px;
+        }
+        
+        .import-stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
     </style>
 </head>
 <body>
     <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
+
+    <?php if ($patient_diagnosis): ?>
+        <div class="diagnosis-badge">
+            Diagnosis: <?= strtoupper(htmlspecialchars($patient_diagnosis)) ?>
+        </div>
+    <?php endif; ?>
 
     <div class="content">
         <h1>Hydroxychloroquine Data Repository</h1>
@@ -806,6 +911,30 @@ function remove_filter_url($filter_to_remove) {
             <a href="import_images.php" class="action-button image-button">Import Medical Images</a>
             <a href="export_csv.php" class="action-button export-button">Export to CSV</a>
         </div>
+
+        <?php if (!empty($import_results)): ?>
+            <div class="import-results-card">
+                <div class="import-results-header">
+                    <h3 class="import-results-title">
+                        <i class="fas fa-file-import"></i> CSV Import Results
+                    </h3>
+                    <span class="filter-results-badge">
+                        <?= $import_results['patients'] + $import_results['tests'] ?> records processed
+                    </span>
+                </div>
+                
+                <div class="import-stats">
+                    <div class="import-stat">
+                        <div class="import-stat-value"><?= $import_results['patients'] ?></div>
+                        <div class="import-stat-label">Patients</div>
+                    </div>
+                    <div class="import-stat">
+                        <div class="import-stat-value"><?= $import_results['tests'] ?></div>
+                        <div class="import-stat-label">Tests</div>
+                    </div>
+                </div>
+            </div>
+        <?php endif; ?>
 
         <!-- Enhanced Filter Panel -->
         <div class="filter-panel">
@@ -991,6 +1120,9 @@ function remove_filter_url($filter_to_remove) {
                         <th>FAF Grade</th>
                         <th>OCT Score</th>
                         <th>VF Score</th>
+                        <th>Dosage (mg)</th>
+                        <th>Duration (days)</th>
+                        <th>Cumulative (mg)</th>
                         <th>Images</th>
                         <?php if ($edit_mode): ?>
                             <th>Actions</th>
@@ -1048,6 +1180,9 @@ function remove_filter_url($filter_to_remove) {
                                     <td><input type="number" name="faf_grade" class="edit-input" value="<?= htmlspecialchars($row['faf_grade'] ?? '') ?>" min="1" max="4"></td>
                                     <td><input type="number" step="0.01" name="oct_score" class="edit-input" value="<?= htmlspecialchars($row['oct_score'] ?? '') ?>"></td>
                                     <td><input type="number" step="0.01" name="vf_score" class="edit-input" value="<?= htmlspecialchars($row['vf_score'] ?? '') ?>"></td>
+                                    <td><input type="number" step="0.01" name="dosage" class="edit-input" value="<?= htmlspecialchars($row['dosage'] ?? '') ?>"></td>
+                                    <td><input type="number" name="duration_days" class="edit-input" value="<?= htmlspecialchars($row['duration_days'] ?? '') ?>"></td>
+                                    <td><input type="number" step="0.01" name="cumulative_dosage" class="edit-input" value="<?= htmlspecialchars($row['cumulative_dosage'] ?? '') ?>"></td>
                                 <?php else: ?>
                                     <td><?= htmlspecialchars($row['age'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($row['eye'] ?? 'N/A') ?></td>
@@ -1059,6 +1194,9 @@ function remove_filter_url($filter_to_remove) {
                                     <td><?= htmlspecialchars($row['faf_grade'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($row['oct_score'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($row['vf_score'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['dosage'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['duration_days'] ?? 'N/A') ?></td>
+                                    <td><?= htmlspecialchars($row['cumulative_dosage'] ?? 'N/A') ?></td>
                                 <?php endif; ?>
                                 
                                 <td>
