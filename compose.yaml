@@ -1,38 +1,26 @@
-version: '3.7'
-
-secrets:
-  mariadb_root_password:
-    external: true
-
 services:
-  db:
-    image: HCQ/mariadb
-    build: ./database
-    restart: always
-    container_name: mariadb
-    volumes:
-      - ./DATA_STORE/database:/var/lib/mysql
-    environment:
-      - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/mariadb_root_password
-    secrets:
-      - mariadb_root_password
+    db:
+        image: HCQ/mariadb
+        build: ./database
+        restart: always
+        container_name: mariadb
+        volumes:
+            - ./DATA_STORE/database:/var/lib/mysql
+        environment:
+            MARIADB_ROOT_PASSWORD: notgood
+    
+    adminer:
+        image: adminer
+        restart: always
+        ports:
+            - 8080:8080
 
-  web:
-    image: HCQ/web
-    build: ./web
-    restart: always
-    container_name: web
-    volumes:
-      - ./DATA_STORE/:/var/www/html/data
-    ports:
-      - "8888:8080"
-    environment:
-      - DB_PASSWORD_FILE=/run/secrets/mariadb_root_password
-    secrets:
-      - mariadb_root_password
-
-  adminer:
-    image: adminer
-    restart: always
-    ports:
-      - "8080:8080"
+    web:
+        image: HCQ/web
+        build: ./web
+        restart: always
+        container_name: web
+        volumes:
+            - ./DATA_STORE/:/var/www/html/data
+        ports: 
+            - "8888:8080"
