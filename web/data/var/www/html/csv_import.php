@@ -3,17 +3,8 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// Database configuration
-$servername = "mariadb";
-$username = "root";
-$password = "notgood";
-$dbname = "PatientData";
-
-// Upload directory
-$uploadDir = "/var/www/html/uploads/";
-if (!file_exists($uploadDir)) {
-    mkdir($uploadDir, 0755, true);
-}
+// Load shared config & functions (this brings in $conn, getOrCreatePatient, insertTest, etc.)
+require_once __DIR__ . '/functions.php';
 
 // Initialize variables
 $message = '';
@@ -24,6 +15,10 @@ $results = [
     'errors' => []
 ];
 $fileName = '';
+$uploadDir = "/var/www/html/uploads/";
+if (!file_exists($uploadDir)) {
+    mkdir($uploadDir, 0755, true);
+}
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
@@ -48,12 +43,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                 $message = "Failed to move uploaded file.";
                 $messageClass = 'error';
             } else {
-                // Connect to DB
-                $conn = new mysqli($servername, $username, $password, $dbname);
-                if ($conn->connect_error) {
-                    die("Connection failed: " . $conn->connect_error);
-                }
-
                 try {
                     if (!file_exists($destPath)) {
                         throw new Exception("CSV file not found at: $destPath");
@@ -223,7 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'patient_id' => $patientId,
                                 'location' => $location,
                                 'date_of_test' => $testDate->format('Y-m-d'),
-                                'age' => null, // Not in this CSV order
+                                'age' => null, // Not in this CSV
                                 'eye' => $eye,
                                 'report_diagnosis' => $reportDiagnosis,
                                 'exclusion' => $exclusion,
@@ -234,10 +223,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'oct_score' => $octScore,
                                 'vf_score' => $vfScore,
                                 'actual_diagnosis' => $actualDiagnosis,
+                                'medication_name' => null,
                                 'dosage' => $dosage,
+                                'dosage_unit' => 'mg',
                                 'duration_days' => $durationDays,
                                 'cumulative_dosage' => $cumulativeDosage,
-                                'date_of_continuation' => $date_of_continuation
+                                'date_of_continuation' => $date_of_continuation,
+                                'treatment_notes' => null
                             ];
 
                             insertTest($conn, $testData);
@@ -265,7 +257,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                     $message = "Fatal error: " . $e->getMessage();
                     $messageClass = 'error';
                 }
-                $conn->close();
             }
         }
     }
@@ -460,7 +451,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                         <div style="margin:8px 0;">or</div>
                         <input type="file" name="csv_file" id="csv_file" accept=".csv" class="file-input" required>
                         <label for="csv_file" class="file-label"><i class="fas fa-folder-open"></i> Select File</label>
-                        <div class="file-name" id="fileName" style="margin-top:8px; font-size:0.9rem; color:#555;"><?= $fileName ?: 'No file selected' ?></div>
+                        <div class="file-name" id="fileName" style="margin-top:8px; font-size:0.9rem; color:#555;"><?= htmlspecialchars($fileName ?: 'No file selected') ?></div>
                     </div>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:10px;">
