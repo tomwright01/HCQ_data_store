@@ -4,7 +4,7 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 // Load shared config & functions (this brings in $conn, getOrCreatePatient, insertTest, etc.)
-require_once __DIR__ . '/functions.php';
+require_once 'functions.php';
 
 // Initialize variables
 $message = '';
