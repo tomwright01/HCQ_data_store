@@ -1,12 +1,18 @@
 <?php
-// Enable error reporting (turn off in production)
+// Enable error reporting (disable in production)
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// Load shared config & functions (this brings in $conn, getOrCreatePatient, insertTest, etc.)
-require_once 'functions.php';
+// Include helpers
+require_once __DIR__ . '/functions.php';
 
-// Initialize variables
+// Upload directory
+$uploadDir = "/var/www/html/uploads/";
+if (!file_exists($uploadDir)) {
+    mkdir($uploadDir, 0755, true);
+}
+
+// Initialize
 $message = '';
 $messageClass = '';
 $results = [
@@ -15,14 +21,9 @@ $results = [
     'errors' => []
 ];
 $fileName = '';
-$uploadDir = "/var/www/html/uploads/";
-if (!file_exists($uploadDir)) {
-    mkdir($uploadDir, 0755, true);
-}
 
 // Handle form submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
-    // Validate file upload
     if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         $message = "Error uploading file: " . ($_FILES['csv_file']['error'] ?? 'No file selected');
         $messageClass = 'error';
@@ -44,20 +45,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                 $messageClass = 'error';
             } else {
                 try {
-                    if (!file_exists($destPath)) {
-                        throw new Exception("CSV file not found at: $destPath");
+                    if (!file_exists($destPath) || !is_readable($destPath)) {
+                        throw new Exception("CSV file not readable at $destPath");
                     }
-                    if (!is_readable($destPath)) {
-                        throw new Exception("CSV file is not readable. Check permissions.");
-                    }
-
                     if (($handle = fopen($destPath, "r")) === FALSE) {
                         throw new Exception("Could not open CSV file");
                     }
 
+                    global $conn;
                     $conn->begin_transaction();
 
-                    // Skip header if present
+                    // Skip header
                     fgetcsv($handle, 0, ",", '"', "\0");
                     $lineNumber = 1;
 
@@ -65,33 +63,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                         $lineNumber++;
                         try {
                             if (count(array_filter($data)) === 0) continue;
-
                             if (count($data) < 18) {
                                 throw new Exception("Row has only " . count($data) . " columns (minimum 18 required)");
                             }
 
-                            // Trim & normalize null-like values
+                            // Normalize
                             $data = array_map('trim', $data);
                             $data = array_map(function($v) {
                                 $v = trim($v ?? '');
                                 $lower = strtolower($v);
-                                if ($v === '' || in_array($lower, ['null', 'no value', 'missing'])) {
-                                    return null;
-                                }
+                                if ($v === '' || in_array($lower, ['null', 'no value', 'missing'])) return null;
                                 return $v;
                             }, $data);
 
-                            // === Column mapping per specified order ===
+                            // Column order per specification:
                             // [0] Subject ID
                             $subjectId = $data[0] ?? '';
-                            // [1] Date of Birth
+                            // [1] Date of Birth MM/DD/YYYY
                             $dob = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
                             if (!$dob) {
                                 throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected MM/DD/YYYY");
                             }
                             $dobFormatted = $dob->format('Y-m-d');
 
-                            // [2] Date of Test
+                            // [2] Date of Test MM/DD/YYYY
                             $testDate = DateTime::createFromFormat('m/d/Y', $data[2] ?? '');
                             if (!$testDate) {
                                 throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected MM/DD/YYYY");
@@ -212,7 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'patient_id' => $patientId,
                                 'location' => $location,
                                 'date_of_test' => $testDate->format('Y-m-d'),
-                                'age' => null, // Not in this CSV
+                                'age' => null,
                                 'eye' => $eye,
                                 'report_diagnosis' => $reportDiagnosis,
                                 'exclusion' => $exclusion,
@@ -293,143 +288,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
             gap: 15px;
             flex-wrap: wrap;
         }
-        .header-content {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            flex: 1;
-        }
-        .logo { height: 50px; }
-        h1 { margin: 0; font-size: 2.2rem; }
-        .container {
-            max-width: 1250px;
-            margin: 30px auto 60px;
-            padding: 0 15px;
-        }
-        .card {
-            background: white;
-            border-radius: var(--radius);
-            padding: 25px;
-            margin-bottom: 30px;
-            position: relative;
-            box-shadow: 0 20px 50px -10px rgba(0,0,0,0.08);
-            border: 1px solid rgba(0,0,0,0.05);
-        }
-        .card-title {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 1.5rem;
-            margin-bottom: 15px;
-            color: var(--primary-color);
-        }
+        .header-content { display: flex; align-items: center; gap: 15px; flex:1; }
+        .logo { height:50px; }
+        h1 { margin:0; font-size:2.2rem; }
+        .container { max-width:1250px; margin:30px auto 60px; padding:0 15px; }
+        .card { background:white; border-radius:var(--radius); padding:25px; margin-bottom:30px; position:relative; box-shadow:0 20px 50px -10px rgba(0,0,0,0.08); border:1px solid rgba(0,0,0,0.05); }
+        .card-title { display:flex; align-items:center; gap:10px; font-size:1.5rem; margin-bottom:15px; color: var(--primary-color); }
         .card-title i { font-size:1.6rem; }
-        .upload-area {
-            border: 2px dashed var(--primary-light);
-            border-radius: 8px;
-            padding: 35px;
-            text-align: center;
-            position: relative;
-            transition: all .3s;
-            background-color: rgba(178, 226, 226, 0.08);
-        }
-        .upload-area:hover {
-            border-color: var(--primary-color);
-            background-color: rgba(178, 226, 226, 0.15);
-        }
-        .upload-icon { font-size: 3.5rem; color: var(--primary-color); margin-bottom:10px; }
-        .file-input { display: none; }
-        .file-label {
-            display: inline-block;
-            padding: 12px 24px;
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-            color: white;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight:600;
-            margin-top:10px;
-        }
+        .upload-area { border:2px dashed var(--primary-light); border-radius:8px; padding:35px; text-align:center; position:relative; transition:all .3s; background-color:rgba(178,226,226,0.08); }
+        .upload-area:hover { border-color: var(--primary-color); background-color: rgba(178,226,226,0.15); }
+        .upload-icon { font-size:3.5rem; color: var(--primary-color); margin-bottom:10px; }
+        .file-input { display:none; }
+        .file-label { display:inline-block; padding:12px 24px; background: linear-gradient(135deg, var(--primary-color), var(--primary-dark)); color:white; border-radius:6px; cursor:pointer; font-weight:600; margin-top:10px; }
         .file-label i { margin-right:6px; }
-        .btn {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-            border: none;
-            color: white;
-            padding: 14px 30px;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size:1rem;
-            font-weight:600;
-            display: inline-flex;
-            align-items:center;
-            gap:8px;
-            transition: all .25s;
-        }
+        .btn { background: linear-gradient(135deg, var(--primary-color), var(--primary-dark)); border:none; color:white; padding:14px 30px; border-radius:8px; cursor:pointer; font-size:1rem; font-weight:600; display:inline-flex; align-items:center; gap:8px; transition:all .25s; }
         .btn:hover { filter:brightness(1.05); }
-        .message {
-            border-radius: 8px;
-            padding: 15px 18px;
-            display:flex;
-            gap:12px;
-            align-items:center;
-            font-weight:500;
-            margin-bottom:12px;
-        }
-        .success { background: rgba(40, 167, 69, 0.1); border-left: 5px solid #28a745; color: #155724; }
-        .error { background: rgba(220, 53, 69, 0.1); border-left:5px solid #dc3545; color: #721c24; }
-        .stats-cards {
-            display:grid;
-            grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
-            gap:20px;
-            margin:18px 0 10px;
-        }
-        .stat-card {
-            background: #f9fcfd;
-            border-radius: 8px;
-            padding: 18px;
-            display:flex;
-            flex-direction: column;
-            align-items:center;
-            gap:6px;
-            border:1px solid rgba(0,168,143,0.15);
-        }
+        .message { border-radius:8px; padding:15px 18px; display:flex; gap:12px; align-items:center; font-weight:500; margin-bottom:12px; }
+        .success { background: rgba(40,167,69,0.1); border-left:5px solid #28a745; color:#155724; }
+        .error { background: rgba(220,53,69,0.1); border-left:5px solid #dc3545; color:#721c24; }
+        .stats-cards { display:grid; grid-template-columns: repeat(auto-fit,minmax(220px,1fr)); gap:20px; margin:18px 0 10px; }
+        .stat-card { background:#f9fcfd; border-radius:8px; padding:18px; display:flex; flex-direction:column; align-items:center; gap:6px; border:1px solid rgba(0,168,143,0.15); }
         .stat-value { font-size:2.4rem; font-weight:700; color: var(--primary-dark); }
         .stat-label { font-size:0.75rem; letter-spacing:1px; text-transform:uppercase; color:#555; }
-        .error-list {
-            margin-top:12px;
-            border:1px solid #e4e8ed;
-            border-radius:6px;
-            max-height:260px;
-            overflow:auto;
-            background:#fff;
-        }
-        .error-item {
-            padding:12px 14px;
-            border-bottom:1px solid #e9ecf2;
-            display:flex;
-            gap:10px;
-            align-items:flex-start;
-            font-size:0.9rem;
-        }
+        .error-list { margin-top:12px; border:1px solid #e4e8ed; border-radius:6px; max-height:260px; overflow:auto; background:#fff; }
+        .error-item { padding:12px 14px; border-bottom:1px solid #e9ecf2; display:flex; gap:10px; align-items:flex-start; font-size:0.9rem; }
         .error-item:last-child { border-bottom:none; }
-        .back-link {
-            display:inline-flex;
-            align-items:center;
-            gap:6px;
-            text-decoration:none;
-            color: var(--primary-dark);
-            font-weight:600;
-            margin-top:10px;
-        }
+        .back-link { display:inline-flex; align-items:center; gap:6px; text-decoration:none; color: var(--primary-dark); font-weight:600; margin-top:10px; }
         .back-link i { font-size:1rem; }
-
-        /* Responsive */
-        @media (max-width: 1024px) {
-            .card { padding:20px; }
-        }
-        @media (max-width: 768px) {
-            header { flex-direction: column; }
-            .stats-cards { grid-template-columns: 1fr; }
-        }
+        @media (max-width:1024px){ .card{ padding:20px; } }
+        @media (max-width:768px){ header{ flex-direction:column;} .stats-cards{ grid-template-columns:1fr;} }
     </style>
 </head>
 <body>
