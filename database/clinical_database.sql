@@ -18,9 +18,6 @@ CREATE TABLE patients (
     INDEX idx_location (location)
 );
 
--- ==========================
--- AUDIT LOG TABLE
--- ==========================
 CREATE TABLE audit_log (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     table_name VARCHAR(50) NOT NULL,
@@ -34,9 +31,6 @@ CREATE TABLE audit_log (
     INDEX idx_changed_at (changed_at)
 );
 
--- ==========================
--- TESTS TABLE
--- ==========================
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
     patient_id VARCHAR(25) NOT NULL,
@@ -60,8 +54,6 @@ CREATE TABLE tests (
     cumulative_dosage DECIMAL(10,2) NULL,
     date_of_continuation DATE NULL,
     treatment_notes TEXT NULL,
-
-    -- image refs (if you later use importTestImage)
     faf_reference_od VARCHAR(255) NULL,
     faf_reference_os VARCHAR(255) NULL,
     oct_reference_od VARCHAR(255) NULL,
@@ -70,33 +62,26 @@ CREATE TABLE tests (
     vf_reference_os VARCHAR(255) NULL,
     mferg_reference_od VARCHAR(255) NULL,
     mferg_reference_os VARCHAR(255) NULL,
-
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
     FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
-
     INDEX idx_patient (patient_id),
     INDEX idx_date (date_of_test),
     INDEX idx_location (location),
     INDEX idx_diagnosis (actual_diagnosis),
     INDEX idx_continuation (date_of_continuation),
-
-    CONSTRAINT chk_age CHECK (age IS NULL OR (age BETWEEN 0 AND 100)),
+    CONSTRAINT chk_age CHECK (age IS NULL OR age BETWEEN 0 AND 100),
     CONSTRAINT chk_merci_score CHECK (
         merci_score IS NULL
         OR merci_score = 'unable'
         OR (merci_score REGEXP '^[0-9]+$' AND CAST(merci_score AS UNSIGNED) BETWEEN 0 AND 100)
     ),
-    CONSTRAINT chk_faf_grade CHECK (faf_grade IS NULL OR (faf_grade BETWEEN 1 AND 4)),
+    CONSTRAINT chk_faf_grade CHECK (faf_grade IS NULL OR faf_grade BETWEEN 1 AND 4),
     CONSTRAINT chk_dosage CHECK (dosage IS NULL OR dosage > 0),
     CONSTRAINT chk_duration CHECK (duration_days IS NULL OR duration_days > 0),
     CONSTRAINT chk_cumulative_dosage CHECK (cumulative_dosage IS NULL OR cumulative_dosage > 0)
 );
 
--- ==========================
--- AUDIT TRIGGERS FOR TESTS
--- ==========================
 DELIMITER //
 CREATE TRIGGER tests_after_insert
 AFTER INSERT ON tests
@@ -106,7 +91,7 @@ BEGIN
         table_name, record_id, action, new_values, changed_by
     ) VALUES (
         'tests', NEW.test_id, 'INSERT',
-        CONCAT('{"test_id":"', NEW.test_id, '", "patient_id":"', NEW.patient_id, '"}'),
+        CONCAT('{"test_id":"', NEW.test_id, '","patient_id":"', NEW.patient_id, '"}'),
         CURRENT_USER()
     );
 END//
@@ -119,8 +104,8 @@ BEGIN
         table_name, record_id, action, old_values, new_values, changed_by
     ) VALUES (
         'tests', NEW.test_id, 'UPDATE',
-        CONCAT('{"test_id":"', OLD.test_id, '", "patient_id":"', OLD.patient_id, '"}'),
-        CONCAT('{"test_id":"', NEW.test_id, '", "patient_id":"', NEW.patient_id, '"}'),
+        CONCAT('{"test_id":"', OLD.test_id, '","patient_id":"', OLD.patient_id, '"}'),
+        CONCAT('{"test_id":"', NEW.test_id, '","patient_id":"', NEW.patient_id, '"}'),
         CURRENT_USER()
     );
 END//
@@ -133,7 +118,7 @@ BEGIN
         table_name, record_id, action, old_values, changed_by
     ) VALUES (
         'tests', OLD.test_id, 'DELETE',
-        CONCAT('{"test_id":"', OLD.test_id, '", "patient_id":"', OLD.patient_id, '"}'),
+        CONCAT('{"test_id":"', OLD.test_id, '","patient_id":"', OLD.patient_id, '"}'),
         CURRENT_USER()
     );
 END//
