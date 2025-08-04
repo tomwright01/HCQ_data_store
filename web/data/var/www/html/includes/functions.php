@@ -22,7 +22,7 @@ function getOrCreatePatient(
     string $subjectId,
     string $dateOfBirth,
     string $location = 'KH',
-    array &$results = null
+    ?array &$results = null
 ): string {
     // Check for existing patient
     $sel = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
