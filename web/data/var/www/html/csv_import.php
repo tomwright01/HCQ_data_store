@@ -1,11 +1,12 @@
 
 <?php
-// Enable error reporting (disable in production)
+// csv_import.php
+
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-require_once 'includes/config.php';
-require_once 'includes/functions.php';
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/functions.php';
 
 // Upload directory
 $uploadDir = __DIR__ . '/uploads/';
@@ -13,7 +14,6 @@ if (!file_exists($uploadDir)) {
     mkdir($uploadDir, 0755, true);
 }
 
-// Initialize
 $message      = '';
 $messageClass = '';
 $results      = [
@@ -23,7 +23,6 @@ $results      = [
 ];
 $fileName = '';
 
-// Handle CSV upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     $fileTmpPath   = $_FILES['csv_file']['tmp_name'];
     $fileName      = $_FILES['csv_file']['name'];
@@ -42,10 +41,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             $messageClass = 'error';
         } else {
             try {
-                if (!file_exists($destPath) || !is_readable($destPath)) {
+                if (!is_readable($destPath)) {
                     throw new Exception("CSV file not readable at: $destPath");
                 }
-                if (($handle = fopen($destPath, "r")) === FALSE) {
+                $handle = fopen($destPath, "r");
+                if ($handle === FALSE) {
                     throw new Exception("Could not open CSV file");
                 }
 
@@ -82,14 +82,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         // [1] Date of Birth (MM/DD/YYYY)
                         $dobObj = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
                         if (!$dobObj) {
-                            throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected MM/DD/YYYY");
+                            throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL'));
                         }
                         $dobFormatted = $dobObj->format('Y-m-d');
 
                         // [2] Date of Test (MM/DD/YYYY)
                         $testDateObj = DateTime::createFromFormat('m/d/Y', $data[2] ?? '');
                         if (!$testDateObj) {
-                            throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected MM/DD/YYYY");
+                            throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
                         }
 
                         // [3] Test ID (provided)
@@ -101,7 +101,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
                         // [4] Eye
                         $eyeValue = $data[4] ?? null;
-                        $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+                        $eye = in_array(strtoupper($eyeValue), ['OD', 'OS']) ? strtoupper($eyeValue) : null;
 
                         // Default location
                         $location = 'KH';
@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         // [7] MERCI Score
                         $merciScoreValue = $data[7] ?? null;
                         $merciScore = null;
-                        if (isset($merciScoreValue)) {
+                        if ($merciScoreValue !== null) {
                             if (strtolower($merciScoreValue) === 'unable') {
                                 $merciScore = 'unable';
                             } elseif (is_numeric($merciScoreValue) && $merciScoreValue >= 0 && $merciScoreValue <= 100) {
@@ -155,27 +155,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $errorTypeValue = $data[9] ?? null;
                         $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
                         $errorType = null;
-                        if ($errorTypeValue !== null && $errorTypeValue !== '') {
+                        if (!empty($errorTypeValue)) {
                             $uv = strtoupper(trim($errorTypeValue));
                             if (in_array($uv, $allowedErrorTypes)) {
                                 $errorType = ($uv === 'NONE') ? 'none' : $uv;
-                            } else {
-                                $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeValue}' - set to NULL";
                             }
                         }
 
                         // [10] FAF Grade
-                        $fafGrade = (isset($data[10]) && is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4)
+                        $fafGrade = (is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4)
                             ? (int)$data[10]
                             : null;
 
                         // [11] OCT Score
-                        $octScore = isset($data[11]) && is_numeric($data[11])
+                        $octScore = is_numeric($data[11])
                             ? round(floatval($data[11]), 2)
                             : null;
 
                         // [12] VF Score
-                        $vfScore = isset($data[12]) && is_numeric($data[12])
+                        $vfScore = is_numeric($data[12])
                             ? round(floatval($data[12]), 2)
                             : null;
 
@@ -188,17 +186,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
 
                         // [14] Dosage
-                        $dosage = isset($data[14]) && is_numeric($data[14])
+                        $dosage = is_numeric($data[14])
                             ? round(floatval($data[14]), 2)
                             : null;
 
                         // [15] Duration Days
-                        $durationDays = isset($data[15]) && is_numeric($data[15])
+                        $durationDays = is_numeric($data[15])
                             ? (int)$data[15]
                             : null;
 
                         // [16] Cumulative Dosage
-                        $cumulativeDosage = isset($data[16]) && is_numeric($data[16])
+                        $cumulativeDosage = is_numeric($data[16])
                             ? round(floatval($data[16]), 2)
                             : null;
 
@@ -231,14 +229,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             'oct_score'            => $octScore,
                             'vf_score'             => $vfScore,
                             'actual_diagnosis'     => $actualDiagnosis,
+                            'medication_name'      => null,
                             'dosage'               => $dosage,
                             'dosage_unit'          => 'mg',
                             'duration_days'        => $durationDays,
                             'cumulative_dosage'    => $cumulativeDosage,
-                            'date_of_continuation' => $date_of_continuation
+                            'date_of_continuation' => $date_of_continuation,
+                            'treatment_notes'      => null
                         ];
 
-                        // Insert or update
                         insertTest($testData);
                         $results['tests']++;
                     } catch (Exception $e) {
@@ -349,14 +348,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             max-height:260px; overflow:auto; background:white;
         }
         .error-item {
-            padding:12px 14px; border-bottom:1px solid #e9ecf2;
-            display:flex; gap:10px; align-items:flex-start; font-size:0.9rem;
+            padding:12px 14px; border-bottom:1px solid #
         }
-        .back-link {
-            display:inline-flex; align-items:center; gap:6px;
-            color:var(--primary-dark); text-decoration:none; font-weight:600; margin-top:10px;
-        }
-        .back-link i { font-size:1rem; }
     </style>
 </head>
 <body>
@@ -374,8 +367,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 <div style="flex:1; min-width:250px;">
                     <div class="upload-area" id="dropZone">
                         <div class="upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
-                        <div style="font-size:1.1rem; font-weight:600;">Drag & Drop your CSV file here</div>
-                        <div style="margin:8px 0;">or</div>
                         <input type="file" name="csv_file" id="csv_file" accept=".csv" class="file-input" required>
                         <label for="csv_file" class="file-label"><i class="fas fa-folder-open"></i> Select File</label>
                         <div class="file-name" id="fileName"><?= htmlspecialchars($fileName ?: 'No file selected') ?></div>
@@ -432,8 +423,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
         const fileNameDisplay = document.getElementById('fileName');
         const dropZone = document.getElementById('dropZone');
 
-        fileInput.addEventListener('change', function() {
-            fileNameDisplay.textContent = this.files.length ? this.files[0].name : 'No file selected';
+        fileInput.addEventListener('change', () => {
+            fileNameDisplay.textContent = fileInput.files.length ? fileInput.files[0].name : 'No file selected';
         });
 
         ['dragenter','dragover','dragleave','drop'].forEach(evt =>
@@ -454,7 +445,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             })
         );
 
-        dropZone.addEventListener('drop', function(e) {
+        dropZone.addEventListener('drop', e => {
             const files = e.dataTransfer.files;
             if (files.length) {
                 fileInput.files = files;
@@ -464,4 +455,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     </script>
 </body>
 </html>
-
