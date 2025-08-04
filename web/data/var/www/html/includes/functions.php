@@ -1,11 +1,14 @@
 <?php
-require_once  'config.php'; // ensure config loads
+require_once __DIR__ . '/config.php'; // ensure config loads
 
 /**
  * PERMANENT STORAGE FUNCTIONS
  * All data operations are designed for permanent retention
  */
 
+/**
+ * Fetch patient by ID
+ */
 function getPatientById($patient_id) {
     global $conn;
     $stmt = $conn->prepare("SELECT * FROM patients WHERE patient_id = ?");
@@ -15,7 +18,7 @@ function getPatientById($patient_id) {
 }
 
 /**
- * Upsert patient including actual_diagnosis
+ * Insert or update patient including actual_diagnosis
  */
 function upsertPatient($patient_id, $subject_id, $date_of_birth, $location = 'KH', $actual_diagnosis = 'other') {
     global $conn;
@@ -36,10 +39,9 @@ function upsertPatient($patient_id, $subject_id, $date_of_birth, $location = 'KH
 }
 
 /**
- * Get existing patient or create if missing (without overwriting actual_diagnosis unless provided)
+ * Simplified getOrCreatePatient for CSV import without actual_diagnosis
  */
-function getOrCreatePatient($conn, $patientId, $subjectId, $date_of_birth, $location = 'KH', &$results) {
-    // Check existence
+function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH', &$results = null) {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patientId);
     $stmt->execute();
@@ -47,13 +49,15 @@ function getOrCreatePatient($conn, $patientId, $subjectId, $date_of_birth, $loca
     if ($res && $res->num_rows > 0) {
         return $patientId;
     }
-    // Insert new with default actual_diagnosis 'other'
-    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth, location, actual_diagnosis) VALUES (?, ?, ?, ?, 'other')");
-    $stmt->bind_param("ssss", $patientId, $subjectId, $date_of_birth, $location);
+
+    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth, location) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("ssss", $patientId, $subjectId, $dob, $location);
     if (!$stmt->execute()) {
         throw new Exception("Patient insert failed: " . $stmt->error);
     }
-    $results['patients']++;
+    if (is_array($results)) {
+        $results['patients']++;
+    }
     return $patientId;
 }
 
@@ -92,7 +96,6 @@ function insertTest($conn, $testData) {
     $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' :
                       (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
 
-    // Defaults / optional
     $actualDiagnosis = $testData['actual_diagnosis'] ?? null;
     $medicationName = $testData['medication_name'] ?? null;
     $dosage = $testData['dosage'] ?? null;
@@ -134,7 +137,7 @@ function insertTest($conn, $testData) {
 }
 
 /**
- * Import image and associate with test (existing logic)
+ * Import image and associate with test
  */
 function importTestImage($testType, $eye, $patient_id, $test_date, $tempFilePath) {
     global $conn;
@@ -246,3 +249,4 @@ function getStoredImagePath($filename) {
     return null;
 }
 ?>
+
