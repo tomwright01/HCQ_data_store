@@ -4,7 +4,8 @@ ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
 // Include helpers
-require_once __DIR__ . '/includes/functions.php';
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
 
 // Upload directory
 $uploadDir = "/var/www/html/uploads/";
