@@ -99,9 +99,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
                         $testId = preg_replace('/\s+/', '_', $testIdRaw);
 
-                        // [4] Eye
                         $eyeValue = $data[4] ?? null;
-                        $eye = in_array(strtoupper($eyeValue), ['OD', 'OS']) ? strtoupper($eyeValue) : null;
+                        $eye = null;
+                        if ($eyeValue !== null) {
+                            $upperEye = strtoupper($eyeValue);
+                            if (in_array($upperEye, ['OD','OS'], true)) {
+                                $eye = $upperEye;
+                            }
+                        }
 
                         // Default location
                         $location = 'KH';
