@@ -239,7 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         ];
 
                         // Insert or update
-                        insertTest($conn, $testData);
+                        insertTest($testData);
                         $results['tests']++;
                     } catch (Exception $e) {
                         $results['errors'][] = "Line $lineNumber: " . $e->getMessage();
