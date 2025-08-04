@@ -1,20 +1,9 @@
 <?php
 // includes/functions.php
-
-require_once 'config.php';
+require_once __DIR__ . '/config.php';
 
 /**
  * Look up an existing patient or create a new one.
- * If $results is provided, increments its 'patients' count on insert.
- *
- * @param mysqli $conn       The database connection.
- * @param string $patientId  The patient_id to lookup or insert.
- * @param string $subjectId  The subject_id to use on insert.
- * @param string $dateOfBirth  YYYY-MM-DD formatted date of birth.
- * @param string $location     One of 'KH','CHUSJ','IWK','IVEY'.
- * @param array|null &$results Optional import results array.
- * @return string The patient_id.
- * @throws Exception on DB error.
  */
 function getOrCreatePatient(
     mysqli $conn,
@@ -24,7 +13,6 @@ function getOrCreatePatient(
     string $location = 'KH',
     ?array &$results = null
 ): string {
-    // Check for existing patient
     $sel = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $sel->bind_param("s", $patientId);
     $sel->execute();
@@ -32,17 +20,14 @@ function getOrCreatePatient(
         return $patientId;
     }
 
-    // Insert new patient
-    $ins = $conn->prepare("
-        INSERT INTO patients (patient_id, subject_id, date_of_birth, location)
-        VALUES (?, ?, ?, ?)
-    ");
+    $ins = $conn->prepare(
+        "INSERT INTO patients (patient_id, subject_id, date_of_birth, location) VALUES (?, ?, ?, ?)"
+    );
     $ins->bind_param("ssss", $patientId, $subjectId, $dateOfBirth, $location);
-    if (! $ins->execute()) {
+    if (!$ins->execute()) {
         throw new Exception("Patient insert failed: " . $ins->error);
     }
 
-    // Tally import count
     if (isset($results) && is_array($results)) {
         $results['patients'] = ($results['patients'] ?? 0) + 1;
     }
@@ -52,10 +37,6 @@ function getOrCreatePatient(
 
 /**
  * Insert or update a test record.
- * Expects $testData to contain exactly the column keys for tests table.
- *
- * @param array $testData Associative array of test column values.
- * @throws Exception on DB error.
  */
 function insertTest(array $testData): void {
     global $conn;
@@ -92,11 +73,10 @@ function insertTest(array $testData): void {
     ";
 
     $stmt = $conn->prepare($sql);
-    if (! $stmt) {
+    if (!$stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
     }
 
-    // Normalize merci_score
     $merci = $testData['merci_score'] === 'unable'
         ? 'unable'
         : ($testData['merci_score'] === null ? null : $testData['merci_score']);
@@ -127,21 +107,13 @@ function insertTest(array $testData): void {
         $testData['treatment_notes']
     );
 
-    if (! $stmt->execute()) {
+    if (!$stmt->execute()) {
         throw new Exception("Test insert failed: " . $stmt->error);
     }
 }
 
 /**
- * Move and register an uploaded test image,
- * then update the corresponding tests record.
- *
- * @param string $testType      One of ALLOWED_TEST_TYPES keys.
- * @param string $eye           'OD' or 'OS'.
- * @param string $patient_id
- * @param string $test_date     'YYYY-MM-DD'
- * @param string $tmpPath       PHP upload tmp path
- * @return bool
+ * Move and register an uploaded test image, then update the tests record.
  */
 function importTestImage(
     string $testType,
@@ -152,23 +124,23 @@ function importTestImage(
 ): bool {
     global $conn;
 
-    if (! isset(ALLOWED_TEST_TYPES[$testType]) || ! in_array($eye, ['OD','OS'])) {
+    if (!isset(ALLOWED_TEST_TYPES[$testType]) || !in_array($eye, ['OD','OS'])) {
         return false;
     }
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mime  = finfo_file($finfo, $tmpPath);
     finfo_close($finfo);
-    if (! isset(ALLOWED_IMAGE_TYPES[$mime])) {
+    if (!isset(ALLOWED_IMAGE_TYPES[$mime])) {
         return false;
     }
 
-    $ext       = ALLOWED_IMAGE_TYPES[$mime];
-    $dir       = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
-    if (! is_dir($dir)) {
+    $ext = ALLOWED_IMAGE_TYPES[$mime];
+    $dir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
+    if (!is_dir($dir)) {
         mkdir($dir, 0777, true);
     }
 
-    $filename  = sprintf(
+    $filename = sprintf(
         '%s_%s_%s.%s',
         preg_replace('/[^A-Za-z0-9_-]/','', $patient_id),
         $eye,
@@ -176,28 +148,21 @@ function importTestImage(
         $ext
     );
 
-    if (! move_uploaded_file($tmpPath, $dir . $filename)) {
+    if (!move_uploaded_file($tmpPath, $dir . $filename)) {
         return false;
     }
 
     $field = strtolower($testType) . "_reference_" . strtolower($eye);
     $date  = date('Y-m-d', strtotime($test_date));
 
-    // Try update
-    $upd = $conn->prepare("
-        UPDATE tests
-        SET {$field} = ?
-        WHERE patient_id = ? AND date_of_test = ? AND eye = ?
-    ");
+    $upd = $conn->prepare("UPDATE tests SET {$field} = ? WHERE patient_id = ? AND date_of_test = ? AND eye = ?");
     $upd->bind_param("ssss", $filename, $patient_id, $date, $eye);
     $upd->execute();
 
-    // If no rows updated, insert stub
     if ($upd->affected_rows < 1) {
-        $ins = $conn->prepare("
-            INSERT INTO tests (test_id, patient_id, date_of_test, eye, {$field})
-            VALUES (?, ?, ?, ?, ?)
-        ");
+        $ins = $conn->prepare(
+            "INSERT INTO tests (test_id, patient_id, date_of_test, eye, {$field}) VALUES (?, ?, ?, ?, ?)"
+        );
         $newId = date('YmdHis') . '_' . $eye . '_' . substr(md5(uniqid()),0,4);
         $ins->bind_param("sssss", $newId, $patient_id, $date, $eye, $filename);
         $ins->execute();
@@ -207,17 +172,14 @@ function importTestImage(
 }
 
 /**
- * Check for existing test
+ * Check for an existing test
  */
 function checkDuplicateTest(string $patient_id, string $date, string $eye): bool {
     global $conn;
-    $stmt = $conn->prepare("
-        SELECT 1 FROM tests
-        WHERE patient_id = ? AND date_of_test = ? AND eye = ?
-    ");
+    $stmt = $conn->prepare("SELECT 1 FROM tests WHERE patient_id = ? AND date_of_test = ? AND eye = ?");
     $stmt->bind_param("sss", $patient_id, $date, $eye);
     $stmt->execute();
-    return (bool) $stmt->get_result()->fetch_row();
+    return (bool)$stmt->get_result()->fetch_row();
 }
 
 /**
@@ -225,18 +187,15 @@ function checkDuplicateTest(string $patient_id, string $date, string $eye): bool
  */
 function backupDatabase(): string|false {
     $dir  = '/var/www/html/backups/';
-    if (! is_dir($dir)) mkdir($dir, 0755, true);
+    if (!is_dir($dir)) mkdir($dir, 0755, true);
     $file = $dir . 'PatientData_' . date('Ymd_His') . '.sql';
-    $cmd  = sprintf(
-        'mysqldump -u%s -p%s -h%s %s > %s',
-        DB_USERNAME, DB_PASSWORD, DB_SERVER, DB_NAME, $file
-    );
+    $cmd  = sprintf('mysqldump -u%s -p%s -h%s %s > %s', DB_USERNAME, DB_PASSWORD, DB_SERVER, DB_NAME, $file);
     system($cmd, $ret);
     return $ret === 0 ? $file : false;
 }
 
 /**
- * Get public URL for a stored image filename
+ * Get public URL for a stored image
  */
 function getStoredImagePath(string $filename): ?string {
     foreach (ALLOWED_TEST_TYPES as $type => $dir) {
