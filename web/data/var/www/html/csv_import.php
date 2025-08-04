@@ -3,11 +3,9 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// Database configuration
-$servername = "mariadb";
-$username = "root";
-$password = "notgood";
-$dbname = "PatientData";
+// Load shared config & helpers
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/functions.php';
 
 // Upload directory
 $uploadDir = "/var/www/html/uploads/";
@@ -25,9 +23,25 @@ $results = [
 ];
 $fileName = '';
 
-// Handle form submission
+function normalize_merci_score($v) {
+    if ($v === null || $v === '') return null;
+    if (strtolower($v) === 'unable') return 'unable';
+    if (is_numeric($v) && $v >= 0 && $v <= 100) return (int)$v;
+    return null;
+}
+
+function normalize_actual_diagnosis($v) {
+    $allowed = ['RA', 'SLE', 'Sjogren', 'other'];
+    if (empty($v)) return null;
+    $normalized = ucfirst(strtolower(trim($v)));
+    if ($normalized === 'Sjorgens') {
+        $normalized = 'Sjogren';
+    }
+    return in_array($normalized, $allowed) ? $normalized : 'other';
+}
+
+// Handle submission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
-    // Validate file upload
     if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         $message = "Error uploading file: " . ($_FILES['csv_file']['error'] ?? 'No file selected');
         $messageClass = 'error';
@@ -48,12 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                 $message = "Failed to move uploaded file.";
                 $messageClass = 'error';
             } else {
-                // Connect to DB
-                $conn = new mysqli($servername, $username, $password, $dbname);
-                if ($conn->connect_error) {
-                    die("Connection failed: " . $conn->connect_error);
-                }
-
                 try {
                     if (!file_exists($destPath)) {
                         throw new Exception("CSV file not found at: $destPath");
@@ -68,21 +76,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
 
                     $conn->begin_transaction();
 
-                    // Skip header if present (assumes first row is header)
+                    // Skip header
                     fgetcsv($handle, 0, ",", '"', "\0");
                     $lineNumber = 1;
 
                     while (($data = fgetcsv($handle, 0, ",", '"', "\0")) !== FALSE) {
                         $lineNumber++;
                         try {
-                            // Skip blank rows
                             if (count(array_filter($data)) === 0) continue;
 
                             if (count($data) < 18) {
                                 throw new Exception("Row has only " . count($data) . " columns (minimum 18 required)");
                             }
 
-                            // Trim and normalize null-like strings
                             $data = array_map('trim', $data);
                             $data = array_map(function($v) {
                                 $v = trim($v ?? '');
@@ -93,23 +99,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 return $v;
                             }, $data);
 
-                            // Patient info
+                            // Patient
                             $subjectId = $data[0] ?? '';
-                            $dob = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
-                            if (!$dob) {
+                            $dobRaw = $data[1] ?? '';
+                            $dobObj = DateTime::createFromFormat('m/d/Y', $dobRaw);
+                            if (!$dobObj) {
                                 throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL') . " - Expected MM/DD/YYYY");
                             }
-                            $dobFormatted = $dob->format('Y-m-d');
-                            $location = 'KH'; // default
+                            $dobFormatted = $dobObj->format('Y-m-d');
+                            $location = 'KH';
                             $patientId = $subjectId;
 
-                            $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $dobFormatted, $location, $results);
+                            // Patient-level actual diagnosis from col 15
+                            $patientActualDiagnosis = normalize_actual_diagnosis($data[14] ?? null) ?? 'other';
 
-                            // Test metadata
-                            $testDate = DateTime::createFromFormat('m/d/Y', $data[2] ?? '');
-                            if (!$testDate) {
+                            upsertPatient($patientId, $subjectId, $dobFormatted, $location, $patientActualDiagnosis);
+                            $results['patients']++;
+
+                            // Test
+                            $testDateRaw = $data[2] ?? '';
+                            $testDateObj = DateTime::createFromFormat('m/d/Y', $testDateRaw);
+                            if (!$testDateObj) {
                                 throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL') . " - Expected MM/DD/YYYY");
                             }
+                            $testDate = $testDateObj->format('Y-m-d');
 
                             $ageValue = $data[3] ?? null;
                             $age = (isset($ageValue) && is_numeric($ageValue) && $ageValue >= 0 && $ageValue <= 100) ? (int)round($ageValue) : null;
@@ -122,95 +135,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                             $eyeValue = $data[5] ?? null;
                             $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
 
-                            $testDateFormatted = $testDate->format('Ymd');
-                            $testId = $testDateFormatted . ($eye ? $eye : '') . ($testNumber ? $testNumber : '');
+                            $testDateFormattedShort = $testDateObj->format('Ymd');
+                            $testId = $testDateFormattedShort . ($eye ? $eye : '') . ($testNumber ? $testNumber : '');
 
-                            // report diagnosis
-                            $reportDiagnosisValue = $data[6] ?? null;
+                            // Report diagnosis
+                            $reportDiagnosisRaw = $data[6] ?? null;
                             $reportDiagnosis = 'no input';
-                            if ($reportDiagnosisValue !== null) {
-                                $lowerValue = strtolower($reportDiagnosisValue);
-                                if (in_array($lowerValue, ['normal', 'abnormal', 'exclude'])) {
-                                    $reportDiagnosis = $lowerValue;
+                            if ($reportDiagnosisRaw !== null) {
+                                $lower = strtolower($reportDiagnosisRaw);
+                                if (in_array($lower, ['normal', 'abnormal', 'exclude'])) {
+                                    $reportDiagnosis = $lower;
                                 }
                             }
 
-                            // exclusion
-                            $exclusionValue = $data[7] ?? null;
+                            // Exclusion
+                            $exclusionRaw = $data[7] ?? null;
                             $exclusion = 'none';
-                            if ($exclusionValue !== null) {
-                                $lowerValue = strtolower($exclusionValue);
-                                if (in_array($lowerValue, ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) {
-                                    $exclusion = $lowerValue;
+                            if ($exclusionRaw !== null) {
+                                $lower = strtolower($exclusionRaw);
+                                if (in_array($lower, ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) {
+                                    $exclusion = $lower;
                                 }
                             }
 
-                            // MERCI score
-                            $merciScoreValue = $data[8] ?? null;
-                            $merciScore = null;
-                            if (isset($merciScoreValue)) {
-                                if (strtolower($merciScoreValue) === 'unable') {
-                                    $merciScore = 'unable';
-                                } elseif (is_numeric($merciScoreValue) && $merciScoreValue >= 0 && $merciScoreValue <= 100) {
-                                    $merciScore = (int)$merciScoreValue;
-                                }
-                            }
-
-                            // MERCI diagnosis
-                            $merciDiagnosisValue = $data[9] ?? null;
+                            // MERCI
+                            $merciScoreRaw = $data[8] ?? null;
+                            $merciScore = normalize_merci_score($merciScoreRaw);
+                            $merciDiagnosisRaw = $data[9] ?? null;
                             $merciDiagnosis = 'no value';
-                            if ($merciDiagnosisValue !== null) {
-                                $lowerValue = strtolower($merciDiagnosisValue);
-                                if (in_array($lowerValue, ['normal', 'abnormal'])) {
-                                    $merciDiagnosis = $lowerValue;
+                            if ($merciDiagnosisRaw !== null) {
+                                $lower = strtolower($merciDiagnosisRaw);
+                                if (in_array($lower, ['normal', 'abnormal'])) {
+                                    $merciDiagnosis = $lower;
                                 }
                             }
 
-                            // error type
-                            $errorTypeValue = $data[10] ?? null;
+                            // Error type
+                            $errorTypeRaw = $data[10] ?? null;
                             $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
                             $errorType = null;
-                            if ($errorTypeValue !== null && $errorTypeValue !== '') {
-                                $upperValue = strtoupper(trim($errorTypeValue));
-                                if (in_array($upperValue, $allowedErrorTypes)) {
-                                    $errorType = ($upperValue === 'NONE') ? 'none' : $upperValue;
+                            if ($errorTypeRaw !== null && $errorTypeRaw !== '') {
+                                $upper = strtoupper(trim($errorTypeRaw));
+                                if (in_array($upper, $allowedErrorTypes)) {
+                                    $errorType = ($upper === 'NONE') ? 'none' : $upper;
                                 } else {
-                                    $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeValue}' - set to NULL";
+                                    $results['errors'][] = "Line $lineNumber: Invalid error_type '{$errorTypeRaw}' - set to NULL";
                                 }
                             }
 
-                            // FAF grade
+                            // FAF / OCT / VF
                             $fafGrade = (isset($data[11]) && is_numeric($data[11]) && $data[11] >= 1 && $data[11] <= 4) ? (int)$data[11] : null;
-
-                            // OCT score
                             $octScore = isset($data[12]) && is_numeric($data[12]) ? round(floatval($data[12]), 2) : null;
-
-                            // VF score
                             $vfScore = isset($data[13]) && is_numeric($data[13]) ? round(floatval($data[13]), 2) : null;
 
-                            // actual diagnosis
-                            $allowedDiagnosis = ['RA', 'SLE', 'Sjorgens', 'other'];
-                            if (!empty($data[14])) {
-                                $diag = ucfirst(strtolower(trim($data[14])));
-                                $actualDiagnosis = in_array($diag, $allowedDiagnosis) ? $diag : 'other';
-                            } else {
-                                $actualDiagnosis = null;
-                            }
+                            // Test-level actual diagnosis
+                            $testActualDiagnosis = normalize_actual_diagnosis($data[14] ?? null);
 
-                            // dosage
+                            // Dosage/duration/cumulative
                             $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
-
-                            // duration
                             $durationDays = isset($data[16]) && is_numeric($data[16]) ? (int)$data[16] : null;
-
-                            // cumulative dosage
                             $cumulativeDosage = isset($data[17]) && is_numeric($data[17]) ? round(floatval($data[17]), 2) : null;
 
                             $testData = [
                                 'test_id' => $testId,
                                 'patient_id' => $patientId,
                                 'location' => $location,
-                                'date_of_test' => $testDate->format('Y-m-d'),
+                                'date_of_test' => $testDate,
                                 'age' => $age,
                                 'eye' => $eye,
                                 'report_diagnosis' => $reportDiagnosis,
@@ -221,10 +211,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                                 'faf_grade' => $fafGrade,
                                 'oct_score' => $octScore,
                                 'vf_score' => $vfScore,
-                                'actual_diagnosis' => $actualDiagnosis,
+                                'actual_diagnosis' => $testActualDiagnosis,
+                                'medication_name' => null,
                                 'dosage' => $dosage,
+                                'dosage_unit' => 'mg',
                                 'duration_days' => $durationDays,
-                                'cumulative_dosage' => $cumulativeDosage
+                                'cumulative_dosage' => $cumulativeDosage,
+                                'date_of_continuation' => null,
+                                'treatment_notes' => null
                             ];
 
                             insertTest($conn, $testData);
@@ -246,80 +240,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit'])) {
                         $messageClass = 'error';
                     }
                 } catch (Exception $e) {
-                    if (isset($conn) && method_exists($conn, 'rollback')) {
+                    if (method_exists($conn, 'rollback')) {
                         $conn->rollback();
                     }
                     $message = "Fatal error: " . $e->getMessage();
                     $messageClass = 'error';
                 }
-                $conn->close();
             }
         }
     }
 }
-
-/**
- * Database helper functions
- */
-function getOrCreatePatient($conn, $patientId, $subjectId, $dob, $location = 'KH', &$results) {
-    $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
-    $stmt->bind_param("s", $patientId);
-    $stmt->execute();
-    $res = $stmt->get_result();
-    if ($res && $res->num_rows > 0) {
-        return $patientId;
-    }
-
-    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth, location) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param("ssss", $patientId, $subjectId, $dob, $location);
-    if (!$stmt->execute()) {
-        throw new Exception("Patient insert failed: " . $stmt->error);
-    }
-    $results['patients']++;
-    return $patientId;
-}
-
-function insertTest($conn, $testData) {
-    $stmt = $conn->prepare("
-        INSERT INTO tests (
-            test_id, patient_id, location, date_of_test, age, eye,
-            report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
-            faf_grade, oct_score, vf_score, actual_diagnosis, dosage, duration_days,
-            cumulative_dosage
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ");
-
-    $merciScoreForDb = ($testData['merci_score'] === 'unable') ? 'unable' :
-                      (is_null($testData['merci_score']) ? NULL : $testData['merci_score']);
-
-    $stmt->bind_param(
-        "ssssissssssdddsdid",
-        $testData['test_id'],
-        $testData['patient_id'],
-        $testData['location'],
-        $testData['date_of_test'],
-        $testData['age'],
-        $testData['eye'],
-        $testData['report_diagnosis'],
-        $testData['exclusion'],
-        $merciScoreForDb,
-        $testData['merci_diagnosis'],
-        $testData['error_type'],
-        $testData['faf_grade'],
-        $testData['oct_score'],
-        $testData['vf_score'],
-        $testData['actual_diagnosis'],
-        $testData['dosage'],
-        $testData['duration_days'],
-        $testData['cumulative_dosage']
-    );
-
-    if (!$stmt->execute()) {
-        throw new Exception("Test insert failed: " . $stmt->error);
-    }
-}
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -479,15 +410,6 @@ function insertTest($conn, $testData) {
             margin-top:10px;
         }
         .back-link i { font-size:1rem; }
-
-        /* Responsive */
-        @media (max-width: 1024px) {
-            .card { padding:20px; }
-        }
-        @media (max-width: 768px) {
-            header { flex-direction: column; }
-            .stats-cards { grid-template-columns: 1fr; }
-        }
     </style>
 </head>
 <body>
@@ -509,7 +431,7 @@ function insertTest($conn, $testData) {
                         <div style="margin:8px 0;">or</div>
                         <input type="file" name="csv_file" id="csv_file" accept=".csv" class="file-input" required>
                         <label for="csv_file" class="file-label"><i class="fas fa-folder-open"></i> Select File</label>
-                        <div class="file-name" id="fileName" style="margin-top:8px; font-size:0.9rem; color:#555;"><?= $fileName ?: 'No file selected' ?></div>
+                        <div class="file-name" id="fileName" style="margin-top:8px; font-size:0.9rem; color:#555;"><?= htmlspecialchars($fileName ?: 'No file selected') ?></div>
                     </div>
                 </div>
                 <div style="display:flex; flex-direction:column; gap:10px;">
