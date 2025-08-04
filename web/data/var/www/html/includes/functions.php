@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/config.php'; // ensure config loads
+require_once 'config.php'; // ensure config loads
 
 /**
  * PERMANENT STORAGE FUNCTIONS
