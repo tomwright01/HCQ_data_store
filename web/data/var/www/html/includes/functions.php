@@ -21,10 +21,11 @@ function getOrCreatePatient(
     }
 
     $ins = $conn->prepare(
-        "INSERT INTO patients (patient_id, subject_id, date_of_birth, location) VALUES (?, ?, ?, ?)"
+        "INSERT INTO patients (patient_id, subject_id, date_of_birth, location)
+         VALUES (?, ?, ?, ?)"
     );
     $ins->bind_param("ssss", $patientId, $subjectId, $dateOfBirth, $location);
-    if (!$ins->execute()) {
+    if (! $ins->execute()) {
         throw new Exception("Patient insert failed: " . $ins->error);
     }
 
@@ -37,6 +38,7 @@ function getOrCreatePatient(
 
 /**
  * Insert or update a test record.
+ * NOTE: actual_diagnosis has been removed to match the current schema.
  */
 function insertTest(array $testData): void {
     global $conn;
@@ -45,11 +47,11 @@ function insertTest(array $testData): void {
         INSERT INTO tests (
             test_id, patient_id, location, date_of_test, age, eye,
             report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
-            faf_grade, oct_score, vf_score, actual_diagnosis,
+            faf_grade, oct_score, vf_score,
             medication_name, dosage, dosage_unit, duration_days,
             cumulative_dosage, date_of_continuation, treatment_notes
         ) VALUES (
-            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+            ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
         )
         ON DUPLICATE KEY UPDATE
             age                  = VALUES(age),
@@ -62,7 +64,6 @@ function insertTest(array $testData): void {
             faf_grade            = VALUES(faf_grade),
             oct_score            = VALUES(oct_score),
             vf_score             = VALUES(vf_score),
-            actual_diagnosis     = VALUES(actual_diagnosis),
             medication_name      = VALUES(medication_name),
             dosage               = VALUES(dosage),
             dosage_unit          = VALUES(dosage_unit),
@@ -73,47 +74,47 @@ function insertTest(array $testData): void {
     ";
 
     $stmt = $conn->prepare($sql);
-    if (!$stmt) {
+    if (! $stmt) {
         throw new Exception("Prepare failed: " . $conn->error);
     }
 
     $merci = $testData['merci_score'] === 'unable'
         ? 'unable'
-        : ($testData['merci_score'] === null ? null : $testData['merci_score']);
+        : ($testData['merci_score'] ?? null);
 
     $stmt->bind_param(
-        "ssssissssssdddsisdisss",
-        $testData['test_id'],
-        $testData['patient_id'],
-        $testData['location'],
-        $testData['date_of_test'],
-        $testData['age'],
-        $testData['eye'],
-        $testData['report_diagnosis'],
-        $testData['exclusion'],
-        $merci,
-        $testData['merci_diagnosis'],
-        $testData['error_type'],
-        $testData['faf_grade'],
-        $testData['oct_score'],
-        $testData['vf_score'],
-        $testData['actual_diagnosis'],
-        $testData['medication_name'],
-        $testData['dosage'],
-        $testData['dosage_unit'],
-        $testData['duration_days'],
-        $testData['cumulative_dosage'],
-        $testData['date_of_continuation'],
-        $testData['treatment_notes']
+        "ssssissssssdddsidisss",
+        $testData['test_id'],             // string
+        $testData['patient_id'],          // string
+        $testData['location'],            // string
+        $testData['date_of_test'],        // string (YYYY-MM-DD)
+        $testData['age'],                 // int|null
+        $testData['eye'],                 // string|null
+        $testData['report_diagnosis'],    // string
+        $testData['exclusion'],           // string
+        $merci,                           // string|null
+        $testData['merci_diagnosis'],     // string
+        $testData['error_type'],          // string|null
+        $testData['faf_grade'],           // int|null
+        $testData['oct_score'],           // float|null
+        $testData['vf_score'],            // float|null
+        $testData['medication_name'],     // string|null
+        $testData['dosage'],              // float|null
+        $testData['dosage_unit'],         // string
+        $testData['duration_days'],       // int|null
+        $testData['cumulative_dosage'],   // float|null
+        $testData['date_of_continuation'],// string|null
+        $testData['treatment_notes']      // string|null
     );
 
-    if (!$stmt->execute()) {
+    if (! $stmt->execute()) {
         throw new Exception("Test insert failed: " . $stmt->error);
     }
 }
 
 /**
- * Move and register an uploaded test image, then update the tests record.
+ * Move and register an uploaded test image,
+ * then update the corresponding tests record.
  */
 function importTestImage(
     string $testType,
@@ -124,19 +125,19 @@ function importTestImage(
 ): bool {
     global $conn;
 
-    if (!isset(ALLOWED_TEST_TYPES[$testType]) || !in_array($eye, ['OD','OS'])) {
+    if (! isset(ALLOWED_TEST_TYPES[$testType]) || ! in_array($eye, ['OD','OS'])) {
         return false;
     }
     $finfo = finfo_open(FILEINFO_MIME_TYPE);
     $mime  = finfo_file($finfo, $tmpPath);
     finfo_close($finfo);
-    if (!isset(ALLOWED_IMAGE_TYPES[$mime])) {
+    if (! isset(ALLOWED_IMAGE_TYPES[$mime])) {
         return false;
     }
 
-    $ext = ALLOWED_IMAGE_TYPES[$mime];
-    $dir = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
-    if (!is_dir($dir)) {
+    $ext  = ALLOWED_IMAGE_TYPES[$mime];
+    $dir  = IMAGE_BASE_DIR . ALLOWED_TEST_TYPES[$testType] . '/';
+    if (! is_dir($dir)) {
         mkdir($dir, 0777, true);
     }
 
@@ -148,21 +149,28 @@ function importTestImage(
         $ext
     );
 
-    if (!move_uploaded_file($tmpPath, $dir . $filename)) {
+    if (! move_uploaded_file($tmpPath, $dir . $filename)) {
         return false;
     }
 
     $field = strtolower($testType) . "_reference_" . strtolower($eye);
     $date  = date('Y-m-d', strtotime($test_date));
 
-    $upd = $conn->prepare("UPDATE tests SET {$field} = ? WHERE patient_id = ? AND date_of_test = ? AND eye = ?");
+    // Try update
+    $upd = $conn->prepare("
+        UPDATE tests
+        SET {$field} = ?
+        WHERE patient_id = ? AND date_of_test = ? AND eye = ?
+    ");
     $upd->bind_param("ssss", $filename, $patient_id, $date, $eye);
     $upd->execute();
 
+    // If no rows updated, insert stub
     if ($upd->affected_rows < 1) {
-        $ins = $conn->prepare(
-            "INSERT INTO tests (test_id, patient_id, date_of_test, eye, {$field}) VALUES (?, ?, ?, ?, ?)"
-        );
+        $ins = $conn->prepare("
+            INSERT INTO tests (test_id, patient_id, date_of_test, eye, {$field})
+            VALUES (?, ?, ?, ?, ?)
+        ");
         $newId = date('YmdHis') . '_' . $eye . '_' . substr(md5(uniqid()),0,4);
         $ins->bind_param("sssss", $newId, $patient_id, $date, $eye, $filename);
         $ins->execute();
@@ -172,14 +180,17 @@ function importTestImage(
 }
 
 /**
- * Check for an existing test
+ * Check for existing test
  */
 function checkDuplicateTest(string $patient_id, string $date, string $eye): bool {
     global $conn;
-    $stmt = $conn->prepare("SELECT 1 FROM tests WHERE patient_id = ? AND date_of_test = ? AND eye = ?");
+    $stmt = $conn->prepare("
+        SELECT 1 FROM tests
+        WHERE patient_id = ? AND date_of_test = ? AND eye = ?
+    ");
     $stmt->bind_param("sss", $patient_id, $date, $eye);
     $stmt->execute();
-    return (bool)$stmt->get_result()->fetch_row();
+    return (bool) $stmt->get_result()->fetch_row();
 }
 
 /**
@@ -187,15 +198,18 @@ function checkDuplicateTest(string $patient_id, string $date, string $eye): bool
  */
 function backupDatabase(): string|false {
     $dir  = '/var/www/html/backups/';
-    if (!is_dir($dir)) mkdir($dir, 0755, true);
+    if (! is_dir($dir)) mkdir($dir, 0755, true);
     $file = $dir . 'PatientData_' . date('Ymd_His') . '.sql';
-    $cmd  = sprintf('mysqldump -u%s -p%s -h%s %s > %s', DB_USERNAME, DB_PASSWORD, DB_SERVER, DB_NAME, $file);
+    $cmd  = sprintf(
+        'mysqldump -u%s -p%s -h%s %s > %s',
+        DB_USERNAME, DB_PASSWORD, DB_SERVER, DB_NAME, $file
+    );
     system($cmd, $ret);
     return $ret === 0 ? $file : false;
 }
 
 /**
- * Get public URL for a stored image
+ * Get public URL for a stored image filename
  */
 function getStoredImagePath(string $filename): ?string {
     foreach (ALLOWED_TEST_TYPES as $type => $dir) {
