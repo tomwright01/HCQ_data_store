@@ -14,7 +14,6 @@ CREATE TABLE patients (
     date_of_birth DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    actual_diagnosis ENUM('RA', 'SLE', 'Sjogren', 'other') NOT NULL DEFAULT 'other',
     INDEX idx_subject (subject_id),
     INDEX idx_location (location)
 );
