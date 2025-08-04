@@ -36,6 +36,28 @@ function upsertPatient($patient_id, $subject_id, $date_of_birth, $location = 'KH
 }
 
 /**
+ * Get existing patient or create if missing (without overwriting actual_diagnosis unless provided)
+ */
+function getOrCreatePatient($conn, $patientId, $subjectId, $date_of_birth, $location = 'KH', &$results) {
+    // Check existence
+    $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
+    $stmt->bind_param("s", $patientId);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($res && $res->num_rows > 0) {
+        return $patientId;
+    }
+    // Insert new with default actual_diagnosis 'other'
+    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth, location, actual_diagnosis) VALUES (?, ?, ?, ?, 'other')");
+    $stmt->bind_param("ssss", $patientId, $subjectId, $date_of_birth, $location);
+    if (!$stmt->execute()) {
+        throw new Exception("Patient insert failed: " . $stmt->error);
+    }
+    $results['patients']++;
+    return $patientId;
+}
+
+/**
  * Insert or update test with full schema support
  */
 function insertTest($conn, $testData) {
