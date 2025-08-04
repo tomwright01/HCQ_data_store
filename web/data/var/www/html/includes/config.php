@@ -57,3 +57,4 @@ function getDynamicImagePath($filename) {
 function getTestTypeDirectory($testType) {
     return IMAGE_BASE_DIR . (ALLOWED_TEST_TYPES[$testType] ?? '');
 }
+?>
