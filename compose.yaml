@@ -5,13 +5,13 @@ secrets:
     external: true
 
 volumes:
-  # Named volume for persistent MariaDB data
   hcq_db_data:
     external: true
 
 services:
   db:
-    image: hcq/mariadb:latest       # pre-built image
+    image: hcq/mariadb:latest
+    # build: ./database     # <-- ignored by Swarm; build & push your image ahead of time
     volumes:
       - hcq_db_data:/var/lib/mysql
     environment:
@@ -24,7 +24,8 @@ services:
         max_attempts: 5
 
   web:
-    image: hcq/web:latest            # pre-built image
+    image: hcq/web:latest
+    # build: ./web           # <-- ignored by Swarm; build & push your image ahead of time
     volumes:
       - ./DATA_STORE/:/var/www/html/data
     ports:
