@@ -812,7 +812,7 @@ if ($result_patient && $result_patient->num_rows > 0) {
 
         <div class="action-buttons">
             <a href="form.php" class="action-button form-button"><i class="fas fa-file-medical-alt"></i> Manual Data Entry</a>
-            <a href="#csvImport" class="action-button import-button"><i class="fas fa-file-import"></i> Upload Patient Data (CSV)</a>
+            <a href="csv_import.php" class="action-button import-button"><i class="fas fa-file-import"></i> Upload Patient Data (CSV)</a>
             <a href="import_images.php" class="action-button image-button"><i class="fas fa-images"></i> Import Medical Images</a>
             <a href="export_csv.php" class="action-button export-button"><i class="fas fa-file-export"></i> Export to CSV</a>
         </div>
