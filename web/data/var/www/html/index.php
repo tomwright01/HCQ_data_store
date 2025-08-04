@@ -1,9 +1,9 @@
-
 <?php
 $servername = "mariadb";
 $username = "root";
 $password = "notgood";
 $dbname = "PatientData";
+
 
 // Create connection
 $conn = new mysqli($servername, $username, $password, $dbname);
@@ -23,8 +23,7 @@ $edit_mode = isset($_GET['edit']) && $_GET['edit'] === 'true';
 $filter_location = isset($_GET['filter_location']) ? $_GET['filter_location'] : '';
 $filter_merci_range = isset($_GET['filter_merci_range']) ? $_GET['filter_merci_range'] : '';
 $filter_eye = isset($_GET['filter_eye']) ? $_GET['filter_eye'] : '';
-$filter_diagnosis = isset($_GET['filter_diagnosis']) ? $_GET['filter_diagnosis'] : '';
-$filter_active = !empty($filter_location) || !empty($filter_merci_range) || !empty($filter_eye) || !empty($filter_diagnosis);
+$filter_active = !empty($filter_location) || !empty($filter_merci_range) || !empty($filter_eye);
 
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -41,10 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $faf_grade = isset($_POST['faf_grade']) && $_POST['faf_grade'] !== '' ? (int)$_POST['faf_grade'] : NULL;
         $oct_score = isset($_POST['oct_score']) && $_POST['oct_score'] !== '' ? (float)$_POST['oct_score'] : NULL;
         $vf_score = isset($_POST['vf_score']) && $_POST['vf_score'] !== '' ? (float)$_POST['vf_score'] : NULL;
-        $actual_diagnosis = $_POST['actual_diagnosis'] ?? 'other';
-        $dosage = isset($_POST['dosage']) && $_POST['dosage'] !== '' ? (float)$_POST['dosage'] : NULL;
-        $duration_days = isset($_POST['duration_days']) && $_POST['duration_days'] !== '' ? (int)$_POST['duration_days'] : NULL;
-        $cumulative_dosage = isset($_POST['cumulative_dosage']) && $_POST['cumulative_dosage'] !== '' ? (float)$_POST['cumulative_dosage'] : NULL;
         
         try {
             $stmt = $conn->prepare("UPDATE tests SET 
@@ -57,17 +52,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 error_type = ?, 
                 faf_grade = ?, 
                 oct_score = ?, 
-                vf_score = ?,
-                actual_diagnosis = ?,
-                dosage = ?,
-                duration_days = ?,
-                cumulative_dosage = ?
+                vf_score = ? 
                 WHERE test_id = ?");
             
-            $stmt->bind_param("isssssssddssids", 
+            $stmt->bind_param("isssssssdds", 
                 $age, $eye, $report_diagnosis, $exclusion, $merci_score, 
-                $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score,
-                $actual_diagnosis, $dosage, $duration_days, $cumulative_dosage, $test_id);
+                $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score, $test_id);
             
             if ($stmt->execute()) {
                 $success_message = "Test record updated successfully!";
@@ -131,14 +121,6 @@ while ($row = $result_location->fetch_assoc()) {
     $location_data[$row['location']] = $row['count'];
 }
 
-// Actual Diagnosis distribution
-$sql_actual_diagnosis = "SELECT actual_diagnosis, COUNT(*) AS count FROM tests GROUP BY actual_diagnosis";
-$result_actual_diagnosis = $conn->query($sql_actual_diagnosis);
-$actual_diagnosis_data = [];
-while ($row = $result_actual_diagnosis->fetch_assoc()) {
-    $actual_diagnosis_data[$row['actual_diagnosis']] = $row['count'];
-}
-
 // MERCI Score distribution
 $sql_merci = "SELECT 
     CASE 
@@ -173,7 +155,6 @@ while ($row = $result_merci->fetch_assoc()) {
 
 // Get patient data if search was performed or filters are active
 $result_patient = null;
-$patient_diagnosis = null;
 if ($search_patient_id || $filter_active) {
     $sql_patient_data = "SELECT 
         t.test_id, t.location, t.date_of_test, t.age, t.eye,
@@ -181,7 +162,6 @@ if ($search_patient_id || $filter_active) {
         t.error_type, t.faf_grade, t.oct_score, t.vf_score,
         t.faf_reference_od, t.faf_reference_os, t.oct_reference_od, t.oct_reference_os,
         t.vf_reference_od, t.vf_reference_os, t.mferg_reference_od, t.mferg_reference_os,
-        t.actual_diagnosis, t.dosage, t.duration_days, t.cumulative_dosage,
         p.patient_id, p.subject_id, p.date_of_birth
         FROM tests t JOIN patients p ON t.patient_id = p.patient_id
         WHERE 1=1";
@@ -205,12 +185,6 @@ if ($search_patient_id || $filter_active) {
     if (!empty($filter_eye)) {
         $sql_patient_data .= " AND t.eye = ?";
         $params[] = $filter_eye;
-        $types .= "s";
-    }
-    
-    if (!empty($filter_diagnosis)) {
-        $sql_patient_data .= " AND t.actual_diagnosis = ?";
-        $params[] = $filter_diagnosis;
         $types .= "s";
     }
     
@@ -260,13 +234,6 @@ if ($search_patient_id || $filter_active) {
     
     $stmt->execute();
     $result_patient = $stmt->get_result();
-    
-    // Get patient diagnosis if searching by patient_id
-    if ($search_patient_id && $result_patient->num_rows > 0) {
-        $first_row = $result_patient->fetch_assoc();
-        $patient_diagnosis = $first_row['actual_diagnosis'];
-        $result_patient->data_seek(0); // Reset pointer to beginning
-    }
 }
 
 // Helper function to generate URL with one filter removed
@@ -274,17 +241,6 @@ function remove_filter_url($filter_to_remove) {
     $params = $_GET;
     unset($params[$filter_to_remove]);
     return 'index.php?' . http_build_query($params);
-}
-
-// Helper function to get diagnosis display name
-function get_diagnosis_display_name($diagnosis) {
-    $diagnosis_map = [
-        'RA' => 'Rheumatoid Arthritis',
-        'SLE' => 'Systemic Lupus Erythematosus',
-        'Sjogren' => 'Sjögren\'s Syndrome',
-        'other' => 'Other'
-    ];
-    return $diagnosis_map[$diagnosis] ?? $diagnosis;
 }
 ?>
 <!DOCTYPE html>
@@ -835,46 +791,10 @@ function get_diagnosis_display_name($diagnosis) {
             box-shadow: 0 4px 10px rgba(220, 53, 69, 0.3);
             color: white;
         }
-        
-        .diagnosis-badge {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            padding: 8px 15px;
-            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
-            color: white;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 600;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            z-index: 10;
-        }
-        
-        .diagnosis-badge.ra {
-            background: linear-gradient(135deg, #ff6b6b 0%, #f06595 100%);
-        }
-        
-        .diagnosis-badge.sle {
-            background: linear-gradient(135deg, #74c0fc 0%, #4dabf7 100%);
-        }
-        
-        .diagnosis-badge.sjogren {
-            background: linear-gradient(135deg, #63e6be 0%, #20c997 100%);
-        }
-        
-        .diagnosis-badge.other {
-            background: linear-gradient(135deg, #adb5bd 0%, #6c757d 100%);
-        }
     </style>
 </head>
 <body>
     <img src="images/kensington-logo.png" alt="Kensington Clinic Logo" class="logo">
-    
-    <?php if ($patient_diagnosis): ?>
-        <div class="diagnosis-badge <?= strtolower($patient_diagnosis) ?>">
-            Diagnosis: <?= get_diagnosis_display_name($patient_diagnosis) ?>
-        </div>
-    <?php endif; ?>
 
     <div class="content">
         <h1>Hydroxychloroquine Data Repository</h1>
@@ -931,23 +851,6 @@ function get_diagnosis_display_name($diagnosis) {
                         </div>
                     </div>
                     
-                    <!-- Diagnosis Filter -->
-                    <div class="filter-card">
-                        <div class="filter-icon">
-                            <i class="fas fa-heartbeat"></i>
-                        </div>
-                        <div class="filter-content">
-                            <label for="filter_diagnosis">Diagnosis</label>
-                            <select name="filter_diagnosis" id="filter_diagnosis" class="filter-select">
-                                <option value="">All Diagnoses</option>
-                                <option value="RA" <?= $filter_diagnosis === 'RA' ? 'selected' : '' ?>>Rheumatoid Arthritis</option>
-                                <option value="SLE" <?= $filter_diagnosis === 'SLE' ? 'selected' : '' ?>>Systemic Lupus Erythematosus</option>
-                                <option value="Sjogren" <?= $filter_diagnosis === 'Sjogren' ? 'selected' : '' ?>>Sjögren's Syndrome</option>
-                                <option value="other" <?= $filter_diagnosis === 'other' ? 'selected' : '' ?>>Other</option>
-                            </select>
-                        </div>
-                    </div>
-                    
                     <!-- MERCI Score Filter -->
                     <div class="filter-card">
                         <div class="filter-icon">
@@ -990,15 +893,6 @@ function get_diagnosis_display_name($diagnosis) {
                                 <div class="filter-tag">
                                     <span>Eye: <?= htmlspecialchars($filter_eye) ?></span>
                                     <a href="<?= remove_filter_url('filter_eye') ?>" class="filter-tag-remove">
-                                        <i class="fas fa-times"></i>
-                                    </a>
-                                </div>
-                            <?php endif; ?>
-                            
-                            <?php if ($filter_diagnosis): ?>
-                                <div class="filter-tag">
-                                    <span>Diagnosis: <?= htmlspecialchars($filter_diagnosis) ?></span>
-                                    <a href="<?= remove_filter_url('filter_diagnosis') ?>" class="filter-tag-remove">
                                         <i class="fas fa-times"></i>
                                     </a>
                                 </div>
@@ -1096,9 +990,6 @@ function get_diagnosis_display_name($diagnosis) {
                         <th>FAF Grade</th>
                         <th>OCT Score</th>
                         <th>VF Score</th>
-                        <th>Dosage (mg)</th>
-                        <th>Duration (days)</th>
-                        <th>Cumulative (mg)</th>
                         <th>Images</th>
                         <?php if ($edit_mode): ?>
                             <th>Actions</th>
@@ -1156,9 +1047,6 @@ function get_diagnosis_display_name($diagnosis) {
                                     <td><input type="number" name="faf_grade" class="edit-input" value="<?= htmlspecialchars($row['faf_grade'] ?? '') ?>" min="1" max="4"></td>
                                     <td><input type="number" step="0.01" name="oct_score" class="edit-input" value="<?= htmlspecialchars($row['oct_score'] ?? '') ?>"></td>
                                     <td><input type="number" step="0.01" name="vf_score" class="edit-input" value="<?= htmlspecialchars($row['vf_score'] ?? '') ?>"></td>
-                                    <td><input type="number" step="0.01" name="dosage" class="edit-input" value="<?= htmlspecialchars($row['dosage'] ?? '') ?>"></td>
-                                    <td><input type="number" name="duration_days" class="edit-input" value="<?= htmlspecialchars($row['duration_days'] ?? '') ?>"></td>
-                                    <td><input type="number" step="0.01" name="cumulative_dosage" class="edit-input" value="<?= htmlspecialchars($row['cumulative_dosage'] ?? '') ?>"></td>
                                 <?php else: ?>
                                     <td><?= htmlspecialchars($row['age'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($row['eye'] ?? 'N/A') ?></td>
@@ -1170,9 +1058,6 @@ function get_diagnosis_display_name($diagnosis) {
                                     <td><?= htmlspecialchars($row['faf_grade'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($row['oct_score'] ?? 'N/A') ?></td>
                                     <td><?= htmlspecialchars($row['vf_score'] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row['dosage'] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row['duration_days'] ?? 'N/A') ?></td>
-                                    <td><?= htmlspecialchars($row['cumulative_dosage'] ?? 'N/A') ?></td>
                                 <?php endif; ?>
                                 
                                 <td>
@@ -1253,11 +1138,6 @@ function get_diagnosis_display_name($diagnosis) {
         <div class="chart-container">
             <h3 class="chart-title">MERCI Score Distribution</h3>
             <canvas id="merciChart"></canvas>
-        </div>
-        
-        <div class="chart-container">
-            <h3 class="chart-title">Actual Diagnosis Distribution</h3>
-            <canvas id="actualDiagnosisChart"></canvas>
         </div>
     </div>
 
@@ -1445,43 +1325,6 @@ function get_diagnosis_display_name($diagnosis) {
                         title: {
                             display: true,
                             text: 'MERCI Score Range'
-                        }
-                    }
-                }
-            }
-        });
-
-        // Actual Diagnosis Distribution Chart
-        var actualDiagnosisCtx = document.getElementById('actualDiagnosisChart').getContext('2d');
-        var actualDiagnosisChart = new Chart(actualDiagnosisCtx, {
-            type: 'pie',
-            data: {
-                labels: <?= json_encode(array_map('get_diagnosis_display_name', array_keys($actual_diagnosis_data))) ?>,
-                datasets: [{
-                    data: <?= json_encode(array_values($actual_diagnosis_data)) ?>,
-                    backgroundColor: [
-                        'rgb(255, 107, 107)',
-                        'rgb(116, 192, 252)',
-                        'rgb(99, 230, 190)',
-                        'rgb(173, 181, 189)'
-                    ],
-                    borderColor: '#fff',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: { position: 'top' },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                var label = context.label || '';
-                                var value = context.raw || 0;
-                                var total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                var percentage = Math.round((value / total) * 100);
-                                return label + ': ' + value + ' (' + percentage + '%)';
-                            }
                         }
                     }
                 }
