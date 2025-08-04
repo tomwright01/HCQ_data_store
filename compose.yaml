@@ -4,24 +4,27 @@ secrets:
   mariadb_root_password:
     external: true
 
+volumes:
+  # Named volume for persistent MariaDB data
+  hcq_db_data:
+    external: true
+
 services:
   db:
-    image: HCQ/mariadb
-    build: ./database
-    restart: always
-    container_name: mariadb
+    image: hcq/mariadb:latest       # pre-built image
     volumes:
-      - ./DATA_STORE/database:/var/lib/mysql
+      - hcq_db_data:/var/lib/mysql
     environment:
       - MARIADB_ROOT_PASSWORD_FILE=/run/secrets/mariadb_root_password
     secrets:
       - mariadb_root_password
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 5
 
   web:
-    image: HCQ/web
-    build: ./web
-    restart: always
-    container_name: web
+    image: hcq/web:latest            # pre-built image
     volumes:
       - ./DATA_STORE/:/var/www/html/data
     ports:
@@ -30,9 +33,14 @@ services:
       - DB_PASSWORD_FILE=/run/secrets/mariadb_root_password
     secrets:
       - mariadb_root_password
+    deploy:
+      restart_policy:
+        condition: on-failure
 
   adminer:
-    image: adminer
-    restart: always
+    image: adminer:latest
     ports:
       - "8080:8080"
+    deploy:
+      restart_policy:
+        condition: any
