@@ -183,11 +183,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             : null;
 
                         // [13] Actual Diagnosis
-                        $allowedDiagnosis = ['RA', 'SLE', 'Sjogren', 'other'];
-                        $actualDiagnosis = null;
+                        $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
+                        $actualDiagnosis  = 'other';            // ← default value
                         if (!empty($data[13])) {
-                            $d = ucfirst(strtolower(trim($data[13])));
-                            $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
+                          $d = ucfirst(strtolower(trim($data[13])));
+                          $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
                         }
 
                         // [14] Dosage
