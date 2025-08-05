@@ -287,16 +287,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_test'])) {
 $result_patient = null;
 if ($search_patient_id || $filter_active) {
     $sql_patient_data = "
-      SELECT
-        t.*,
-        t.actual_diagnosis    AS patient_actual_diagnosis,
-        p.patient_id,
-        p.subject_id,
-        p.date_of_birth,
-        p.location            AS patient_location
-      FROM tests t
-      JOIN patients p ON t.patient_id = p.patient_id
-      WHERE p.patient_id = ?
+        SELECT
+            t.*,
+            t.actual_diagnosis    AS patient_actual_diagnosis,
+            p.patient_id,
+            p.subject_id,
+            p.date_of_birth,
+            p.location            AS patient_location
+          FROM tests t
+          JOIN patients p ON t.patient_id = p.patient_id
+          WHERE 1=1
     ";
 
     $params = [];
