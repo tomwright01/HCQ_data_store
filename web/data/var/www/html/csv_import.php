@@ -95,11 +95,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $dateOfTest = $testDateObj->format('Y-m-d');
 
                         // [3] Test ID (as provided)
-                        $testIdRaw = $data[3] ?? '';
-                        if ($testIdRaw === null || $testIdRaw === '') {
-                            throw new Exception("Missing Test ID at column 4");
-                        }
-                        $testId = preg_replace('/\s+/', '_', trim($testIdRaw));
+                        // [3] Age
+                        $ageValue = $data[3] ?? null;
+                        $age      = (is_numeric($ageValue) ? (int)$ageValue : null);
+                        
+                        // [4] Eye
+                        $eyeValue = $data[4] ?? null;
+                        $eye      = (in_array(strtoupper($eyeValue), ['OD','OS'], true)
+                                     ? strtoupper($eyeValue)
+                                     : null);
+                        
+                        // Auto-generate a Test ID from Subject, Date, and Eye
+                        // e.g.   SUBJ123_20240723_OD
+                        $testId = $subjectId
+                                . '_' 
+                                . $testDateObj->format('Ymd')
+                                . ($eye ? "_{$eye}" : '');
 
                         // [4] Eye
                         $eyeVal = strtoupper($data[4] ?? '');
