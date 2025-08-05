@@ -93,10 +93,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
 
                         // [3] Test ID (provided)
-                        $testIdRaw = $data[3] ?? '';
-                        if (empty($testIdRaw)) {
-                            throw new Exception("Test ID is required");
+                        $testIdRaw = trim($data[3] ?? '');
+                        if ($testIdRaw === '') {
+                            // log it and move on
+                            $results['errors'][] = "Line $lineNumber: Missing Test ID, skipping row";
+                            continue;
                         }
+$testId = preg_replace('/\s+/', '_', $testIdRaw);
                         $testId = preg_replace('/\s+/', '_', $testIdRaw);
 
                         $eyeValue = $data[4] ?? null;
