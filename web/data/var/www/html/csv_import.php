@@ -99,7 +99,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             $results['errors'][] = "Line $lineNumber: Missing Test ID, skipping row";
                             continue;
                         }
-$testId = preg_replace('/\s+/', '_', $testIdRaw);
                         $testId = preg_replace('/\s+/', '_', $testIdRaw);
 
                         $eyeValue = $data[4] ?? null;
