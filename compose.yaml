@@ -1,26 +1,31 @@
-services:
-    db:
-        image: HCQ/mariadb
-        build: ./database
-        restart: always
-        container_name: mariadb
-        volumes:
-            - ./DATA_STORE/database:/var/lib/mysql
-        environment:
-            MARIADB_ROOT_PASSWORD: notgood
-    
-    adminer:
-        image: adminer
-        restart: always
-        ports:
-            - 8080:8080
+version: '3.7'
 
-    web:
-        image: HCQ/web
-        build: ./web
-        restart: always
-        container_name: web
-        volumes:
-            - ./DATA_STORE/:/var/www/html/data
-        ports: 
-            - "8888:8080"
+services:
+  db:
+    image: HCQ/mariadb
+    build: ./database
+    restart: always
+    container_name: mariadb
+    volumes:
+      - ./DATA_STORE/database:/var/lib/mysql
+      # mount the secret into the container
+      - ./secrets/mariadb-root:/run/secrets/mariadb-root:ro
+    environment:
+      # tell MariaDB to read its root password from the mounted file
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/mariadb-root
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 8080:8080
+
+  web:
+    image: HCQ/web
+    build: ./web
+    restart: always
+    container_name: web
+    volumes:
+      - ./DATA_STORE/:/var/www/html/data
+    ports:
+      - "8888:8080"
