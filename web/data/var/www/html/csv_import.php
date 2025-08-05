@@ -198,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                                 test_id, patient_id, location, date_of_test, age, eye,
                                 report_diagnosis, exclusion, merci_score, merci_diagnosis,
                                 error_type, faf_grade, actual_diagnosis,
-                                dosage, duration_days, cumulative_dosage, date_of_discontinuation
+                                dosage, duration_days, cumulative_dosage, date_of_continuation
                             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                         ");
                         $stmt->bind_param(
