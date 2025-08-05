@@ -170,13 +170,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $vfScore = is_numeric($data[12]) ? round((float)$data[12],2) : null;
 
                         // [13] Actual Diagnosis
-                        $actualDiagnosis = null;
-                        if ($data[13] !== null) {
-                            $d = ucfirst(strtolower($data[13]));
-                            $allowed = ['RA','SLE','Sjogren','other'];
-                            $actualDiagnosis = in_array($d,$allowed,true) ? $d : 'other';
+                        $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
+                        $rawDiag = trim((string)$data[13]);
+                        $diagNorm = ucfirst(strtolower($rawDiag));
+                        
+                        if (in_array($diagNorm, $allowedDiagnosis, true)) {
+                            $actualDiagnosis = $diagNorm;
+                        } else {
+                            $actualDiagnosis = 'other';
                         }
-
                         // [14] Dosage
                         $dosage = is_numeric($data[14]) ? round((float)$data[14],2) : null;
 
