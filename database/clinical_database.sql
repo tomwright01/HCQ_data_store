@@ -38,7 +38,7 @@ CREATE TABLE tests (
     date_of_test DATE NOT NULL,
     age TINYINT UNSIGNED NULL COMMENT '0–100',
     eye ENUM('OD', 'OS') NULL,
-    report_diagnosis ENUM('normal','abnormal','no input') NOT NULL DEFAULT 'no input',
+    report_diagnosis ENUM('normal','abnormal', 'exclude','no input') NOT NULL DEFAULT 'no input',
     exclusion ENUM('none','retinal detachment','generalized retinal dysfunction','unilateral testing') NOT NULL DEFAULT 'none',
     merci_score VARCHAR(10) NULL COMMENT '0–100 or "unable"',
     merci_diagnosis ENUM('normal','abnormal','no value') NOT NULL DEFAULT 'no value',
