@@ -286,19 +286,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['update_test'])) {
 // Build patient/test query
 $result_patient = null;
 if ($search_patient_id || $filter_active) {
-    $sql_patient_data = "SELECT 
+    $sql_patient_data = "
+      SELECT
         t.*,
-        p.patient_id, p.subject_id, p.date_of_birth, t.actual_diagnosis AS patient_actual_diagnosis
-        FROM tests t 
-        JOIN patients p ON t.patient_id = p.patient_id
-        WHERE 1=1";
-    $params = [];
-    $types = '';
+        p.patient_id,
+        p.subject_id,
+        p.date_of_birth,
+        p.location      AS patient_location
+      FROM tests t
+      JOIN patients p ON t.patient_id = p.patient_id
+      WHERE 1=1
+    ";
 
+    $params = [];
+    $types  = '';
+
+    //  filter by the actual patient_id column
     if ($search_patient_id) {
-        $sql_patient_data .= " AND p.subject_id = ?";
+        $sql_patient_data .= " AND p.patient_id = ?";
         $params[] = $search_patient_id;
-        $types .= "s";
+        $types   .= "s";
     }
     if (!empty($filter_location)) {
         $sql_patient_data .= " AND t.location = ?";
