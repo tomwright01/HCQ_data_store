@@ -95,12 +95,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         // [3] Test ID (provided)
                         $testIdRaw = trim($data[3] ?? '');
                         if ($testIdRaw === '') {
-                            // log it and move on
-                            $results['errors'][] = "Line $lineNumber: Missing Test ID, skipping row";
-                            continue;
+                            // create a timestamp-based fallback ID
+                            $testIdRaw = 'gen_' . date('YmdHis') . '_' . bin2hex(random_bytes(3));
                         }
                         $testId = preg_replace('/\s+/', '_', $testIdRaw);
-
+                        
                         $eyeValue = $data[4] ?? null;
                         $eye = null;
                         if ($eyeValue !== null) {
