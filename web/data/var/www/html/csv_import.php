@@ -76,147 +76,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             return $v;
                         }, $data);
 
-                        // [0] Subject ID
-                        $subjectId = $data[0] ?? '';
-
-                        // [1] Date of Birth (MM/DD/YYYY)
-                        $dobObj = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
-                        if (!$dobObj) {
-                            throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL'));
-                        }
-                        $dobFormatted = $dobObj->format('Y-m-d');
-
-                        // [2] Date of Test (MM/DD/YYYY)
-                        $testDateObj = DateTime::createFromFormat('m/d/Y', $data[2] ?? '');
-                        if (!$testDateObj) {
-                            throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
-                        }
-
-                        // [3] Test ID (provided)
-                        $testIdRaw = trim($data[3] ?? '');
-                        if ($testIdRaw === '') {
-                            // create a timestamp-based fallback ID
-                            $testIdRaw = 'gen_' . date('YmdHis') . '_' . bin2hex(random_bytes(3));
-                        }
-                        $testId = preg_replace('/\s+/', '_', $testIdRaw);
+                        // 0: Subject ID
+                        $subjectId = trim($data[0]);
                         
-                        $eyeValue = $data[4] ?? null;
-                        $eye = null;
-                        if ($eyeValue !== null) {
-                            $upperEye = strtoupper($eyeValue);
-                            if (in_array($upperEye, ['OD','OS'], true)) {
-                                $eye = $upperEye;
-                            }
+                        // 1: Date of Birth (MM/DD/YYYY or YYYY-MM-DD)
+                        $dobObj = DateTime::createFromFormat('m/d/Y', trim($data[1]))
+                               ?: DateTime::createFromFormat('Y-m-d', trim($data[1]));
+                        if (!$dobObj) throw new Exception("Invalid DoB on line $lineNumber");
+                        $dobFormatted = $dobObj->format('Y-m-d');
+                        
+                        // 2: Date of Test
+                        $testDateObj = DateTime::createFromFormat('m/d/Y', trim($data[2]))
+                                   ?: DateTime::createFromFormat('Y-m-d', trim($data[2]));
+                        if (!$testDateObj) throw new Exception("Invalid test date on line $lineNumber");
+                        $testDateFormatted = $testDateObj->format('Y-m-d');
+                        
+                        // 3: Age
+                        $age = is_numeric($data[3]) ? (int)$data[3] : null;
+                        
+                        // 4: Eye
+                        $eyeVal = strtoupper(trim($data[4]));
+                        $eye = in_array($eyeVal, ['OD','OS']) ? $eyeVal : null;
+                        
+                        // 5: Report diagnosis
+                        $reportDiagnosis = strtolower(trim($data[5])) ?: 'no input';
+                        
+                        // 6: Exclusion
+                        $exclusion = strtolower(trim($data[6])) ?: 'none';
+                        
+                        // 7: MERCI score
+                        $mRaw = trim($data[7]);
+                        if (strcasecmp($mRaw,'unable')===0) {
+                            $merciScore = 'unable';
+                        } elseif (is_numeric($mRaw)) {
+                            $merciScore = (int)$mRaw;
+                        } else {
+                            $merciScore = null;
                         }
-
-                        // Default location
-                        $location = 'KH';
-
-                        // Patient upsert
-                        $patientId = getOrCreatePatient($conn, $subjectId, $subjectId, $dobFormatted, $location);
-                        $results['patients']++;
-
-                        // [5] Report Diagnosis
-                        $reportDiagnosisValue = $data[5] ?? null;
-                        $reportDiagnosis = 'no input';
-                        if ($reportDiagnosisValue !== null) {
-                            $lv = strtolower($reportDiagnosisValue);
-                            if (in_array($lv, ['normal', 'abnormal', 'exclude'])) {
-                                $reportDiagnosis = $lv;
-                            }
-                        }
-
-                        // [6] Exclusion
-                        $exclusionValue = $data[6] ?? null;
-                        $exclusion = 'none';
-                        if ($exclusionValue !== null) {
-                            $lv = strtolower($exclusionValue);
-                            if (in_array($lv, ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) {
-                                $exclusion = $lv;
-                            }
-                        }
-
-                        // [7] MERCI Score
-                        $merciScoreValue = $data[7] ?? null;
-                        $merciScore = null;
-                        if ($merciScoreValue !== null) {
-                            if (strtolower($merciScoreValue) === 'unable') {
-                                $merciScore = 'unable';
-                            } elseif (is_numeric($merciScoreValue) && $merciScoreValue >= 0 && $merciScoreValue <= 100) {
-                                $merciScore = (int)$merciScoreValue;
-                            }
-                        }
-
-                        // [8] MERCI Diagnosis
-                        $merciDiagnosisValue = $data[8] ?? null;
-                        $merciDiagnosis = 'no value';
-                        if ($merciDiagnosisValue !== null) {
-                            $lv = strtolower($merciDiagnosisValue);
-                            if (in_array($lv, ['normal', 'abnormal'])) {
-                                $merciDiagnosis = $lv;
-                            }
-                        }
-
-                        // [9] Error Type
-                        $errorTypeValue = $data[9] ?? null;
-                        $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
-                        $errorType = null;
-                        if (!empty($errorTypeValue)) {
-                            $uv = strtoupper(trim($errorTypeValue));
-                            if (in_array($uv, $allowedErrorTypes)) {
-                                $errorType = ($uv === 'NONE') ? 'none' : $uv;
-                            }
-                        }
-
-                        // [10] FAF Grade
-                        $fafGrade = (is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4)
-                            ? (int)$data[10]
-                            : null;
-
-                        // [11] OCT Score
-                        $octScore = is_numeric($data[11])
-                            ? round(floatval($data[11]), 2)
-                            : null;
-
-                        // [12] VF Score
-                        $vfScore = is_numeric($data[12])
-                            ? round(floatval($data[12]), 2)
-                            : null;
-
-                        // [13] Actual Diagnosis
-                        $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
-                        $actualDiagnosis  = 'other';            // ← default value
-                        if (!empty($data[13])) {
-                          $d = ucfirst(strtolower(trim($data[13])));
-                          $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
-                        }
-
-                        // [14] Dosage
-                        $dosage = is_numeric($data[14])
-                            ? round(floatval($data[14]), 2)
-                            : null;
-
-                        // [15] Duration Days
-                        $durationDays = is_numeric($data[15])
-                            ? (int)$data[15]
-                            : null;
-
-                        // [16] Cumulative Dosage
-                        $cumulativeDosage = is_numeric($data[16])
-                            ? round(floatval($data[16]), 2)
-                            : null;
-
-                        // [17] Date of Continuation (MM/DD/YYYY)
-                        $dateOfContinuationValue = $data[17] ?? null;
-                        $date_of_continuation = null;
-                        if ($dateOfContinuationValue !== null) {
-                            $contObj = DateTime::createFromFormat('m/d/Y', $dateOfContinuationValue);
-                            if ($contObj) {
-                                $date_of_continuation = $contObj->format('Y-m-d');
-                            } else {
-                                $results['errors'][] = "Line $lineNumber: Invalid date_of_continuation format '{$dateOfContinuationValue}' - expected MM/DD/YYYY";
-                            }
-                        }
+                        
+                        // 8: MERCI diagnosis
+                        $merciDiagnosis = strtolower(trim($data[8])) ?: 'no value';
+                        
+                        // 9: Error type
+                        $eRaw = strtoupper(trim($data[9]));
+                        $errorType = in_array($eRaw, ['TN','FP','TP','FN','NONE'])
+                                   ? ($eRaw==='NONE' ? 'none' : $eRaw)
+                                   : null;
+                        
+                        // 10: FAF grade
+                        $fafGrade = is_numeric($data[10]) ? (int)$data[10] : null;
+                        
+                        // 11: OCT score
+                        $octScore = is_numeric($data[11]) ? (float)$data[11] : null;
+                        
+                        // 12: VF score
+                        $vfScore = is_numeric($data[12]) ? (float)$data[12] : null;
+                        
+                        // 13: Actual diagnosis
+                        $actualDiagnosis = trim($data[13]) ?: null;
+                        
+                        // 14: Dosage
+                        $dosage = is_numeric($data[14]) ? (float)$data[14] : null;
+                        
+                        // 15: Duration (days)
+                        $durationDays = is_numeric($data[15]) ? (int)$data[15] : null;
+                        
+                        // 16: Cumulative dosage
+                        $cumulativeDosage = is_numeric($data[16]) ? (float)$data[16] : null;
+                        
+                        // 17: Date of Discontinuation
+                        $discObj = DateTime::createFromFormat('m/d/Y', trim($data[17]))
+                                ?: DateTime::createFromFormat('Y-m-d', trim($data[17]));
+                        $dateOfDiscontinuation = $discObj ? $discObj->format('Y-m-d') : null;
 
                         // Build test data
                         $testData = [
