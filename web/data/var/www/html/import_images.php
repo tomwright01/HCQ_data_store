@@ -9,8 +9,6 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
-// ================== CRITICAL FUNCTIONAL CHANGES START ================== //
-
 function handleSingleFile($testType, $tmpName, $originalName) {
     global $conn;
 
@@ -19,222 +17,235 @@ function handleSingleFile($testType, $tmpName, $originalName) {
         ? '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
         : '/^(\d+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
 
-    if (!preg_match($pattern, $originalName, $matches)) {
+    if (!preg_match($pattern, $originalName, $m)) {
         return ['success' => false, 'message' => "Filename must be: PatientID_OD/OS_YYYYMMDD.ext"];
     }
 
-    $patientId = $matches[1];
-    $eye = strtoupper($matches[2]); // Force uppercase
-    $dateStr = $matches[3];
-
-    // Strict eye validation
-    if (!in_array($eye, ['OD', 'OS'])) {
+    list(, $patientId, $eye, $dateStr) = $m;
+    $eye = strtoupper($eye);
+    if (!in_array($eye, ['OD','OS'])) {
         return ['success' => false, 'message' => "Eye must be OD or OS"];
     }
 
-    $testDate = DateTime::createFromFormat('Ymd', $dateStr);
-    if (!$testDate) {
+    $dt = DateTime::createFromFormat('Ymd', $dateStr);
+    if (!$dt) {
         return ['success' => false, 'message' => "Invalid date in filename"];
     }
 
-    // Eye-specific database lookup
-    $stmt = $conn->prepare("SELECT test_id FROM tests 
-                           WHERE patient_id = ? 
-                           AND date_of_test = ? 
-                           AND eye = ?"); // Critical eye filter added
-    $stmt->bind_param("sss", $patientId, $testDate->format('Y-m-d'), $eye);
-    $stmt->execute();
-    $test = $stmt->get_result()->fetch_assoc();
+    // find existing test
+    $sel = $conn->prepare("
+        SELECT test_id 
+          FROM tests
+         WHERE patient_id = ?
+           AND date_of_test = ?
+           AND eye = ?
+    ");
+    $sel->bind_param("sss", $patientId, $dt->format('Y-m-d'), $eye);
+    $sel->execute();
+    $existing = $sel->get_result()->fetch_assoc();
+    $field = strtolower($testType) . "_reference_" . strtolower($eye);
 
-    // Uppercase eye in column names to match schema
-    $imageField = strtolower($testType) . '_reference_' . strtolower($eye); // Removed strtolower on eye
-
-    if ($test) {
-        // Update only the specific eye's image field
-        $stmt = $conn->prepare("UPDATE tests SET $imageField = ? 
-                               WHERE test_id = ?");
-        $stmt->bind_param("ss", $originalName, $test['test_id']);
+    if ($existing) {
+        $up = $conn->prepare("UPDATE tests SET `$field` = ? WHERE test_id = ?");
+        $up->bind_param("ss", $originalName, $existing['test_id']);
     } else {
-        // Create new record with explicit eye value
-        $testId = $patientId . '_' . $testDate->format('Ymd') . '_' . substr(md5(uniqid()), 0, 4);
-        $stmt = $conn->prepare("INSERT INTO tests 
-                              (test_id, patient_id, date_of_test, eye, $imageField) 
-                              VALUES (?, ?, ?, ?, ?)"); // Added eye column
-        $stmt->bind_param("sssss", $testId, $patientId, $testDate->format('Y-m-d'), $eye, $originalName);
+        $newId = $patientId . "_" . $dt->format('Ymd') . "_" . substr(md5(uniqid()),0,6);
+        $ins = $conn->prepare("
+            INSERT INTO tests
+              (test_id, patient_id, date_of_test, eye, `$field`)
+            VALUES (?, ?, ?, ?, ?)
+        ");
+        $ins->bind_param("sssss", $newId, $patientId, $dt->format('Y-m-d'), $eye, $originalName);
+        $up = $ins;
     }
 
-    if (!$stmt->execute()) {
-        return ['success' => false, 'message' => "Database error: " . $conn->error];
+    if (!$up->execute()) {
+        return ['success' => false, 'message' => "DB error: " . $conn->error];
     }
 
     return ['success' => true, 'message' => "$testType image saved for $eye eye"];
 }
 
-// ================== CRITICAL FUNCTIONAL CHANGES END ================== //
-
-// AJAX handler (unchanged except for error messages)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
+if ($_SERVER['REQUEST_METHOD']==='POST' && isset($_POST['bulk_upload'])) {
     $testType = $_POST['test_type'] ?? '';
-    if (!array_key_exists($testType, ALLOWED_TEST_TYPES)) {
-        echo json_encode(['status' => 'error', 'message' => 'Invalid test type']);
+    if (! array_key_exists($testType, ALLOWED_TEST_TYPES)) {
+        echo json_encode(['status'=>'error','message'=>'Invalid test type']);
         exit;
     }
-    
-    if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
-        echo json_encode(['status' => 'error', 'message' => 'Upload failed']);
+    if (! isset($_FILES['image']) || $_FILES['image']['error']!==UPLOAD_ERR_OK) {
+        echo json_encode(['status'=>'error','message'=>'Upload failed']);
         exit;
     }
-
-    $result = handleSingleFile($testType, $_FILES['image']['tmp_name'], $_FILES['image']['name']);
-    echo json_encode($result['success']
-        ? ['status' => 'success', 'message' => $result['message']]
-        : ['status' => 'error', 'message' => $result['message']]);
+    $r = handleSingleFile($testType, $_FILES['image']['tmp_name'], $_FILES['image']['name']);
+    echo json_encode($r['success']
+        ? ['status'=>'success','message'=>$r['message']]
+        : ['status'=>'error','message'=>$r['message']]);
     exit;
 }
-
-// HTML (maintaining your original styling)
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Medical Image Importer</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f0f4f8; }
-        .container { max-width: 1000px; margin: 40px auto; background: white; padding: 40px;
-                     border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #00a88f; margin-bottom: 30px; font-size: 32px; }
-        h2 { color: #00a88f; margin-top: 0; font-size: 24px; }
-        .form-section { margin-bottom: 50px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0; }
-        label { display: block; font-weight: 600; margin: 15px 0 5px; font-size: 15px; }
-        select, input[type="text"], input[type="date"], input[type="file"] {
-            width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px;
-            font-size: 16px; margin-bottom: 15px; transition: 0.3s;
-        }
-        select:focus, input:focus { outline: none; border-color: #00a88f; box-shadow: 0 0 5px rgba(0,168,143,0.5); }
-        button { width: 100%; padding: 14px; background: #00a88f; color: white; border: none;
-                 border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;
-                 transition: background 0.3s, transform 0.2s; }
-        button:hover { background: #008f7a; transform: translateY(-1px); }
-        .progress { font-weight: bold; margin: 15px 0; font-size: 15px; }
-        .progress-bar-container { width: 100%; background: #e0e0e0; height: 14px; border-radius: 7px; margin: 10px 0; }
-        .progress-bar { height: 14px; background: #00a88f; width: 0%; border-radius: 7px; transition: width 0.3s; }
-        ul#file-list { list-style: none; padding: 0; font-size: 14px; max-height: 250px; overflow-y: auto; }
-        #file-list li.success { color: green; }
-        #file-list li.error { color: red; }
-        .message { text-align: center; padding: 12px; border-radius: 5px; margin-bottom: 20px; font-size: 16px; }
-        .success { background: #e6f7e6; color: #3c763d; border: 1px solid #d6e9c6; }
-        .error { background: #f2dede; color: #a94442; border: 1px solid #ebccd1; }
-        .back-link { display: inline-block; margin-top: 25px; color: #00a88f; text-decoration: none;
-                     font-weight: bold; font-size: 16px; transition: 0.3s; }
-        .back-link:hover { text-decoration: underline; color: #008f7a; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Medical Image Importer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #00a88f;
+      --primary-dark: #008f7a;
+      --bg: #f5f7fa;
+      --card: #ffffff;
+      --text: #333;
+      --radius: 12px;
+      --shadow: 0 4px 20px rgba(0,0,0,0.05);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); }
+    .wrapper { max-width: 960px; margin: 40px auto; padding: 0 20px; }
+    h1 { text-align: center; color: var(--primary); margin-bottom: 30px; font-size: 2.5rem; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 30px; }
+    @media(min-width: 768px) { .grid { grid-template-columns: 1fr 1fr; } }
+    .card {
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 30px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .card h2 { color: var(--primary); font-size: 1.5rem; }
+    label { font-weight: 600; margin-bottom: 6px; display: block; }
+    input, select, button {
+      font-family: inherit;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: var(--radius);
+    }
+    input, select { padding: 12px; width: 100%; }
+    input[type="file"] { padding: 6px; }
+    input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 4px rgba(0,168,143,0.3); }
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 14px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: background 0.2s, transform 0.1s;
+    }
+    button:hover { background: var(--primary-dark); transform: translateY(-2px); }
+    .progress-wrap { margin-top: 10px; }
+    .progress-text { font-size: 0.95rem; font-weight: 600; }
+    .bar-container {
+      background: #e0e0e0;
+      border-radius: 7px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+    .bar { height: 12px; width: 0; background: var(--primary); transition: width 0.3s; }
+    ul { list-style: none; max-height: 200px; overflow-y: auto; padding-left: 0; }
+    ul li { padding: 6px 0; font-size: 0.9rem; }
+    ul li.success { color: green; }
+    ul li.error { color: red; }
+    .back { text-decoration: none; color: var(--primary); font-weight: 600; display: block; text-align: center; margin-top: 30px; }
+    .back:hover { color: var(--primary-dark); }
+  </style>
 </head>
 <body>
-<div class="container">
+  <div class="wrapper">
     <h1>Medical Image Importer</h1>
-
-    <!-- Single File Upload -->
-    <div class="form-section">
+    <div class="grid">
+      <!-- Single Upload -->
+      <div class="card">
         <h2>Single File Upload</h2>
         <form method="POST" enctype="multipart/form-data">
-            <label>Test Type:</label>
-            <select name="test_type" required>
-                <option value="">Select Test Type</option>
-                <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
-                    <option value="<?= $type ?>"><?= $type ?></option>
-                <?php endforeach; ?>
-            </select>
-
-            <label>Patient ID:</label>
-            <input type="text" name="patient_id" required>
-
-            <label>Test Date:</label>
-            <input type="date" name="test_date" required>
-
-            <label>Eye:</label>
-            <select name="eye" required>
-                <option value="OD">Right Eye (OD)</option>
-                <option value="OS">Left Eye (OS)</option>
-            </select>
-
-            <label>File (PNG or PDF):</label>
-            <input type="file" name="image" accept="image/png,.pdf,.exp" required>
-
-            <button type="submit" name="import">Upload File</button>
-        </form>
-    </div>
-
-    <!-- Folder Upload -->
-    <div class="form-section">
-        <h2>Bulk Folder Upload (Progressive)</h2>
-        <label>Test Type:</label>
-        <select id="test_type">
-            <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
-                <option value="<?= $type ?>"><?= $type ?></option>
+          <label for="single_type">Test Type</label>
+          <select id="single_type" name="test_type" required>
+            <option value="">— Choose —</option>
+            <?php foreach(ALLOWED_TEST_TYPES as $t=>$d): ?>
+              <option value="<?= $t ?>"><?= $t ?></option>
             <?php endforeach; ?>
+          </select>
+
+          <label for="image">Choose File (PNG • PDF • EXP)</label>
+          <input type="file" id="image" name="image" accept=".png,.pdf,.exp" required>
+
+          <button type="submit" name="bulk_upload">Upload Now</button>
+        </form>
+      </div>
+
+      <!-- Bulk Upload -->
+      <div class="card">
+        <h2>Bulk Folder Upload</h2>
+        <label for="bulk_type">Test Type</label>
+        <select id="bulk_type">
+          <?php foreach(ALLOWED_TEST_TYPES as $t=>$d): ?>
+            <option value="<?= $t ?>"><?= $t ?></option>
+          <?php endforeach; ?>
         </select>
 
-        <label>Select Folder:</label>
+        <label for="bulk_files">Select Folder</label>
         <input type="file" id="bulk_files" webkitdirectory multiple>
+
         <button id="startUpload">Start Upload</button>
 
-        <div id="progress" class="progress">No files uploaded yet</div>
-        <div class="progress-bar-container"><div class="progress-bar" id="progress-bar"></div></div>
-        <ul id="file-list"></ul>
+        <div class="progress-wrap">
+          <div class="progress-text" id="progressText">No files processed</div>
+          <div class="bar-container"><div id="bar" class="bar"></div></div>
+        </div>
+        <ul id="results"></ul>
+      </div>
     </div>
 
-    <a href="index.php" class="back-link">← Return Home</a>
-</div>
+    <a href="index.php" class="back">← Return Home</a>
+  </div>
 
-<script>
-document.getElementById('startUpload').addEventListener('click', async () => {
-    const files = document.getElementById('bulk_files').files;
-    if (files.length === 0) { alert('Please select a folder'); return; }
+  <script>
+    document.getElementById('startUpload').addEventListener('click', async () => {
+      const files = document.getElementById('bulk_files').files;
+      const type  = document.getElementById('bulk_type').value;
+      const list  = document.getElementById('results');
+      const txt   = document.getElementById('progressText');
+      const bar   = document.getElementById('bar');
+      if (!type || files.length===0) return alert('Select test type & folder.');
 
-    const test_type = document.getElementById('test_type').value;
-    const fileList = document.getElementById('file-list');
-    const progress = document.getElementById('progress');
-    const progressBar = document.getElementById('progress-bar');
-
-    fileList.innerHTML = '';
-    let successCount = 0, errorCount = 0;
-
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      list.innerHTML = '';
+      let ok=0, err=0;
+      for (let i=0; i<files.length; i++) {
+        const f = files[i];
         const li = document.createElement('li');
-        li.textContent = file.webkitRelativePath;
-        fileList.appendChild(li);
+        li.textContent = f.webkitRelativePath;
+        list.appendChild(li);
 
-        const formData = new FormData();
-        formData.append('bulk_upload', '1');
-        formData.append('test_type', test_type);
-        formData.append('image', file, file.name);
+        const fd = new FormData();
+        fd.append('bulk_upload','1');
+        fd.append('test_type',type);
+        fd.append('image',f,f.name);
 
         try {
-            const response = await fetch('import_images.php', { method: 'POST', body: formData });
-            const result = await response.json();
-            if (result.status === 'success') {
-                li.classList.add('success');
-                successCount++;
-            } else {
-                li.classList.add('error');
-                li.textContent += ' - ' + result.message;
-                errorCount++;
-            }
-        } catch (err) {
+          let res = await fetch('', { method:'POST', body:fd });
+          let json= await res.json();
+          if (json.status==='success') {
+            li.classList.add('success');
+            ok++;
+          } else {
             li.classList.add('error');
-            li.textContent += ' - network error';
-            errorCount++;
+            li.textContent += ' — ' + json.message;
+            err++;
+          }
+        } catch {
+          li.classList.add('error');
+          li.textContent += ' — network error';
+          err++;
         }
+        let pct = Math.round(((i+1)/files.length)*100);
+        bar.style.width = pct + '%';
+        txt.textContent = `Processed ${i+1}/${files.length} — ✓ ${ok} | ✕ ${err}`;
+      }
 
-        const percentage = Math.round(((i+1)/files.length)*100);
-        progress.innerText = `Processed ${i+1}/${files.length} | Success: ${successCount}, Errors: ${errorCount}`;
-        progressBar.style.width = percentage + '%';
-    }
-
-    progress.innerText = `Upload finished! Success: ${successCount}, Errors: ${errorCount}`;
-});
-</script>
+      txt.textContent = `Done — ✓ ${ok} | ✕ ${err}`;
+    });
+  </script>
 </body>
 </html>
