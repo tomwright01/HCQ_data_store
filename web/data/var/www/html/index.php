@@ -296,7 +296,7 @@ if ($search_patient_id || $filter_active) {
     $types = '';
 
     if ($search_patient_id) {
-        $sql_patient_data .= " AND p.patient_id = ?";
+        $sql_patient_data .= " AND p.subject_id = ?";
         $params[] = $search_patient_id;
         $types .= "s";
     }
