@@ -1,4 +1,3 @@
-
 <?php
 // csv_import.php
 
@@ -65,96 +64,147 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             throw new Exception("Row has only " . count($data) . " columns (minimum 18 required)");
                         }
 
-                        // Trim & normalize null-like values
+                        // Trim and normalize null-like values
                         $data = array_map('trim', $data);
                         $data = array_map(function($v) {
                             $v = trim($v ?? '');
                             $lower = strtolower($v);
-                            if ($v === '' || in_array($lower, ['null', 'no value', 'missing'])) {
+                            if ($v === '' || in_array($lower, ['null','no value','missing'])) {
                                 return null;
                             }
                             return $v;
                         }, $data);
 
-                        // 0: Subject ID
-                        $subjectId = trim($data[0]);
-                        
-                        // 1: Date of Birth (MM/DD/YYYY or YYYY-MM-DD)
-                        $dobObj = DateTime::createFromFormat('m/d/Y', trim($data[1]))
-                               ?: DateTime::createFromFormat('Y-m-d', trim($data[1]));
-                        if (!$dobObj) throw new Exception("Invalid DoB on line $lineNumber");
-                        $dobFormatted = $dobObj->format('Y-m-d');
-                        
-                        // 2: Date of Test
-                        $testDateObj = DateTime::createFromFormat('m/d/Y', trim($data[2]))
-                                   ?: DateTime::createFromFormat('Y-m-d', trim($data[2]));
-                        if (!$testDateObj) throw new Exception("Invalid test date on line $lineNumber");
-                        $testDateFormatted = $testDateObj->format('Y-m-d');
-                        
-                        // 3: Age
-                        $age = is_numeric($data[3]) ? (int)$data[3] : null;
-                        
-                        // 4: Eye
-                        $eyeVal = strtoupper(trim($data[4]));
-                        $eye = in_array($eyeVal, ['OD','OS']) ? $eyeVal : null;
-                        
-                        // 5: Report diagnosis
-                        $reportDiagnosis = strtolower(trim($data[5])) ?: 'no input';
-                        
-                        // 6: Exclusion
-                        $exclusion = strtolower(trim($data[6])) ?: 'none';
-                        
-                        // 7: MERCI score
-                        $mRaw = trim($data[7]);
-                        if (strcasecmp($mRaw,'unable')===0) {
-                            $merciScore = 'unable';
-                        } elseif (is_numeric($mRaw)) {
-                            $merciScore = (int)$mRaw;
-                        } else {
-                            $merciScore = null;
-                        }
-                        
-                        // 8: MERCI diagnosis
-                        $merciDiagnosis = strtolower(trim($data[8])) ?: 'no value';
-                        
-                        // 9: Error type
-                        $eRaw = strtoupper(trim($data[9]));
-                        $errorType = in_array($eRaw, ['TN','FP','TP','FN','NONE'])
-                                   ? ($eRaw==='NONE' ? 'none' : $eRaw)
-                                   : null;
-                        
-                        // 10: FAF grade
-                        $fafGrade = is_numeric($data[10]) ? (int)$data[10] : null;
-                        
-                        // 11: OCT score
-                        $octScore = is_numeric($data[11]) ? (float)$data[11] : null;
-                        
-                        // 12: VF score
-                        $vfScore = is_numeric($data[12]) ? (float)$data[12] : null;
-                        
-                        // 13: Actual diagnosis
-                        $actualDiagnosis = trim($data[13]) ?: null;
-                        
-                        // 14: Dosage
-                        $dosage = is_numeric($data[14]) ? (float)$data[14] : null;
-                        
-                        // 15: Duration (days)
-                        $durationDays = is_numeric($data[15]) ? (int)$data[15] : null;
-                        
-                        // 16: Cumulative dosage
-                        $cumulativeDosage = is_numeric($data[16]) ? (float)$data[16] : null;
-                        
-                        // 17: Date of Discontinuation
-                        $discObj = DateTime::createFromFormat('m/d/Y', trim($data[17]))
-                                ?: DateTime::createFromFormat('Y-m-d', trim($data[17]));
-                        $dateOfDiscontinuation = $discObj ? $discObj->format('Y-m-d') : null;
+                        // [0] Subject ID
+                        $subjectId = $data[0];
 
-                        // Build test data
+                        // [1] Date of Birth
+                        $dobObj = DateTime::createFromFormat('m/d/Y', $data[1])
+                               ?: DateTime::createFromFormat('Y-m-d', $data[1]);
+                        if (!$dobObj) {
+                            throw new Exception("Invalid DoB format: '{$data[1]}'");
+                        }
+                        $dobFormatted = $dobObj->format('Y-m-d');
+
+                        // [2] Date of Test
+                        $testDateObj = DateTime::createFromFormat('m/d/Y', $data[2])
+                                   ?: DateTime::createFromFormat('Y-m-d', $data[2]);
+                        if (!$testDateObj) {
+                            throw new Exception("Invalid test date format: '{$data[2]}'");
+                        }
+                        $dateOfTest = $testDateObj->format('Y-m-d');
+
+                        // [3] Test ID (as provided)
+                        $testIdRaw = $data[3] ?? '';
+                        if ($testIdRaw === null || $testIdRaw === '') {
+                            throw new Exception("Missing Test ID at column 4");
+                        }
+                        $testId = preg_replace('/\s+/', '_', trim($testIdRaw));
+
+                        // [4] Eye
+                        $eyeVal = strtoupper($data[4] ?? '');
+                        $eye = in_array($eyeVal, ['OD','OS'], true) ? $eyeVal : null;
+
+                        // default location
+                        $location = 'KH';
+
+                        // Upsert patient
+                        $patientId = getOrCreatePatient($conn, $subjectId, $subjectId, $dobFormatted, $location);
+                        $results['patients']++;
+
+                        // [5] Report Diagnosis
+                        $reportDiagnosis = 'no input';
+                        if ($data[5] !== null) {
+                            $v = strtolower($data[5]);
+                            if (in_array($v, ['normal','abnormal','exclude'], true)) {
+                                $reportDiagnosis = $v;
+                            }
+                        }
+
+                        // [6] Exclusion
+                        $exclusion = 'none';
+                        if ($data[6] !== null) {
+                            $v = strtolower($data[6]);
+                            if (in_array($v, ['retinal detachment','generalized retinal dysfunction','unilateral testing'], true)) {
+                                $exclusion = $v;
+                            }
+                        }
+
+                        // [7] MERCI Score
+                        $merciScore = null;
+                        if ($data[7] !== null) {
+                            if (strcasecmp($data[7],'unable') === 0) {
+                                $merciScore = 'unable';
+                            } elseif (is_numeric($data[7])) {
+                                $merciScore = (int)$data[7];
+                            }
+                        }
+
+                        // [8] MERCI Diagnosis
+                        $merciDiagnosis = 'no value';
+                        if ($data[8] !== null) {
+                            $v = strtolower($data[8]);
+                            if (in_array($v, ['normal','abnormal'], true)) {
+                                $merciDiagnosis = $v;
+                            }
+                        }
+
+                        // [9] Error Type
+                        $errorType = null;
+                        if ($data[9] !== null) {
+                            $v = strtoupper($data[9]);
+                            if (in_array($v, ['TN','FP','TP','FN','NONE'], true)) {
+                                $errorType = ($v === 'NONE') ? 'none' : $v;
+                            }
+                        }
+
+                        // [10] FAF Grade
+                        $fafGrade = (is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4)
+                            ? (int)$data[10]
+                            : null;
+
+                        // [11] OCT Score
+                        $octScore = is_numeric($data[11]) ? round((float)$data[11],2) : null;
+
+                        // [12] VF Score
+                        $vfScore = is_numeric($data[12]) ? round((float)$data[12],2) : null;
+
+                        // [13] Actual Diagnosis
+                        $actualDiagnosis = null;
+                        if ($data[13] !== null) {
+                            $d = ucfirst(strtolower($data[13]));
+                            $allowed = ['RA','SLE','Sjogren','other'];
+                            $actualDiagnosis = in_array($d,$allowed,true) ? $d : 'other';
+                        }
+
+                        // [14] Dosage
+                        $dosage = is_numeric($data[14]) ? round((float)$data[14],2) : null;
+
+                        // [15] Duration (days)
+                        $durationDays = is_numeric($data[15]) ? (int)$data[15] : null;
+
+                        // [16] Cumulative Dosage
+                        $cumulativeDosage = is_numeric($data[16]) ? round((float)$data[16],2) : null;
+
+                        // [17] Date of Continuation
+                        $dateOfContRaw = $data[17];
+                        $dateOfContinuation = null;
+                        if ($dateOfContRaw !== null && $dateOfContRaw !== '') {
+                            $contObj = DateTime::createFromFormat('m/d/Y', $dateOfContRaw)
+                                     ?: DateTime::createFromFormat('Y-m-d', $dateOfContRaw);
+                            if ($contObj) {
+                                $dateOfContinuation = $contObj->format('Y-m-d');
+                            } else {
+                                $results['errors'][] = "Line $lineNumber: invalid continuation date '{$dateOfContRaw}'";
+                            }
+                        }
+
+                        // Build and insert
                         $testData = [
                             'test_id'              => $testId,
                             'patient_id'           => $patientId,
                             'location'             => $location,
-                            'date_of_test'         => $testDateObj->format('Y-m-d'),
+                            'date_of_test'         => $dateOfTest,
                             'age'                  => null,
                             'eye'                  => $eye,
                             'report_diagnosis'     => $reportDiagnosis,
@@ -171,10 +221,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             'dosage_unit'          => 'mg',
                             'duration_days'        => $durationDays,
                             'cumulative_dosage'    => $cumulativeDosage,
-                            'date_of_continuation' => $date_of_continuation,
+                            'date_of_continuation' => $dateOfContinuation,
                             'treatment_notes'      => null
                         ];
-
                         insertTest($testData);
                         $results['tests']++;
                     } catch (Exception $e) {
@@ -213,80 +262,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <title>CSV Import Tool | Hydroxychloroquine Data Repository</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <style>
-        :root {
-            --primary-color: rgb(0, 168, 143);
-            --primary-dark: rgb(0, 140, 120);
-            --primary-light: rgb(178, 226, 226);
-            --text-color: #212529;
-            --radius: 10px;
-        }
-        * { box-sizing: border-box; margin:0; padding:0; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg,#f0f4f9,#ffffff);
-            color: var(--text-color);
-        }
-        header {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-            padding: 25px 15px; color: white;
-            display: flex; align-items: center; gap: 15px; flex-wrap: wrap;
-        }
-        .header-content { display:flex; align-items:center; gap:15px; flex:1; }
-        .logo { height:50px; }
-        h1 { margin:0; font-size:2.2rem; }
-        .container { max-width:1250px; margin:30px auto 60px; padding:15px; }
-        .card {
-            background:white; border-radius:var(--radius); padding:25px; margin-bottom:30px;
-            box-shadow:0 20px 50px -10px rgba(0,0,0,0.08); border:1px solid rgba(0,0,0,0.05);
-        }
-        .card-title {
-            display:flex; align-items:center; gap:10px; font-size:1.5rem;
-            margin-bottom:15px; color:var(--primary-color);
-        }
-        .upload-area {
-            border:2px dashed var(--primary-light); border-radius:8px;
-            padding:35px; text-align:center; transition:all .3s;
-            background-color:rgba(178,226,226,0.08); margin-bottom:20px;
-        }
-        .upload-area:hover {
-            border-color:var(--primary-color);
-            background-color:rgba(178,226,226,0.15);
-        }
-        .upload-icon { font-size:3.5rem; color:var(--primary-color); margin-bottom:10px; }
-        .file-input { display:none; }
-        .file-label {
-            display:inline-block; padding:12px 24px;
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-            color:white; border-radius:6px; cursor:pointer; font-weight:600;
-        }
-        .file-name { margin-top:8px; font-size:0.9rem; color:#555; }
-        .btn {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-dark));
-            color:white; padding:14px 30px; border:none; border-radius:8px;
-            cursor:pointer; font-size:1rem; font-weight:600; display:inline-flex;
-            align-items:center; gap:8px; transition:all .25s;
-        }
-        .btn:hover { filter:brightness(1.05); }
-        .message { border-radius:8px; padding:15px 18px; display:flex; gap:12px; align-items:center; margin-bottom:12px; }
-        .success { background:rgba(40,167,69,0.1); border-left:5px solid #28a745; color:#155724; }
-        .error { background:rgba(220,53,69,0.1); border-left:5px solid #dc3545; color:#721c24; }
-        .stats-cards {
-            display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-            gap:20px; margin:18px 0 10px;
-        }
-        .stat-card {
-            background:#f9fcfd; border-radius:8px; padding:18px; text-align:center;
-            border:1px solid rgba(0,168,143,0.15);
-        }
-        .stat-value { font-size:2.4rem; font-weight:700; color:var(--primary-dark); }
-        .stat-label { font-size:0.75rem; letter-spacing:1px; text-transform:uppercase; color:#555; }
-        .error-list {
-            margin-top:12px; border:1px solid #e4e8ed; border-radius:6px;
-            max-height:260px; overflow:auto; background:white;
-        }
-        .error-item {
-            padding:12px 14px; border-bottom:1px solid #
-        }
+        :root { --primary-color:rgb(0,168,143); --primary-dark:rgb(0,140,120); --primary-light:rgb(178,226,226); --text-color:#212529; --radius:10px; }
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#f0f4f9,#fff);color:var(--text-color);}
+        header{background:linear-gradient(135deg,var(--primary-color),var(--primary-dark));padding:25px;color:white;display:flex;align-items:center;gap:15px;flex-wrap:wrap;}
+        .header-content{display:flex;align-items:center;gap:15px;flex:1;}
+        .logo{height:50px;}
+        h1{margin:0;font-size:2.2rem;}
+        .container{max-width:1250px;margin:30px auto 60px;padding:15px;}
+        .card{background:white;border-radius:var(--radius);padding:25px;margin-bottom:30px;box-shadow:0 20px 50px -10px rgba(0,0,0,0.08);border:1px solid rgba(0,0,0,0.05);}
+        .card-title{display:flex;align-items:center;gap:10px;font-size:1.5rem;margin-bottom:15px;color:var(--primary-color);}
+        .upload-area{border:2px dashed var(--primary-light);border-radius:8px;padding:35px;text-align:center;background-color:rgba(178,226,226,0.08);margin-bottom:20px;transition:all .3s;}
+        .upload-area:hover{border-color:var(--primary-color);background-color:rgba(178,226,226,0.15);}
+        .upload-icon{font-size:3.5rem;color:var(--primary-color);margin-bottom:10px;}
+        .file-input{display:none;}
+        .file-label{display:inline-block;padding:12px 24px;background:linear-gradient(135deg,var(--primary-color),var(--primary-dark));color:white;border-radius:6px;cursor:pointer;font-weight:600;}
+        .file-name{margin-top:8px;font-size:0.9rem;color:#555;}
+        .btn{background:linear-gradient(135deg,var(--primary-color),var(--primary-dark));color:white;padding:14px 30px;border:none;border-radius:8px;cursor:pointer;font-size:1rem;font-weight:600;display:inline-flex;align-items:center;gap:8px;transition:all .25s;}
+        .btn:hover{filter:brightness(1.05);}
+        .message{border-radius:8px;padding:15px 18px;display:flex;gap:12px;align-items:center;margin-bottom:12px;}
+        .success{background:rgba(40,167,69,0.1);border-left:5px solid #28a745;color:#155724;}
+        .error{background:rgba(220,53,69,0.1);border-left:5px solid #dc3545;color:#721c24;}
+        .stats-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin:18px 0 10px;}
+        .stat-card{background:#f9fcfd;border-radius:8px;padding:18px;text-align:center;border:1px solid rgba(0,168,143,0.15);}
+        .stat-value{font-size:2.4rem;font-weight:700;color:var(--primary-dark);}
+        .stat-label{font-size:0.75rem;letter-spacing:1px;text-transform:uppercase;color:#555;}
+        .error-list{margin-top:12px;border:1px solid #e4e8ed;border-radius:6px;max-height:260px;overflow:auto;background:white;}
+        .error-item{padding:12px 14px;border-bottom:1px solid #eee;display:flex;gap:8px;}
     </style>
 </head>
 <body>
@@ -296,12 +298,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             <h1>CSV Import Tool</h1>
         </div>
     </header>
-
     <div class="container">
         <div class="card">
             <div class="card-title"><i class="fas fa-file-import"></i> Import Patient &amp; Test Data</div>
-            <form method="post" enctype="multipart/form-data" id="importForm" style="display:flex; flex-wrap:wrap; gap:20px; align-items:center;">
-                <div style="flex:1; min-width:250px;">
+            <form method="post" enctype="multipart/form-data" id="importForm" style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;">
+                <div style="flex:1;min-width:250px;">
                     <div class="upload-area" id="dropZone">
                         <div class="upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
                         <input type="file" name="csv_file" id="csv_file" accept=".csv" class="file-input" required>
@@ -309,10 +310,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         <div class="file-name" id="fileName"><?= htmlspecialchars($fileName ?: 'No file selected') ?></div>
                     </div>
                 </div>
-                <div style="display:flex; flex-direction:column; gap:10px;">
+                <div style="display:flex;flex-direction:column;gap:10px;">
                     <button type="submit" class="btn"><i class="fas fa-upload"></i> Import File</button>
-                    <div style="font-size:0.8rem; color:#555;">
-                        Expected order: subject id, DoB (MM/DD/YYYY), test date (MM/DD/YYYY), test ID, eye, report diagnosis, exclusion, MERCI score, MERCI diagnosis, error type, FAF grade, OCT score, VF score, actual diagnosis, dosage, duration, cumulative dosage, date of continuation.
+                    <div style="font-size:0.8rem;color:#555;">
+                        Expected order: subject id, DoB, test date, test ID, eye, report diagnosis, exclusion, MERCI score, MERCI diagnosis, error type, FAF grade, OCT score, VF score, actual diagnosis, dosage, duration, cumulative dosage, date of continuation.
                     </div>
                 </div>
             </form>
@@ -343,7 +344,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     <div class="error-list">
                         <?php foreach ($results['errors'] as $error): ?>
                             <div class="error-item">
-                                <i class="fas fa-times-circle" style="color:#dc3545; margin-top:3px;"></i>
+                                <i class="fas fa-times-circle" style="color:#dc3545;"></i>
                                 <div><?= htmlspecialchars($error) ?></div>
                             </div>
                         <?php endforeach; ?>
@@ -351,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 </div>
             <?php endif; ?>
 
-            <a href="index.php" class="back-link"><i class="fas fa-arrow-left"></i> Return to Dashboard</a>
+            <a href="index.php" class="btn" style="margin-top:20px;"><i class="fas fa-arrow-left"></i> Return to Dashboard</a>
         </div>
     </div>
 
