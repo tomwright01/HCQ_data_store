@@ -288,7 +288,7 @@ $result_patient = null;
 if ($search_patient_id || $filter_active) {
     $sql_patient_data = "SELECT 
         t.*,
-        p.patient_id, p.subject_id, p.date_of_birth, p.actual_diagnosis AS patient_actual_diagnosis
+        p.patient_id, p.subject_id, p.date_of_birth, t.actual_diagnosis AS patient_actual_diagnosis
         FROM tests t 
         JOIN patients p ON t.patient_id = p.patient_id
         WHERE 1=1";
