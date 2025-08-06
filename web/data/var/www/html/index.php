@@ -288,15 +288,31 @@ $result_patient = null;
 if ($search_patient_id || $filter_active) {
     $sql_patient_data = "
         SELECT
-            t.*,
-            t.actual_diagnosis    AS patient_actual_diagnosis,
-            p.patient_id,
-            p.subject_id,
-            p.date_of_birth,
-            p.location            AS patient_location
-          FROM tests t
-          JOIN patients p ON t.patient_id = p.patient_id
-          WHERE 1=1
+            t.test_id, 
+            t.location, 
+            t.date_of_test, 
+            t.age, 
+            t.eye, 
+            t.report_diagnosis, 
+            t.exclusion, 
+            t.merci_score, 
+            t.merci_diagnosis, 
+            t.error_type, 
+            t.faf_grade, 
+            t.oct_score, 
+            t.vf_score, 
+            t.actual_diagnosis, 
+            t.dosage, 
+            t.duration_days, 
+            t.cumulative_dosage, 
+            t.date_of_continuation, 
+            t.treatment_notes,
+            p.subject_id, 
+            p.date_of_birth, 
+            p.location AS patient_location
+        FROM tests t
+        JOIN patients p ON t.patient_id = p.patient_id
+        WHERE 1=1
     ";
 
     $params = [];
