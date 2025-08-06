@@ -103,12 +103,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
                         $testId = preg_replace('/\s+/', '_', $testIdRaw);
                         
+                        // Change the eye filter section to be more flexible:
                         $eyeValue = $data[5] ?? null;
                         $eye = null;
                         if ($eyeValue !== null) {
-                            $upperEye = strtoupper($eyeValue);
-                            if (in_array($upperEye, ['OD','OS'], true)) {
-                                $eye = $upperEye;
+                            $upperEye = strtoupper(trim($eyeValue));
+                            if (strpos($upperEye, 'OD') !== false || strpos($upperEye, 'RIGHT') !== false) {
+                                $eye = 'OD';
+                            } elseif (strpos($upperEye, 'OS') !== false || strpos($upperEye, 'LEFT') !== false) {
+                                $eye = 'OS';
                             }
                         }
 
