@@ -1122,37 +1122,37 @@ if ($result_patient && $result_patient->num_rows > 0) {
                                         <td style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($row['treatment_notes'] ?? 'N/A') ?></td>
                                     <?php endif; ?>
                                     <td>
-                                        <?php 
-                                            $currentEye = $row['eye'] ?? '';
-                                            $imageLinks = [];
-                                            if (in_array($currentEye, ['OD','OS'])) {
-                                                $testTypes = ['faf'=>'FAF','oct'=>'OCT','vf'=>'VF','mferg'=>'MFERG'];
-                                                foreach ($testTypes as $prefix => $label) {
-                                                    $columnName = $prefix . '_reference_' . strtolower($currentEye);
-                                                    if (!empty($row[$columnName])) {
-                                                        $imageLinks[] = sprintf(
-                                                            '<a href="view_%s.php?ref=%s&patient_id=%s&eye=%s" class="image-link">%s %s</a>',
-                                                            $prefix,
-                                                            htmlspecialchars($row[$columnName]),
-                                                            htmlspecialchars($row['patient_id']),
-                                                            $currentEye,
-                                                            $label,
-                                                            $currentEye
-                                                        );
-                                                        if ($prefix === 'mferg') {
-                                                            $imageLinks[] = sprintf(
-                                                                '<a href="%sMFERG/%s" class="image-link" download>Download %s %s</a>',
-                                                                IMAGE_BASE_URL,
-                                                                rawurlencode($row[$columnName]),
-                                                                $label,
-                                                                $currentEye
-                                                            );
-                                                        }
-                                                    }
-                                                }
+                                      <?php 
+                                        $currentEye = $row['eye'] ?? '';
+                                        $imageLinks = [];
+                                        if (in_array($currentEye, ['OD','OS'])) {
+                                          $testTypes = ['faf'=>'FAF','oct'=>'OCT','vf'=>'VF','mferg'=>'MFERG'];
+                                          foreach ($testTypes as $prefix => $label) {
+                                            $columnName = $prefix . '_reference_' . strtolower($currentEye);
+                                            if (!empty($row[$columnName])) {
+                                              $imageLinks[] = sprintf(
+                                                '<a href="view_%s.php?ref=%s&patient_id=%s&eye=%s" class="image-link">%s %s</a>',
+                                                $prefix,
+                                                htmlspecialchars($row[$columnName]),
+                                                htmlspecialchars($row['patient_id']),
+                                                $currentEye,
+                                                $label,
+                                                $currentEye
+                                              );
+                                              if ($prefix === 'mferg') {
+                                                $imageLinks[] = sprintf(
+                                                  '<a href="%sMFERG/%s" class="image-link" download>Download %s %s</a>',
+                                                  IMAGE_BASE_URL,
+                                                  rawurlencode($row[$columnName]),
+                                                  $label,
+                                                  $currentEye
+                                                );
+                                              }
                                             }
-                                            echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
-                                        ?>
+                                          }
+                                        }
+                                        echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
+                                      ?>                                        
                                     </td>
                                     <?php if ($edit_mode): ?>
                                         <td>
