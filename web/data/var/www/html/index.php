@@ -1122,37 +1122,47 @@ if ($result_patient && $result_patient->num_rows > 0) {
                                         <td style="max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><?= htmlspecialchars($row['treatment_notes'] ?? 'N/A') ?></td>
                                     <?php endif; ?>
                                     <td>
-                                      <?php 
-                                        $currentEye = $row['eye'] ?? '';
+                                      <?php
                                         $imageLinks = [];
-                                        if (in_array($currentEye, ['OD','OS'])) {
-                                          $testTypes = ['faf'=>'FAF','oct'=>'OCT','vf'=>'VF','mferg'=>'MFERG'];
-                                          foreach ($testTypes as $prefix => $label) {
-                                            $columnName = $prefix . '_reference_' . strtolower($currentEye);
-                                            if (!empty($row[$columnName])) {
-                                              $imageLinks[] = sprintf(
-                                                '<a href="view_%s.php?ref=%s&patient_id=%s&eye=%s" class="image-link">%s %s</a>',
-                                                $prefix,
-                                                htmlspecialchars($row[$columnName]),
-                                                htmlspecialchars($row['patient_id']),
-                                                $currentEye,
-                                                $label,
-                                                $currentEye
-                                              );
-                                              if ($prefix === 'mferg') {
-                                                $imageLinks[] = sprintf(
-                                                  '<a href="%sMFERG/%s" class="image-link" download>Download %s %s</a>',
-                                                  IMAGE_BASE_URL,
-                                                  rawurlencode($row[$columnName]),
-                                                  $label,
-                                                  $currentEye
-                                                );
-                                              }
-                                            }
-                                          }
-                                        }
+                                        if (!empty($row['faf_reference_od']))  
+                                          $imageLinks[] = '<a href="view_faf.php?ref='
+                                            .htmlspecialchars($row['faf_reference_od'])
+                                            .'&patient_id='
+                                            .htmlspecialchars($row['patient_id'])
+                                            .'&eye=OD" class="image-link">FAF OD</a>';
+                                        if (!empty($row['faf_reference_os']))  
+                                          $imageLinks[] = '<a href="view_faf.php?ref='
+                                            .htmlspecialchars($row['faf_reference_os'])
+                                            .'&patient_id='
+                                            .htmlspecialchars($row['patient_id'])
+                                            .'&eye=OS" class="image-link">FAF OS</a>';
+                                        if (!empty($row['oct_reference_od']))  
+                                          $imageLinks[] = '<a href="view_oct.php?test_id='
+                                            .htmlspecialchars($row['test_id'])
+                                            .'&eye=OD" class="image-link">OCT OD</a>';
+                                        if (!empty($row['oct_reference_os']))  
+                                          $imageLinks[] = '<a href="view_oct.php?test_id='
+                                            .htmlspecialchars($row['test_id'])
+                                            .'&eye=OS" class="image-link">OCT OS</a>';
+                                        if (!empty($row['vf_reference_od']))  
+                                          $imageLinks[] = '<a href="view_vf.php?test_id='
+                                            .htmlspecialchars($row['test_id'])
+                                            .'&eye=OD" class="image-link">VF OD</a>';
+                                        if (!empty($row['vf_reference_os']))  
+                                          $imageLinks[] = '<a href="view_vf.php?test_id='
+                                            .htmlspecialchars($row['test_id'])
+                                            .'&eye=OS" class="image-link">VF OS</a>';
+                                        if (!empty($row['mferg_reference_od']))  
+                                          $imageLinks[] = '<a href="view_mferg.php?test_id='
+                                            .htmlspecialchars($row['test_id'])
+                                            .'&eye=OD" class="image-link">MFERG OD</a>';
+                                        if (!empty($row['mferg_reference_os']))  
+                                          $imageLinks[] = '<a href="view_mferg.php?test_id='
+                                            .htmlspecialchars($row['test_id'])
+                                            .'&eye=OS" class="image-link">MFERG OS</a>';
+                                    
                                         echo $imageLinks ? implode(' | ', $imageLinks) : 'No images';
-                                      ?>                                        
+                                      ?>                          
                                     </td>
                                     <?php if ($edit_mode): ?>
                                         <td>
