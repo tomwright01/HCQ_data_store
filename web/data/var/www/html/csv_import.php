@@ -211,14 +211,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
                         // [17] Date of Continuation (MM/DD/YYYY)
                         $dateOfContinuationValue = $data[18] ?? null;
-                        $date_of_continuation = null;
-                        if ($dateOfContinuationValue !== null) {
-                            $contObj = DateTime::createFromFormat('m/d/Y', $dateOfContinuationValue);
-                            if ($contObj) {
-                                $date_of_continuation = $contObj->format('Y-m-d');
-                            } else {
-                                $results['errors'][] = "Line $lineNumber: Invalid date_of_continuation format '{$dateOfContinuationValue}' - expected MM/DD/YYYY";
-                            }
+                        if ($date_of_continuation === '') {
+                            $date_of_continuation = null;  // Store NULL if empty
                         }
 
                         // Build test data
