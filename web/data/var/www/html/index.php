@@ -1039,7 +1039,6 @@ if ($result_patient && $result_patient->num_rows > 0) {
                             <?php if ($edit_mode): ?><th>Actions</th><?php endif; ?>
                         </tr>
                         <?php while ($row = $result_patient->fetch_assoc()): ?>
-                                <input type="hidden" name="test_id" value="<?= htmlspecialchars($row['test_id']) ?>">
                                 <tr>
                                     <td><?= htmlspecialchars($row['test_id']) ?></td>
                                     <td><?= htmlspecialchars($row['location'] ?? 'KH') ?></td>
