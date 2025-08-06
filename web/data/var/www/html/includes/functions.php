@@ -39,7 +39,6 @@ function getOrCreatePatient(
  * Insert or update a test record.
  */
 function insertTest(array $testData): void {
-    global $conn;
 
     $sql = "
         INSERT INTO tests (
