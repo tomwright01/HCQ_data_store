@@ -1039,7 +1039,6 @@ if ($result_patient && $result_patient->num_rows > 0) {
                             <?php if ($edit_mode): ?><th>Actions</th><?php endif; ?>
                         </tr>
                         <?php while ($row = $result_patient->fetch_assoc()): ?>
-                            <form method="POST" action="index.php?search_patient_id=<?= urlencode($search_patient_id) ?><?= $edit_mode ? '&edit=true' : '' ?>">
                                 <input type="hidden" name="test_id" value="<?= htmlspecialchars($row['test_id']) ?>">
                                 <tr>
                                     <td><?= htmlspecialchars($row['test_id']) ?></td>
@@ -1165,13 +1164,15 @@ if ($result_patient && $result_patient->num_rows > 0) {
                                       ?>                          
                                     </td>
                                     <?php if ($edit_mode): ?>
-                                        <td>
-                                            <button type="submit" name="update_test" class="save-button">Save</button>
-                                            <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="cancel-button">Cancel</a>
-                                        </td>
+                                          <td>
+                                            <form method="POST" action="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>&edit=true">
+                                              <input type="hidden" name="test_id" value="<?= htmlspecialchars($row['test_id']) ?>">
+                                              <button type="submit" name="update_test" class="save-button">Save</button>
+                                              <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="cancel-button">Cancel</a>
+                                            </form>
+                                          </td>
                                     <?php endif; ?>
                                 </tr>
-                            </form>
                         <?php endwhile; ?>
                     </table>
                 </div>
