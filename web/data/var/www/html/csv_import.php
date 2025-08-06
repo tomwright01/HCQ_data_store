@@ -106,14 +106,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         // Change the eye filter section to be more flexible:
                         $eyeValue = $data[5] ?? null;
                         $eye = null;
+                        
                         if ($eyeValue !== null) {
-                            $cleanEye = strtoupper(trim(preg_replace('/[^A-Za-z]/', '', $eyeValue)));
-                            if (preg_match('/\b(OD|RIGHT)\b/', $cleanEye)) {
+                            $normalized = strtoupper(trim($eyeValue));
+                            if (strpos($normalized, 'OD') !== false || strpos($normalized, 'RIGHT') !== false) {
                                 $eye = 'OD';
-                            } elseif (preg_match('/\b(OS|LEFT)\b/', $cleanEye)) {
+                            } elseif (strpos($normalized, 'OS') !== false || strpos($normalized, 'LEFT') !== false) {
                                 $eye = 'OS';
-                            } elseif ($cleanEye === 'OU') {
-                                $eye = 'OU'; // Both eyes
                             }
                         }
 
