@@ -90,16 +90,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         if (!$testDateObj) {
                             throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
                         }
+                        
+                        $age = (is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 100) 
+                           ? (int)$data[3] 
+                           : null;                       
 
                         // [3] Test ID (provided)
-                        $testIdRaw = trim($data[3] ?? '');
+                        $testIdRaw = trim($data[4] ?? '');
                         if ($testIdRaw === '') {
                             // create a timestamp-based fallback ID
                             $testIdRaw = 'gen_' . date('YmdHis') . '_' . bin2hex(random_bytes(3));
                         }
                         $testId = preg_replace('/\s+/', '_', $testIdRaw);
                         
-                        $eyeValue = $data[4] ?? null;
+                        $eyeValue = $data[5] ?? null;
                         $eye = null;
                         if ($eyeValue !== null) {
                             $upperEye = strtoupper($eyeValue);
@@ -116,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $results['patients']++;
 
                         // [5] Report Diagnosis
-                        $reportDiagnosisValue = $data[5] ?? null;
+                        $reportDiagnosisValue = $data[6] ?? null;
                         $reportDiagnosis = 'no input';
                         if ($reportDiagnosisValue !== null) {
                             $lv = strtolower($reportDiagnosisValue);
@@ -126,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
 
                         // [6] Exclusion
-                        $exclusionValue = $data[6] ?? null;
+                        $exclusionValue = $data[7] ?? null;
                         $exclusion = 'none';
                         if ($exclusionValue !== null) {
                             $lv = strtolower($exclusionValue);
@@ -136,7 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
 
                         // [7] MERCI Score
-                        $merciScoreValue = $data[7] ?? null;
+                        $merciScoreValue = $data[8] ?? null;
                         $merciScore = null;
                         if ($merciScoreValue !== null) {
                             if (strtolower($merciScoreValue) === 'unable') {
@@ -147,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
 
                         // [8] MERCI Diagnosis
-                        $merciDiagnosisValue = $data[8] ?? null;
+                        $merciDiagnosisValue = $data[9] ?? null;
                         $merciDiagnosis = 'no value';
                         if ($merciDiagnosisValue !== null) {
                             $lv = strtolower($merciDiagnosisValue);
@@ -157,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
 
                         // [9] Error Type
-                        $errorTypeValue = $data[9] ?? null;
+                        $errorTypeValue = $data[10] ?? null;
                         $allowedErrorTypes = ['TN', 'FP', 'TP', 'FN', 'none'];
                         $errorType = null;
                         if (!empty($errorTypeValue)) {
@@ -168,45 +172,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         }
 
                         // [10] FAF Grade
-                        $fafGrade = (is_numeric($data[10]) && $data[10] >= 1 && $data[10] <= 4)
-                            ? (int)$data[10]
+                        $fafGrade = (is_numeric($data[11]) && $data[11] >= 1 && $data[11] <= 4)
+                            ? (int)$data[11]
                             : null;
 
                         // [11] OCT Score
-                        $octScore = is_numeric($data[11])
-                            ? round(floatval($data[11]), 2)
+                        $octScore = is_numeric($data[12])
+                            ? round(floatval($data[12]), 2)
                             : null;
 
                         // [12] VF Score
-                        $vfScore = is_numeric($data[12])
-                            ? round(floatval($data[12]), 2)
+                        $vfScore = is_numeric($data[13])
+                            ? round(floatval($data[13]), 2)
                             : null;
 
                         // [13] Actual Diagnosis
                         $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
                         $actualDiagnosis  = 'other';            // ← default value
-                        if (!empty($data[13])) {
+                        if (!empty($data[14])) {
                           $d = ucfirst(strtolower(trim($data[13])));
                           $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
                         }
 
                         // [14] Dosage
-                        $dosage = is_numeric($data[14])
-                            ? round(floatval($data[14]), 2)
+                        $dosage = is_numeric($data[15])
+                            ? round(floatval($data[15]), 2)
                             : null;
 
                         // [15] Duration Days
-                        $durationDays = is_numeric($data[15])
-                            ? (int)$data[15]
+                        $durationDays = is_numeric($data[16])
+                            ? (int)$data[16]
                             : null;
 
                         // [16] Cumulative Dosage
-                        $cumulativeDosage = is_numeric($data[16])
-                            ? round(floatval($data[16]), 2)
+                        $cumulativeDosage = is_numeric($data[17])
+                            ? round(floatval($data[17]), 2)
                             : null;
 
                         // [17] Date of Continuation (MM/DD/YYYY)
-                        $dateOfContinuationValue = $data[17] ?? null;
+                        $dateOfContinuationValue = $data[18] ?? null;
                         $date_of_continuation = null;
                         if ($dateOfContinuationValue !== null) {
                             $contObj = DateTime::createFromFormat('m/d/Y', $dateOfContinuationValue);
