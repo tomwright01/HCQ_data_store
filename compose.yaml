@@ -2,14 +2,15 @@ services:
   db:
     image: HCQ/mariadb
     build: ./database
-    restart: always
+    restart: no
     container_name: mariadb
     volumes:
       - ./DATA_STORE/database:/var/lib/mysql
-      - ./secrets/mariadb-root:/run/secrets/mariadb-root:ro
       - ./backups/db:/backup
     environment:
-      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/mariadb-root
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/mariadb-root-password
+    secrets:
+      - mariadb-root-password
 
   adminer:
     image: adminer
@@ -26,3 +27,7 @@ services:
       - ./DATA_STORE/:/var/www/html/data
     ports:
       - "8888:8080"
+
+secrets:
+  mariadb-root-password:
+    file: ./secrets/mariadb-root
