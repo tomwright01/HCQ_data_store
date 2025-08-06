@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         
                         // Change the eye filter section to be more flexible:
                         $eyeValue = $data[5] ?? null;
-                        $eye = in_array(strtoupper(trim($eyeValue ?? '')), ['OD', 'OS']) ? strtoupper(trim($eyeValue)) : null;
+                        $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
 
                         // Default location
                         $location = 'KH';
