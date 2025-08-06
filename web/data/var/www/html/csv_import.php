@@ -107,11 +107,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $eyeValue = $data[5] ?? null;
                         $eye = null;
                         if ($eyeValue !== null) {
-                            $upperEye = strtoupper(trim($eyeValue));
-                            if (strpos($upperEye, 'OD') !== false || strpos($upperEye, 'RIGHT') !== false) {
+                            $cleanEye = strtoupper(trim(preg_replace('/[^A-Za-z]/', '', $eyeValue)));
+                            if (preg_match('/\b(OD|RIGHT)\b/', $cleanEye)) {
                                 $eye = 'OD';
-                            } elseif (strpos($upperEye, 'OS') !== false || strpos($upperEye, 'LEFT') !== false) {
+                            } elseif (preg_match('/\b(OS|LEFT)\b/', $cleanEye)) {
                                 $eye = 'OS';
+                            } elseif ($cleanEye === 'OU') {
+                                $eye = 'OU'; // Both eyes
                             }
                         }
 
