@@ -220,7 +220,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         // Build test data
                         $testData = [
                             'test_id'              => $testId,
-                            'patient_id'           => $patientId,
+                            'patient_id'           => $subjectId,
                             'location'             => $location,
                             'date_of_test'         => $testDateObj->format('Y-m-d'),
                             'age'                  => null,
