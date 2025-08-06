@@ -210,7 +210,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             : null;
 
                         // [17] Date of Continuation (MM/DD/YYYY)
-                        $dateOfContinuationValue = $data[18] ?? null;
+                        $date_of_continuation = trim($data[18] ?? '');  // Get value from column 18
                         if ($date_of_continuation === '') {
                             $date_of_continuation = null;  // Store NULL if empty
                         }
