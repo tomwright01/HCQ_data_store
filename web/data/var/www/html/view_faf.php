@@ -481,11 +481,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
                 
                 <div class="severity-scale">
-                    <div class="scale-item">0-20 - Normal</div>
-                    <div class="scale-item">21-40 - Mild</div>
-                    <div class="scale-item">41-60 - Moderate</div>
-                    <div class="scale-item">61-80 - Significant</div>
-                    <div class="scale-item">81-100 - Severe</div>
+                    <div class="scale-item">0-20 </div>
+                    <div class="scale-item">21-40 </div>
+                    <div class="scale-item">41-60 </div>
+                    <div class="scale-item">61-80 </div>
+                    <div class="scale-item">81-100</div>
                 </div>
             </div>
             
