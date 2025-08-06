@@ -1055,10 +1055,69 @@ if ($result_patient && $result_patient->num_rows > 0) {
                             <?php if ($edit_mode): ?><th>Actions</th><?php endif; ?>
                         </tr>
                         <?php while ($row = $result_patient->fetch_assoc()): ?>
-                                <tr>
-                                    <td><?= htmlspecialchars($row['test_id']) ?></td>
-                                    <td><?= htmlspecialchars($row['location'] ?? 'KH') ?></td>
-                                    <td><?= htmlspecialchars($row['date_of_test']) ?></td>
+                                
+                                echo "<tr>";  // Start a new table row
+                                
+                                    // Display Test ID
+                                    echo "<td>" . htmlspecialchars($row['test_id'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Location
+                                    echo "<td>" . htmlspecialchars($row['location'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Date of Test
+                                    echo "<td>" . htmlspecialchars($row['date_of_test'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Age
+                                    echo "<td>" . htmlspecialchars($row['age'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Eye (OD/OS)
+                                    echo "<td>" . htmlspecialchars($row['eye'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Report Diagnosis
+                                    echo "<td>" . htmlspecialchars($row['report_diagnosis'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Exclusion
+                                    echo "<td>" . htmlspecialchars($row['exclusion'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display MERCI Score
+                                    echo "<td>" . htmlspecialchars($row['merci_score'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display MERCI Diagnosis
+                                    echo "<td>" . htmlspecialchars($row['merci_diagnosis'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Error Type
+                                    echo "<td>" . htmlspecialchars($row['error_type'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display FAF Grade
+                                    echo "<td>" . htmlspecialchars($row['faf_grade'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display OCT Score
+                                    echo "<td>" . htmlspecialchars($row['oct_score'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display VF Score
+                                    echo "<td>" . htmlspecialchars($row['vf_score'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Actual Diagnosis
+                                    echo "<td>" . htmlspecialchars($row['actual_diagnosis'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Dosage
+                                    echo "<td>" . htmlspecialchars($row['dosage'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Duration Days
+                                    echo "<td>" . htmlspecialchars($row['duration_days'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Cumulative Dosage
+                                    echo "<td>" . htmlspecialchars($row['cumulative_dosage'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Date of Continuation
+                                    echo "<td>" . htmlspecialchars($row['date_of_continuation'] ?? 'N/A') . "</td>";
+                                    
+                                    // Display Treatment Notes
+                                    echo "<td>" . htmlspecialchars($row['treatment_notes'] ?? 'N/A') . "</td>";
+                                
+                                    // End the row
+                                    echo "</tr>";  
+    
                                     <?php if ($edit_mode): ?>
                                         <td><input type="number" name="age" class="edit-input" value="<?= htmlspecialchars($row['age'] ?? '') ?>" min="0" max="100"></td>
                                         <td>
