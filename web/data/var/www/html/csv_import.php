@@ -109,9 +109,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         
                         if ($eyeValue !== null) {
                             $normalized = strtoupper(trim($eyeValue));
-                            if (strpos($normalized, 'OD') !== false || strpos($normalized, 'RIGHT') !== false) {
+                            if ($normalized === 'OD' || $normalized === 'RIGHT') {
                                 $eye = 'OD';
-                            } elseif (strpos($normalized, 'OS') !== false || strpos($normalized, 'LEFT') !== false) {
+                            } elseif ($normalized === 'OS' || $normalized === 'LEFT') {
                                 $eye = 'OS';
                             }
                         }
