@@ -52,7 +52,7 @@ CREATE TABLE tests (
     dosage_unit VARCHAR(10) DEFAULT 'mg',
     duration_days SMALLINT UNSIGNED NULL,
     cumulative_dosage DECIMAL(10,2) NULL,
-    date_of_continuation DATE NULL,
+    date_of_continuation VARCHAR(255) NULL,
     treatment_notes TEXT NULL,
     faf_reference_od VARCHAR(255) NULL,
     faf_reference_os VARCHAR(255) NULL,
