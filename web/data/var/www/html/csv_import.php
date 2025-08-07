@@ -1,103 +1,178 @@
 <?php
-// csv_import.php
-require_once __DIR__ . '/includes/functions.php';
+require_once 'config.php';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
+/**
+ * Generate a unique patient_id from subject_id
+ */
+function generatePatientId($subject_id) {
+    return 'P_' . substr(md5($subject_id), 0, 20); // 20 chars of md5 hash for uniqueness
+}
+
+function getOrCreatePatient($conn, $patient_id, $subject_id, $location, $dob) {
+    $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
+    $stmt->bind_param("s", $patient_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($res && $res->num_rows > 0) {
+        $stmt->close();
+        return $patient_id;
+    }
+    $stmt->close();
+
+    $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, location, date_of_birth) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("ssss", $patient_id, $subject_id, $location, $dob);
+    if (!$stmt->execute()) {
+        die("Failed to insert patient: " . $stmt->error);
+    }
+    $stmt->close();
+    return $patient_id;
+}
+
+function insertTest($conn, $test_id, $patient_id, $location, $date_of_test) {
+    $stmt = $conn->prepare("
+        INSERT INTO tests (test_id, patient_id, location, date_of_test)
+        VALUES (?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP
+    ");
+    $stmt->bind_param("ssss", $test_id, $patient_id, $location, $date_of_test);
+    if (!$stmt->execute()) {
+        die("Failed to insert/update test: " . $stmt->error);
+    }
+    $stmt->close();
+}
+
+function insertTestEye(
+    $conn, $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score,
+    $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score,
+    $actual_diagnosis, $medication_name, $dosage, $dosage_unit,
+    $duration_days, $cumulative_dosage, $date_of_continuation, $treatment_notes
+) {
+    $stmt = $conn->prepare("
+        INSERT INTO test_eyes 
+        (test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
+        faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
+        duration_days, cumulative_dosage, date_of_continuation, treatment_notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            age = VALUES(age),
+            report_diagnosis = VALUES(report_diagnosis),
+            exclusion = VALUES(exclusion),
+            merci_score = VALUES(merci_score),
+            merci_diagnosis = VALUES(merci_diagnosis),
+            error_type = VALUES(error_type),
+            faf_grade = VALUES(faf_grade),
+            oct_score = VALUES(oct_score),
+            vf_score = VALUES(vf_score),
+            actual_diagnosis = VALUES(actual_diagnosis),
+            medication_name = VALUES(medication_name),
+            dosage = VALUES(dosage),
+            dosage_unit = VALUES(dosage_unit),
+            duration_days = VALUES(duration_days),
+            cumulative_dosage = VALUES(cumulative_dosage),
+            date_of_continuation = VALUES(date_of_continuation),
+            treatment_notes = VALUES(treatment_notes),
+            updated_at = CURRENT_TIMESTAMP
+    ");
+    $stmt->bind_param("ssissssssdddsdsssss",
+        $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score, $merci_diagnosis, $error_type,
+        $faf_grade, $oct_score, $vf_score, $actual_diagnosis, $medication_name, $dosage, $dosage_unit,
+        $duration_days, $cumulative_dosage, $date_of_continuation, $treatment_notes
+    );
+    if (!$stmt->execute()) {
+        die("Failed to insert/update test_eye: " . $stmt->error);
+    }
+    $stmt->close();
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+        die("Error uploading file.");
+    }
+
     $file = $_FILES['csv_file']['tmp_name'];
 
-    if (!is_uploaded_file($file)) {
-        die("No file uploaded.");
+    if (($handle = fopen($file, 'r')) === FALSE) {
+        die("Failed to open uploaded CSV file.");
     }
 
-    $handle = fopen($file, 'r');
-    if (!$handle) {
-        die("Failed to open uploaded file.");
+    $headers = fgetcsv($handle);
+    if ($headers === FALSE) {
+        die("Empty CSV file.");
     }
 
-    // Read header
-    $header = fgetcsv($handle);
-    if (!$header) {
-        die("Empty CSV or invalid format.");
-    }
+    while (($row = fgetcsv($handle)) !== FALSE) {
+        $data = array_combine($headers, $row);
 
-    $results = ['patients' => 0, 'tests' => 0];
-
-    while (($row = fgetcsv($handle)) !== false) {
-        $rowData = array_combine($header, $row);
-        if (!$rowData) {
-            continue; // skip malformed row
+        // Required columns must include subject_id and test_id
+        if (empty($data['subject_id']) || empty($data['test_id'])) {
+            continue; // skip invalid rows
         }
 
-        // Extract patient info from row
-        $patientId = trim($rowData['patient_id'] ?? '');
-        $patientName = trim($rowData['patient_name'] ?? '');
-        $dob = trim($rowData['dob'] ?? '');
-        $location = trim($rowData['location'] ?? 'KH');
+        // Generate patient_id from subject_id
+        $patient_id = generatePatientId($data['subject_id']);
+        $subject_id = $data['subject_id'];
+        $location = $data['location'] ?? 'KH';
+        $date_of_birth = $data['date_of_birth'] ?? null;
+        $test_id = $data['test_id'];
+        $date_of_test = $data['date_of_test'] ?? null;
 
-        if (!$patientId) {
-            // skip rows without patient_id
-            continue;
-        }
+        getOrCreatePatient($conn, $patient_id, $subject_id, $location, $date_of_birth);
+        insertTest($conn, $test_id, $patient_id, $location, $date_of_test);
 
-        // Ensure patient exists
-        try {
-            getOrCreatePatient($conn, $patientId, $patientName, $dob, $location, $results);
-        } catch (Exception $e) {
-            error_log("Error inserting patient: " . $e->getMessage());
-            continue;
-        }
+        foreach (['OD', 'OS'] as $eye) {
+            $prefix = $eye . '_';
 
-        // Prepare test data for this row (eye-specific)
-        $testData = [
-            'test_id' => trim($rowData['test_id'] ?? uniqid('test_')),
-            'patient_id' => $patientId,
-            'location' => $location,
-            'date_of_test' => trim($rowData['date_of_test'] ?? ''),
-            'age' => is_numeric($rowData['age'] ?? null) ? (int)$rowData['age'] : null,
-            'eye' => strtoupper(trim($rowData['eye'] ?? '')),
-            'report_diagnosis' => trim($rowData['report_diagnosis'] ?? ''),
-            'exclusion' => trim($rowData['exclusion'] ?? ''),
-            'merci_score' => $rowData['merci_score'] ?? null,
-            'merci_diagnosis' => trim($rowData['merci_diagnosis'] ?? ''),
-            'error_type' => trim($rowData['error_type'] ?? ''),
-            'faf_grade' => is_numeric($rowData['faf_grade'] ?? null) ? (int)$rowData['faf_grade'] : null,
-            'oct_score' => is_numeric($rowData['oct_score'] ?? null) ? (float)$rowData['oct_score'] : null,
-            'vf_score' => is_numeric($rowData['vf_score'] ?? null) ? (float)$rowData['vf_score'] : null,
-            'actual_diagnosis' => trim($rowData['actual_diagnosis'] ?? ''),
-            'medication_name' => trim($rowData['medication_name'] ?? ''),
-            'dosage' => is_numeric($rowData['dosage'] ?? null) ? (float)$rowData['dosage'] : null,
-            'dosage_unit' => trim($rowData['dosage_unit'] ?? ''),
-            'duration_days' => is_numeric($rowData['duration_days'] ?? null) ? (int)$rowData['duration_days'] : null,
-            'cumulative_dosage' => is_numeric($rowData['cumulative_dosage'] ?? null) ? (float)$rowData['cumulative_dosage'] : null,
-            'date_of_continuation' => trim($rowData['date_of_continuation'] ?? null),
-            'treatment_notes' => trim($rowData['treatment_notes'] ?? ''),
-        ];
+            $age = isset($data[$prefix . 'age']) && $data[$prefix . 'age'] !== '' ? (int)$data[$prefix . 'age'] : null;
+            $report_diagnosis = $data[$prefix . 'report_diagnosis'] ?? 'no input';
+            $exclusion = $data[$prefix . 'exclusion'] ?? 'none';
+            $merci_score = $data[$prefix . 'merci_score'] ?? null;
+            $merci_diagnosis = $data[$prefix . 'merci_diagnosis'] ?? 'no value';
+            $error_type = $data[$prefix . 'error_type'] ?? null;
+            $faf_grade = isset($data[$prefix . 'faf_grade']) && $data[$prefix . 'faf_grade'] !== '' ? (int)$data[$prefix . 'faf_grade'] : null;
+            $oct_score = isset($data[$prefix . 'oct_score']) && $data[$prefix . 'oct_score'] !== '' ? (float)$data[$prefix . 'oct_score'] : null;
+            $vf_score = isset($data[$prefix . 'vf_score']) && $data[$prefix . 'vf_score'] !== '' ? (float)$data[$prefix . 'vf_score'] : null;
+            $actual_diagnosis = $data[$prefix . 'actual_diagnosis'] ?? 'other';
+            $medication_name = $data[$prefix . 'medication_name'] ?? null;
+            $dosage = isset($data[$prefix . 'dosage']) && $data[$prefix . 'dosage'] !== '' ? (float)$data[$prefix . 'dosage'] : null;
+            $dosage_unit = $data[$prefix . 'dosage_unit'] ?? 'mg';
+            $duration_days = isset($data[$prefix . 'duration_days']) && $data[$prefix . 'duration_days'] !== '' ? (int)$data[$prefix . 'duration_days'] : null;
+            $cumulative_dosage = isset($data[$prefix . 'cumulative_dosage']) && $data[$prefix . 'cumulative_dosage'] !== '' ? (float)$data[$prefix . 'cumulative_dosage'] : null;
+            $date_of_continuation = $data[$prefix . 'date_of_continuation'] ?? null;
+            $treatment_notes = $data[$prefix . 'treatment_notes'] ?? null;
 
-        try {
-            insertTest($testData);
-            $results['tests']++;
-        } catch (Exception $e) {
-            error_log("Error inserting test for patient $patientId eye {$testData['eye']}: " . $e->getMessage());
+            insertTestEye(
+                $conn, $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score,
+                $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score,
+                $actual_diagnosis, $medication_name, $dosage, $dosage_unit,
+                $duration_days, $cumulative_dosage, $date_of_continuation, $treatment_notes
+            );
         }
     }
 
     fclose($handle);
-
-    echo "Import complete: {$results['patients']} patients, {$results['tests']} tests imported.";
-} else {
-    // Show simple upload form if accessed directly
-    ?>
-    <!DOCTYPE html>
-    <html lang="en">
-    <head><meta charset="UTF-8"><title>CSV Import</title></head>
-    <body>
-        <h1>Import Test Data CSV</h1>
-        <form action="" method="POST" enctype="multipart/form-data">
-            <label for="csv_file">CSV File:</label>
-            <input type="file" name="csv_file" id="csv_file" accept=".csv" required>
-            <button type="submit">Import</button>
-        </form>
-    </body>
-    </html>
-    <?php
+    echo "CSV import completed successfully.";
+    exit;
 }
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CSV Import - Clinical Database</title>
+<style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    form { margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<h1>Import Clinical Data CSV</h1>
+<form method="POST" enctype="multipart/form-data">
+    <label for="csv_file">Choose CSV file:</label>
+    <input type="file" id="csv_file" name="csv_file" accept=".csv" required />
+    <button type="submit">Upload & Import</button>
+</form>
+<p>CSV must include subject_id and test_id columns. Patient ID will be generated automatically.</p>
+</body>
+</html>
+
