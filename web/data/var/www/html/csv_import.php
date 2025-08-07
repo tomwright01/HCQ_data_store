@@ -32,7 +32,10 @@ function insertTest($conn, $test_id, $patient_id, $location, $date_of_test) {
     $stmt = $conn->prepare("
         INSERT INTO tests (test_id, patient_id, location, date_of_test)
         VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP
+        ON DUPLICATE KEY UPDATE
+            location = VALUES(location),
+            date_of_test = VALUES(date_of_test),
+            updated_at = CURRENT_TIMESTAMP
     ");
     $stmt->bind_param("ssss", $test_id, $patient_id, $location, $date_of_test);
     if (!$stmt->execute()) {
@@ -84,6 +87,18 @@ function insertTestEye(
     $stmt->close();
 }
 
+// Helper function: normalize date to Y-m-d or null if invalid
+function normalizeDate($dateStr) {
+    if (!$dateStr) return null;
+    // Try Y-m-d format first
+    $d = DateTime::createFromFormat('Y-m-d', $dateStr);
+    if (!$d) {
+        // Try m/d/Y format next
+        $d = DateTime::createFromFormat('m/d/Y', $dateStr);
+    }
+    return $d ? $d->format('Y-m-d') : null;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_FILES['csv_file']) || $_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         die("Error uploading file.");
@@ -100,21 +115,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         die("Empty CSV file.");
     }
 
+    $lineNumber = 1;
+
     while (($row = fgetcsv($handle)) !== FALSE) {
+        $lineNumber++;
         $data = array_combine($headers, $row);
 
-        // Required columns must include subject_id and test_id
         if (empty($data['subject_id']) || empty($data['test_id'])) {
-            continue; // skip invalid rows
+            // Skip invalid rows
+            continue;
         }
 
-        // Generate patient_id from subject_id
         $patient_id = generatePatientId($data['subject_id']);
         $subject_id = $data['subject_id'];
         $location = $data['location'] ?? 'KH';
-        $date_of_birth = $data['date_of_birth'] ?? null;
+        $date_of_birth = normalizeDate($data['date_of_birth'] ?? null);
         $test_id = $data['test_id'];
-        $date_of_test = $data['date_of_test'] ?? null;
+        $date_of_test = normalizeDate($data['date_of_test'] ?? null);
 
         getOrCreatePatient($conn, $patient_id, $subject_id, $location, $date_of_birth);
         insertTest($conn, $test_id, $patient_id, $location, $date_of_test);
@@ -125,19 +142,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $age = isset($data[$prefix . 'age']) && $data[$prefix . 'age'] !== '' ? (int)$data[$prefix . 'age'] : null;
             $report_diagnosis = $data[$prefix . 'report_diagnosis'] ?? 'no input';
             $exclusion = $data[$prefix . 'exclusion'] ?? 'none';
-            $merci_score = $data[$prefix . 'merci_score'] ?? null;
+            $merci_score = isset($data[$prefix . 'merci_score']) && is_numeric($data[$prefix . 'merci_score']) ? $data[$prefix . 'merci_score'] : null;
             $merci_diagnosis = $data[$prefix . 'merci_diagnosis'] ?? 'no value';
             $error_type = $data[$prefix . 'error_type'] ?? null;
             $faf_grade = isset($data[$prefix . 'faf_grade']) && $data[$prefix . 'faf_grade'] !== '' ? (int)$data[$prefix . 'faf_grade'] : null;
-            $oct_score = isset($data[$prefix . 'oct_score']) && $data[$prefix . 'oct_score'] !== '' ? (float)$data[$prefix . 'oct_score'] : null;
-            $vf_score = isset($data[$prefix . 'vf_score']) && $data[$prefix . 'vf_score'] !== '' ? (float)$data[$prefix . 'vf_score'] : null;
+            $oct_score = isset($data[$prefix . 'oct_score']) && is_numeric($data[$prefix . 'oct_score']) ? (float)$data[$prefix . 'oct_score'] : null;
+            $vf_score = isset($data[$prefix . 'vf_score']) && is_numeric($data[$prefix . 'vf_score']) ? (float)$data[$prefix . 'vf_score'] : null;
             $actual_diagnosis = $data[$prefix . 'actual_diagnosis'] ?? 'other';
             $medication_name = $data[$prefix . 'medication_name'] ?? null;
-            $dosage = isset($data[$prefix . 'dosage']) && $data[$prefix . 'dosage'] !== '' ? (float)$data[$prefix . 'dosage'] : null;
+            $dosage = isset($data[$prefix . 'dosage']) && is_numeric($data[$prefix . 'dosage']) ? (float)$data[$prefix . 'dosage'] : null;
             $dosage_unit = $data[$prefix . 'dosage_unit'] ?? 'mg';
-            $duration_days = isset($data[$prefix . 'duration_days']) && $data[$prefix . 'duration_days'] !== '' ? (int)$data[$prefix . 'duration_days'] : null;
-            $cumulative_dosage = isset($data[$prefix . 'cumulative_dosage']) && $data[$prefix . 'cumulative_dosage'] !== '' ? (float)$data[$prefix . 'cumulative_dosage'] : null;
-            $date_of_continuation = $data[$prefix . 'date_of_continuation'] ?? null;
+            $duration_days = isset($data[$prefix . 'duration_days']) && is_numeric($data[$prefix . 'duration_days']) ? (int)$data[$prefix . 'duration_days'] : null;
+            $cumulative_dosage = isset($data[$prefix . 'cumulative_dosage']) && is_numeric($data[$prefix . 'cumulative_dosage']) ? (float)$data[$prefix . 'cumulative_dosage'] : null;
+            $date_of_continuation = normalizeDate($data[$prefix . 'date_of_continuation'] ?? null);
             $treatment_notes = $data[$prefix . 'treatment_notes'] ?? null;
 
             insertTestEye(
@@ -175,4 +192,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <p>CSV must include subject_id and test_id columns. Patient ID will be generated automatically.</p>
 </body>
 </html>
-
