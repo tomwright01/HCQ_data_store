@@ -9,7 +9,7 @@ function generatePatientId($subject_id) {
 }
 
 /**
- * Get existing or create a patient record.
+ * Get existing or create a patient record
  */
 function getOrCreatePatient($conn, $patient_id, $subject_id, $location, $dob) {
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
@@ -91,4 +91,36 @@ function insertTestEye(
         die("Failed to insert/update test_eye: " . $stmt->error);
     }
     $stmt->close();
+}
+
+/**
+ * Retrieve all patients
+ */
+function getPatientsWithTests($conn) {
+    $result = $conn->query("SELECT * FROM patients ORDER BY subject_id ASC");
+    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+}
+
+/**
+ * Retrieve all tests for a given patient
+ */
+function getTestsByPatient($conn, $patient_id) {
+    $stmt = $conn->prepare("SELECT * FROM tests WHERE patient_id = ? ORDER BY date_of_test DESC");
+    $stmt->bind_param("s", $patient_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $stmt->close();
+    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+}
+
+/**
+ * Retrieve all test_eye records for a given test
+ */
+function getTestEyes($conn, $test_id) {
+    $stmt = $conn->prepare("SELECT * FROM test_eyes WHERE test_id = ? ORDER BY eye ASC");
+    $stmt->bind_param("s", $test_id);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $stmt->close();
+    return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 }
