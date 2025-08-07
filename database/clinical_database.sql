@@ -18,6 +18,9 @@ CREATE TABLE patients (
     INDEX idx_location (location)
 );
 
+-- ==========================
+-- AUDIT LOG TABLE
+-- ==========================
 CREATE TABLE audit_log (
     id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     table_name VARCHAR(50) NOT NULL,
@@ -31,6 +34,9 @@ CREATE TABLE audit_log (
     INDEX idx_changed_at (changed_at)
 );
 
+-- ==========================
+-- TESTS TABLE
+-- ==========================
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
     patient_id VARCHAR(25) NOT NULL,
@@ -43,6 +49,9 @@ CREATE TABLE tests (
     INDEX idx_date (date_of_test)
 );
 
+-- ==========================
+-- TEST_EYES TABLE
+-- ==========================
 CREATE TABLE test_eyes (
     test_id VARCHAR(25),
     eye ENUM('OD', 'OS') NOT NULL,
@@ -73,11 +82,15 @@ CREATE TABLE test_eyes (
     PRIMARY KEY (test_id, eye)
 );
 
-
+-- ==========================
+-- TRIGGERS FOR AUDIT LOGGING
+-- ==========================
 DELIMITER //
-CREATE TRIGGER tests_after_insert
+
+CREATE DEFINER = CURRENT_USER TRIGGER tests_after_insert
 AFTER INSERT ON tests
 FOR EACH ROW
+SQL SECURITY INVOKER
 BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, new_values, changed_by
@@ -88,9 +101,10 @@ BEGIN
     );
 END//
 
-CREATE TRIGGER tests_after_update
+CREATE DEFINER = CURRENT_USER TRIGGER tests_after_update
 AFTER UPDATE ON tests
 FOR EACH ROW
+SQL SECURITY INVOKER
 BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, old_values, new_values, changed_by
@@ -102,9 +116,10 @@ BEGIN
     );
 END//
 
-CREATE TRIGGER tests_after_delete
+CREATE DEFINER = CURRENT_USER TRIGGER tests_after_delete
 AFTER DELETE ON tests
 FOR EACH ROW
+SQL SECURITY INVOKER
 BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, old_values, changed_by
@@ -114,4 +129,5 @@ BEGIN
         CURRENT_USER()
     );
 END//
+
 DELIMITER ;
