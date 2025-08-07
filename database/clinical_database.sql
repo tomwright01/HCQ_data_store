@@ -36,14 +36,23 @@ CREATE TABLE tests (
     patient_id VARCHAR(25) NOT NULL,
     location ENUM('KH', 'CHUSJ', 'IWK', 'IVEY') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
-    age TINYINT UNSIGNED NULL COMMENT '0–100',
-    eye ENUM('OD', 'OS') NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    INDEX idx_patient (patient_id),
+    INDEX idx_date (date_of_test)
+);
+
+CREATE TABLE test_eyes (
+    test_id VARCHAR(25),
+    eye ENUM('OD', 'OS') NOT NULL,
+    age TINYINT UNSIGNED NULL,
     report_diagnosis ENUM('normal','abnormal', 'exclude','no input') NOT NULL DEFAULT 'no input',
     exclusion ENUM('none','retinal detachment','generalized retinal dysfunction','unilateral testing') NOT NULL DEFAULT 'none',
-    merci_score VARCHAR(10) NULL COMMENT '0–100 or "unable"',
+    merci_score VARCHAR(10) NULL,
     merci_diagnosis ENUM('normal','abnormal','no value') NOT NULL DEFAULT 'no value',
     error_type ENUM('TN','FP','TP','FN','none') DEFAULT NULL,
-    faf_grade TINYINT UNSIGNED NULL COMMENT '1–4',
+    faf_grade TINYINT UNSIGNED NULL,
     oct_score DECIMAL(10,2) NULL,
     vf_score DECIMAL(10,2) NULL,
     actual_diagnosis ENUM('RA','SLE','Sjogren','other') NOT NULL DEFAULT 'other',
@@ -54,34 +63,16 @@ CREATE TABLE tests (
     cumulative_dosage DECIMAL(10,2) NULL,
     date_of_continuation VARCHAR(255) NULL,
     treatment_notes TEXT NULL,
-    faf_reference_od VARCHAR(255) NULL,
-    faf_reference_os VARCHAR(255) NULL,
-    oct_reference_od VARCHAR(255) NULL,
-    oct_reference_os VARCHAR(255) NULL,
-    vf_reference_od VARCHAR(255) NULL,
-    vf_reference_os VARCHAR(255) NULL,
-    mferg_reference_od VARCHAR(255) NULL,
-    mferg_reference_os VARCHAR(255) NULL,
+    faf_reference VARCHAR(255) NULL,
+    oct_reference VARCHAR(255) NULL,
+    vf_reference VARCHAR(255) NULL,
+    mferg_reference VARCHAR(255) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
-    UNIQUE (patient_id, date_of_test, eye),
-    INDEX idx_patient (patient_id),
-    INDEX idx_date (date_of_test),
-    INDEX idx_location (location),
-    INDEX idx_diagnosis (actual_diagnosis),
-    INDEX idx_continuation (date_of_continuation),
-    CONSTRAINT chk_age CHECK (age IS NULL OR age BETWEEN 0 AND 100),
-    CONSTRAINT chk_merci_score CHECK (
-        merci_score IS NULL
-        OR merci_score = 'unable'
-        OR (merci_score REGEXP '^[0-9]+$' AND CAST(merci_score AS UNSIGNED) BETWEEN 0 AND 100)
-    ),
-    CONSTRAINT chk_faf_grade CHECK (faf_grade IS NULL OR faf_grade BETWEEN 1 AND 4),
-    CONSTRAINT chk_dosage CHECK (dosage IS NULL OR dosage > 0),
-    CONSTRAINT chk_duration CHECK (duration_days IS NULL OR duration_days > 0),
-    CONSTRAINT chk_cumulative_dosage CHECK (cumulative_dosage IS NULL OR cumulative_dosage > 0)
+    FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE,
+    PRIMARY KEY (test_id, eye)
 );
+
 
 DELIMITER //
 CREATE TRIGGER tests_after_insert
