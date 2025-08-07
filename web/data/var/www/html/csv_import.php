@@ -96,8 +96,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                            : null;                       
 
                         // [3] Test ID (provided)
-                        $eyeValue = $data[4] ?? null;
-                        $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+                        $testIdRaw = trim($data[4] ?? '');
+                        if ($testIdRaw === '') {
+                            // create a timestamp-based fallback ID
+                            $testIdRaw = 'gen_' . date('YmdHis') . '_' . bin2hex(random_bytes(3));
+                        }
+                        $testId = preg_replace('/\s+/', '_', $testIdRaw);
                         
                         // Change the eye filter section to be more flexible:
                         $eyeValue = $data[5] ?? null; // Double-check index!
