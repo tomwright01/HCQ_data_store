@@ -1,133 +1,110 @@
 <?php
 require_once 'config.php';
-
-function fetchPatientsWithTests($conn) {
-    $sql = "
-        SELECT 
-            p.patient_id, p.subject_id, p.location AS patient_location, p.date_of_birth,
-            t.test_id, t.date_of_test, t.location AS test_location,
-            te.eye, te.age, te.report_diagnosis, te.exclusion, te.merci_score, 
-            te.merci_diagnosis, te.error_type, te.faf_grade, te.oct_score, te.vf_score, 
-            te.actual_diagnosis, te.medication_name, te.dosage, te.dosage_unit,
-            te.duration_days, te.cumulative_dosage, te.date_of_continuation, te.treatment_notes
-        FROM patients p
-        LEFT JOIN tests t ON p.patient_id = t.patient_id
-        LEFT JOIN test_eyes te ON t.test_id = te.test_id
-        ORDER BY p.patient_id, t.test_id, te.eye
-    ";
-
-    $result = $conn->query($sql);
-    if (!$result) {
-        die("Query failed: " . $conn->error);
-    }
-
-    $data = [];
-    while ($row = $result->fetch_assoc()) {
-        $pid = $row['patient_id'];
-        $tid = $row['test_id'];
-        $eye = $row['eye'];
-
-        if (!isset($data[$pid])) {
-            $data[$pid] = [
-                'subject_id' => $row['subject_id'],
-                'location' => $row['patient_location'],
-                'dob' => $row['date_of_birth'],
-                'tests' => []
-            ];
-        }
-
-        if ($tid) {
-            if (!isset($data[$pid]['tests'][$tid])) {
-                $data[$pid]['tests'][$tid] = [
-                    'date_of_test' => $row['date_of_test'],
-                    'location' => $row['test_location'],
-                    'eyes' => []
-                ];
-            }
-
-            if ($eye) {
-                $data[$pid]['tests'][$tid]['eyes'][$eye] = [
-                    'age' => $row['age'],
-                    'report_diagnosis' => $row['report_diagnosis'],
-                    'exclusion' => $row['exclusion'],
-                    'merci_score' => $row['merci_score'],
-                    'merci_diagnosis' => $row['merci_diagnosis'],
-                    'error_type' => $row['error_type'],
-                    'faf_grade' => $row['faf_grade'],
-                    'oct_score' => $row['oct_score'],
-                    'vf_score' => $row['vf_score'],
-                    'actual_diagnosis' => $row['actual_diagnosis'],
-                    'medication_name' => $row['medication_name'],
-                    'dosage' => $row['dosage'],
-                    'dosage_unit' => $row['dosage_unit'],
-                    'duration_days' => $row['duration_days'],
-                    'cumulative_dosage' => $row['cumulative_dosage'],
-                    'date_of_continuation' => $row['date_of_continuation'],
-                    'treatment_notes' => $row['treatment_notes']
-                ];
-            }
-        }
-    }
-
-    return $data;
-}
-
-$patients = fetchPatientsWithTests($conn);
+require_once 'functions.php';
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Patient Test Data</title>
+    <meta charset="UTF-8">
+    <title>Clinical Patient Data Viewer</title>
     <style>
-        body { font-family: Arial; margin: 20px; }
-        .patient { margin-bottom: 30px; border-bottom: 1px solid #ccc; padding-bottom: 15px; }
-        .test { margin-left: 20px; margin-top: 10px; }
-        .eye { margin-left: 40px; }
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        .patient-box {
+            border: 1px solid #ccc;
+            margin-bottom: 30px;
+            padding: 15px;
+            background-color: #f8f8f8;
+        }
+
+        .test-box {
+            border-left: 3px solid #888;
+            margin-top: 15px;
+            padding-left: 15px;
+        }
+
+        .eye-box {
+            background-color: #fff;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px dashed #aaa;
+        }
+
+        h1, h2, h3, h4 {
+            margin-top: 0;
+        }
+
+        ul {
+            margin: 0;
+            padding-left: 20px;
+        }
     </style>
 </head>
 <body>
-    <h1>Clinical Data Overview</h1>
+    <h1>Clinical Patient Records</h1>
 
-    <?php foreach ($patients as $pid => $patient): ?>
-        <div class="patient">
-            <h2>Patient ID: <?= htmlspecialchars($pid) ?></h2>
-            <p>Subject ID: <?= htmlspecialchars($patient['subject_id']) ?> | Location: <?= htmlspecialchars($patient['location']) ?> | DOB: <?= htmlspecialchars($patient['dob']) ?></p>
+    <?php
+    $patients = getPatientsWithTests($conn);
 
-            <?php if (!empty($patient['tests'])): ?>
-                <?php foreach ($patient['tests'] as $tid => $test): ?>
-                    <div class="test">
-                        <strong>Test ID:</strong> <?= htmlspecialchars($tid) ?> | Date: <?= htmlspecialchars($test['date_of_test']) ?> | Location: <?= htmlspecialchars($test['location']) ?>
-                        
-                        <?php foreach ($test['eyes'] as $eye => $details): ?>
-                            <div class="eye">
-                                <h4>Eye: <?= htmlspecialchars($eye) ?></h4>
-                                <ul>
-                                    <li>Age: <?= htmlspecialchars($details['age']) ?></li>
-                                    <li>Report Diagnosis: <?= htmlspecialchars($details['report_diagnosis']) ?></li>
-                                    <li>Exclusion: <?= htmlspecialchars($details['exclusion']) ?></li>
-                                    <li>Merci Score: <?= htmlspecialchars($details['merci_score']) ?></li>
-                                    <li>Merci Diagnosis: <?= htmlspecialchars($details['merci_diagnosis']) ?></li>
-                                    <li>Error Type: <?= htmlspecialchars($details['error_type']) ?></li>
-                                    <li>FAF Grade: <?= htmlspecialchars($details['faf_grade']) ?></li>
-                                    <li>OCT Score: <?= htmlspecialchars($details['oct_score']) ?></li>
-                                    <li>VF Score: <?= htmlspecialchars($details['vf_score']) ?></li>
-                                    <li>Actual Diagnosis: <?= htmlspecialchars($details['actual_diagnosis']) ?></li>
-                                    <li>Medication: <?= htmlspecialchars($details['medication_name']) ?> (<?= htmlspecialchars($details['dosage']) ?> <?= htmlspecialchars($details['dosage_unit']) ?>)</li>
-                                    <li>Duration (days): <?= htmlspecialchars($details['duration_days']) ?></li>
-                                    <li>Cumulative Dosage: <?= htmlspecialchars($details['cumulative_dosage']) ?></li>
-                                    <li>Date of Continuation: <?= htmlspecialchars($details['date_of_continuation']) ?></li>
-                                    <li>Treatment Notes: <?= nl2br(htmlspecialchars($details['treatment_notes'])) ?></li>
-                                </ul>
-                            </div>
-                        <?php endforeach; ?>
-                    </div>
-                <?php endforeach; ?>
-            <?php else: ?>
-                <p>No tests found for this patient.</p>
-            <?php endif; ?>
+    if (empty($patients)) {
+        echo "<p>No patient data found.</p>";
+    }
+
+    foreach ($patients as $patient):
+    ?>
+        <div class="patient-box">
+            <h2><?= htmlspecialchars($patient['subject_id']) ?> (<?= htmlspecialchars($patient['patient_id']) ?>)</h2>
+            <p><strong>Location:</strong> <?= htmlspecialchars($patient['location']) ?><br>
+               <strong>Date of Birth:</strong> <?= htmlspecialchars($patient['date_of_birth']) ?></p>
+
+            <?php
+            $tests = getTestsByPatient($conn, $patient['patient_id']);
+
+            if (empty($tests)) {
+                echo "<p>No tests found for this patient.</p>";
+            }
+
+            foreach ($tests as $test):
+                $test_id = $test['test_id'];
+                $eyes = getTestEyes($conn, $test_id);
+            ?>
+                <div class="test-box">
+                    <h3>Test ID: <?= htmlspecialchars($test_id) ?> | Date: <?= htmlspecialchars($test['date_of_test']) ?> | Location: <?= htmlspecialchars($test['location']) ?></h3>
+
+                    <?php
+                    if (empty($eyes)) {
+                        echo "<p>No eye data found for this test.</p>";
+                    }
+
+                    foreach ($eyes as $eye): ?>
+                        <div class="eye-box">
+                            <h4>Eye: <?= htmlspecialchars($eye['eye']) ?></h4>
+                            <ul>
+                                <li><strong>Age:</strong> <?= htmlspecialchars($eye['age']) ?></li>
+                                <li><strong>Report Diagnosis:</strong> <?= htmlspecialchars($eye['report_diagnosis']) ?></li>
+                                <li><strong>Exclusion:</strong> <?= htmlspecialchars($eye['exclusion']) ?></li>
+                                <li><strong>Merci Score:</strong> <?= htmlspecialchars($eye['merci_score']) ?></li>
+                                <li><strong>Merci Diagnosis:</strong> <?= htmlspecialchars($eye['merci_diagnosis']) ?></li>
+                                <li><strong>Error Type:</strong> <?= htmlspecialchars($eye['error_type']) ?></li>
+                                <li><strong>FAF Grade:</strong> <?= htmlspecialchars($eye['faf_grade']) ?></li>
+                                <li><strong>OCT Score:</strong> <?= htmlspecialchars($eye['oct_score']) ?></li>
+                                <li><strong>VF Score:</strong> <?= htmlspecialchars($eye['vf_score']) ?></li>
+                                <li><strong>Actual Diagnosis:</strong> <?= htmlspecialchars($eye['actual_diagnosis']) ?></li>
+                                <li><strong>Medication:</strong> <?= htmlspecialchars($eye['medication_name']) ?> (<?= htmlspecialchars($eye['dosage']) ?> <?= htmlspecialchars($eye['dosage_unit']) ?>)</li>
+                                <li><strong>Duration:</strong> <?= htmlspecialchars($eye['duration_days']) ?> days</li>
+                                <li><strong>Cumulative Dosage:</strong> <?= htmlspecialchars($eye['cumulative_dosage']) ?></li>
+                                <li><strong>Date of Continuation:</strong> <?= htmlspecialchars($eye['date_of_continuation']) ?></li>
+                                <li><strong>Treatment Notes:</strong> <?= htmlspecialchars($eye['treatment_notes']) ?></li>
+                            </ul>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endforeach; ?>
         </div>
     <?php endforeach; ?>
-
 </body>
 </html>
