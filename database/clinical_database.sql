@@ -87,7 +87,7 @@ CREATE TABLE test_eyes (
 -- ==========================
 DELIMITER //
 
-CREATE DEFINER = CURRENT_USER TRIGGER tests_after_insert
+CREATE TRIGGER tests_after_insert
 AFTER INSERT ON tests
 FOR EACH ROW
 SQL SECURITY INVOKER
@@ -101,7 +101,7 @@ BEGIN
     );
 END//
 
-CREATE DEFINER = CURRENT_USER TRIGGER tests_after_update
+CREATE TRIGGER tests_after_update
 AFTER UPDATE ON tests
 FOR EACH ROW
 SQL SECURITY INVOKER
@@ -116,7 +116,7 @@ BEGIN
     );
 END//
 
-CREATE DEFINER = CURRENT_USER TRIGGER tests_after_delete
+CREATE TRIGGER tests_after_delete
 AFTER DELETE ON tests
 FOR EACH ROW
 SQL SECURITY INVOKER
