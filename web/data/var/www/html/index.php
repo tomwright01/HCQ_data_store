@@ -115,8 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['csv_import_submit']))
                             $testNumber = $data[4] ?? null;
                             if ($testNumber !== null && !is_numeric($testNumber)) throw new Exception("Invalid TEST_ID: must be a number");
 
-                            $eyeValue = $data[5] ?? null;
-                            $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+                            $eyeValue = trim(strtoupper($data[5] ?? ''));
+                            $eye = in_array($eyeValue, ['OD', 'OS']) ? $eyeValue : null;
+                            if ($eyeValue && !in_array($eyeValue, ['OD', 'OS'])) {
+                                $import_results['errors'][] = "Line $lineNumber: Invalid eye value '{$data[5]}' - must be OD or OS";
+                            }
 
                             $testDateFormatted = $testDate->format('Ymd');
                             $testId = $testDateFormatted . ($eye ? $eye : '') . ($testNumber ? $testNumber : '');
