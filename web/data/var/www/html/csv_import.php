@@ -106,6 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         // Change the eye filter section to be more flexible:
                         $eyeValue = $data[5] ?? null; // Double-check index!
                         $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
+                        if ($eye === null && !empty($eyeValue)) {
+                        $results['errors'][] = "Line $lineNumber: Invalid eye value '{$eyeValue}'";
+                        }
 
                         // Add validation feedback
                         if ($eye === null && $eyeValue !== '') {
