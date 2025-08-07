@@ -1,5 +1,8 @@
 <?php
 require_once 'config.php';  // Provides $conn and helper functions
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 
 // Fetch all patients, ordered by subject_id
 $patients_sql = "SELECT * FROM patients ORDER BY subject_id";
