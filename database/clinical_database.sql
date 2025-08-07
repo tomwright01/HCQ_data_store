@@ -65,6 +65,7 @@ CREATE TABLE tests (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    UNIQUE (patient_id, date_of_test, eye),
     INDEX idx_patient (patient_id),
     INDEX idx_date (date_of_test),
     INDEX idx_location (location),
