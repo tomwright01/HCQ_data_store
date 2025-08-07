@@ -1,78 +1,47 @@
 <?php
-require_once __DIR__ . '/config.php';
-
-/**
- * Generate patient_id from subject_id
- */
-function generatePatientId(string $subject_id): string {
-    return 'P_' . substr(md5($subject_id), 0, 20);
-}
-
-/**
- * Get existing patient by subject_id or insert new patient.
- */
-function getOrCreatePatient(mysqli $conn, string $subject_id, string $dob, string $location = 'KH'): string {
-    $patient_id = generatePatientId($subject_id);
-
-    $sel = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
-    $sel->bind_param("s", $patient_id);
-    $sel->execute();
-    $res = $sel->get_result();
-
-    if ($res && $res->num_rows > 0) {
-        return $patient_id;
-    }
-
-    $ins = $conn->prepare("INSERT INTO patients (patient_id, subject_id, date_of_birth, location) VALUES (?, ?, ?, ?)");
-    $ins->bind_param("ssss", $patient_id, $subject_id, $dob, $location);
-
-    if (!$ins->execute()) {
-        throw new Exception("Patient insert failed: " . $ins->error);
-    }
-
+function generatePatientId($conn, $patient_name, $patient_dob) {
+    $patient_id = md5($patient_name . $patient_dob);
     return $patient_id;
 }
 
-/**
- * Insert or update a test record.
- */
-function insertOrUpdateTest(mysqli $conn, array $testData): void {
-    // Insert or update tests table (without eyes)
-    $sql = "
+function getOrCreatePatient($conn, $patient_name, $patient_dob) {
+    $patient_id = generatePatientId($conn, $patient_name, $patient_dob);
+
+    $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
+    $stmt->bind_param("s", $patient_id);
+    $stmt->execute();
+    $stmt->store_result();
+
+    if ($stmt->num_rows === 0) {
+        $stmt->close();
+        $stmt = $conn->prepare("INSERT INTO patients (patient_id, name, dob) VALUES (?, ?, ?)");
+        $stmt->bind_param("sss", $patient_id, $patient_name, $patient_dob);
+        $stmt->execute();
+    }
+
+    $stmt->close();
+    return $patient_id;
+}
+
+function insertOrUpdateTest($conn, $test_id, $patient_id, $location, $date_of_test, $eye_data) {
+    // Insert or update main test row
+    $stmt = $conn->prepare("
         INSERT INTO tests (test_id, patient_id, location, date_of_test)
         VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            location = VALUES(location),
-            date_of_test = VALUES(date_of_test)
-    ";
-
-    $stmt = $conn->prepare($sql);
-    if (!$stmt) {
-        throw new Exception("Prepare failed (tests): " . $conn->error);
-    }
-
-    $stmt->bind_param(
-        "ssss",
-        $testData['test_id'],
-        $testData['patient_id'],
-        $testData['location'],
-        $testData['date_of_test']
-    );
-
-    if (!$stmt->execute()) {
-        throw new Exception("Test insert/update failed: " . $stmt->error);
-    }
+        ON DUPLICATE KEY UPDATE location = VALUES(location), date_of_test = VALUES(date_of_test)
+    ");
+    $stmt->bind_param("ssss", $test_id, $patient_id, $location, $date_of_test);
+    $stmt->execute();
     $stmt->close();
 
-    // Insert or update test_eyes table (detailed per eye)
-    $sql_eye = "
+    // Insert or update per-eye data
+    $stmt = $conn->prepare("
         INSERT INTO test_eyes (
             test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
             faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
             duration_days, cumulative_dosage, date_of_continuation, treatment_notes
-        ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
         )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             age = VALUES(age),
             report_diagnosis = VALUES(report_diagnosis),
@@ -91,39 +60,66 @@ function insertOrUpdateTest(mysqli $conn, array $testData): void {
             cumulative_dosage = VALUES(cumulative_dosage),
             date_of_continuation = VALUES(date_of_continuation),
             treatment_notes = VALUES(treatment_notes)
-    ";
+    ");
 
-    $stmt_eye = $conn->prepare($sql_eye);
-    if (!$stmt_eye) {
-        throw new Exception("Prepare failed (test_eyes): " . $conn->error);
-    }
-
-    // Bind all parameters, handling possible nulls gracefully
-    $stmt_eye->bind_param(
+    $stmt->bind_param(
         "ssissssssdddsisdisss",
-        $testData['test_id'],
-        $testData['eye'],
-        $testData['age'],
-        $testData['report_diagnosis'],
-        $testData['exclusion'],
-        $testData['merci_score'],
-        $testData['merci_diagnosis'],
-        $testData['error_type'],
-        $testData['faf_grade'],
-        $testData['oct_score'],
-        $testData['vf_score'],
-        $testData['actual_diagnosis'],
-        $testData['medication_name'],
-        $testData['dosage'],
-        $testData['dosage_unit'],
-        $testData['duration_days'],
-        $testData['cumulative_dosage'],
-        $testData['date_of_continuation'],
-        $testData['treatment_notes']
+        $test_id,
+        $eye_data['eye'],
+        $eye_data['age'],
+        $eye_data['report_diagnosis'],
+        $eye_data['exclusion'],
+        $eye_data['merci_score'],
+        $eye_data['merci_diagnosis'],
+        $eye_data['error_type'],
+        $eye_data['faf_grade'],
+        $eye_data['oct_score'],
+        $eye_data['vf_score'],
+        $eye_data['actual_diagnosis'],
+        $eye_data['medication_name'],
+        $eye_data['dosage'],
+        $eye_data['dosage_unit'],
+        $eye_data['duration_days'],
+        $eye_data['cumulative_dosage'],
+        $eye_data['date_of_continuation'],
+        $eye_data['treatment_notes']
     );
 
-    if (!$stmt_eye->execute()) {
-        throw new Exception("Test eye insert/update failed: " . $stmt_eye->error);
-    }
-    $stmt_eye->close();
+    $stmt->execute();
+    $stmt->close();
 }
+
+function checkDuplicateTest($conn, $patient_id, $date_of_test, $eye) {
+    $query = "
+        SELECT te.test_id
+        FROM tests t
+        JOIN test_eyes te ON t.test_id = te.test_id
+        WHERE t.patient_id = ? AND t.date_of_test = ? AND te.eye = ?
+    ";
+    $stmt = $conn->prepare($query);
+    $stmt->bind_param("sss", $patient_id, $date_of_test, $eye);
+    $stmt->execute();
+    $stmt->store_result();
+    $is_duplicate = $stmt->num_rows > 0;
+    $stmt->close();
+
+    return $is_duplicate;
+}
+
+function importTestImage($conn, $test_id, $eye, $image_type, $file_path) {
+    // Example: image_type = 'oct_reference', file_path = 'uploads/abc.jpg'
+    // This will update test_eyes.oct_reference or other image field
+    $allowed_fields = ['oct_reference', 'vf_reference', 'faf_reference'];
+
+    if (!in_array($image_type, $allowed_fields)) {
+        throw new Exception("Invalid image type: $image_type");
+    }
+
+    // Ensure the column exists in your `test_eyes` table
+    $sql = "UPDATE test_eyes SET {$image_type} = ? WHERE test_id = ? AND eye = ?";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param("sss", $file_path, $test_id, $eye);
+    $stmt->execute();
+    $stmt->close();
+}
+?>
