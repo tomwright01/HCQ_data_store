@@ -310,6 +310,14 @@ if ($search_patient_id || $filter_active) {
             t.cumulative_dosage, 
             t.date_of_continuation, 
             t.treatment_notes,
+            t.faf_reference_od,  // ← Add these
+            t.faf_reference_os,
+            t.oct_reference_od,
+            t.oct_reference_os,
+            t.vf_reference_od,
+            t.vf_reference_os,
+            t.mferg_reference_od,
+            t.mferg_reference_os,
             p.subject_id, 
             p.date_of_birth, 
             p.location AS patient_location
