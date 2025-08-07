@@ -310,7 +310,7 @@ if ($search_patient_id || $filter_active) {
             t.cumulative_dosage, 
             t.date_of_continuation, 
             t.treatment_notes,
-            t.faf_reference_od,  // ← Add these
+            t.faf_reference_od,  
             t.faf_reference_os,
             t.oct_reference_od,
             t.oct_reference_os,
