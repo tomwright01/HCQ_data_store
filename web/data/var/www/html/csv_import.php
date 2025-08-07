@@ -105,14 +105,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         
                         // Change the eye filter section to be more flexible:
                         $eyeValue = trim($data[5] ?? '');
-                        $eye = null;
-                        if (strtoupper($eyeValue) === 'OD') {
-                            $eye = 'OD';
-                        } elseif (strtoupper($eyeValue) === 'OS') {
-                            $eye = 'OS';
-                        }
+                        $eye = (strtoupper($eyeValue) === 'OD') ? 'OD' : 
+                               (strtoupper($eyeValue) === 'OS') ? 'OS' : null;
                         
-                        if ($eye === null && !empty($eyeValue)) {
+                        // Add validation feedback
+                        if ($eye === null && $eyeValue !== '') {
                             $results['errors'][] = "Line $lineNumber: Invalid eye value '{$eyeValue}' - must be OD or OS";
                         }
 
