@@ -2,106 +2,8 @@
 require_once 'config.php';
 require_once 'functions.php';
 
-// Enable error reporting (for development)
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
-
-// Initialize variables
-$search_patient_id = isset($_GET['search_patient_id']) ? trim($_GET['search_patient_id']) : '';
-$edit_mode = isset($_GET['edit']) && $_GET['edit'] === 'true';
-$message = '';
-$message_type = '';
-
-// Handle form submissions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['update_test_eye'])) {
-        // Handle test eye updates
-        $test_id = $_POST['test_id'];
-        $eye = $_POST['eye'];
-        
-        $update_data = [
-            'age' => isset($_POST['age']) ? (int)$_POST['age'] : null,
-            'report_diagnosis' => $_POST['report_diagnosis'] ?? 'no input',
-            'exclusion' => $_POST['exclusion'] ?? 'none',
-            'merci_score' => $_POST['merci_score'] ?? null,
-            'merci_diagnosis' => $_POST['merci_diagnosis'] ?? 'no value',
-            'error_type' => $_POST['error_type'] ?? 'none',
-            'faf_grade' => isset($_POST['faf_grade']) ? (int)$_POST['faf_grade'] : null,
-            'oct_score' => isset($_POST['oct_score']) ? (float)$_POST['oct_score'] : null,
-            'vf_score' => isset($_POST['vf_score']) ? (float)$_POST['vf_score'] : null,
-            'actual_diagnosis' => $_POST['actual_diagnosis'] ?? 'other',
-            'medication_name' => $_POST['medication_name'] ?? null,
-            'dosage' => isset($_POST['dosage']) ? (float)$_POST['dosage'] : null,
-            'dosage_unit' => $_POST['dosage_unit'] ?? 'mg',
-            'duration_days' => isset($_POST['duration_days']) ? (int)$_POST['duration_days'] : null,
-            'cumulative_dosage' => isset($_POST['cumulative_dosage']) ? (float)$_POST['cumulative_dosage'] : null,
-            'date_of_continuation' => $_POST['date_of_continuation'] ?? null,
-            'treatment_notes' => $_POST['treatment_notes'] ?? null
-        ];
-        
-        try {
-            $stmt = $conn->prepare("
-                UPDATE test_eyes SET 
-                    age = ?, report_diagnosis = ?, exclusion = ?, merci_score = ?, merci_diagnosis = ?, 
-                    error_type = ?, faf_grade = ?, oct_score = ?, vf_score = ?, actual_diagnosis = ?, 
-                    medication_name = ?, dosage = ?, dosage_unit = ?, duration_days = ?, 
-                    cumulative_dosage = ?, date_of_continuation = ?, treatment_notes = ?
-                WHERE test_id = ? AND eye = ?
-            ");
-            
-            $stmt->bind_param(
-                "issssssddsssdsssss",
-                $update_data['age'],
-                $update_data['report_diagnosis'],
-                $update_data['exclusion'],
-                $update_data['merci_score'],
-                $update_data['merci_diagnosis'],
-                $update_data['error_type'],
-                $update_data['faf_grade'],
-                $update_data['oct_score'],
-                $update_data['vf_score'],
-                $update_data['actual_diagnosis'],
-                $update_data['medication_name'],
-                $update_data['dosage'],
-                $update_data['dosage_unit'],
-                $update_data['duration_days'],
-                $update_data['cumulative_dosage'],
-                $update_data['date_of_continuation'],
-                $update_data['treatment_notes'],
-                $test_id,
-                $eye
-            );
-            
-            if ($stmt->execute()) {
-                $message = "Test eye record updated successfully!";
-                $message_type = "success";
-            } else {
-                throw new Exception("Execute failed: " . $stmt->error);
-            }
-        } catch (Exception $e) {
-            $message = "Error updating record: " . $e->getMessage();
-            $message_type = "error";
-        }
-    }
-}
-
-// Get all patients (for the main view)
+// Get all patients with their test counts
 $patients = getPatientsWithTests($conn);
-
-// Get specific patient data if searching
-$search_results = [];
-if ($search_patient_id) {
-    $stmt = $conn->prepare("
-        SELECT p.*, t.test_id, t.location AS test_location, t.date_of_test
-        FROM patients p
-        LEFT JOIN tests t ON p.patient_id = t.patient_id
-        WHERE p.patient_id = ? OR p.subject_id = ?
-        ORDER BY t.date_of_test DESC
-    ");
-    $stmt->bind_param("ss", $search_patient_id, $search_patient_id);
-    $stmt->execute();
-    $search_results = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-}
 ?>
 
 <!DOCTYPE html>
@@ -109,633 +11,281 @@ if ($search_patient_id) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clinical Patient Data Viewer</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <title>Patient Data Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
-        body {
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-            color: #333;
-        }
-        
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        h1, h2, h3 {
-            color: #2c3e50;
-        }
-        
-        .search-box {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .search-form {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .search-input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 16px;
-        }
-        
-        .search-button {
-            padding: 10px 20px;
-            background: #3498db;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
         .patient-card {
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
+            transition: all 0.3s ease;
             margin-bottom: 20px;
-            background: white;
         }
-        
-        .patient-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 10px;
+        .patient-card:hover {
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
-        
         .test-card {
-            border-left: 3px solid #3498db;
-            padding: 10px 15px;
-            margin: 15px 0;
-            background: #f8f9fa;
+            border-left: 4px solid #0d6efd;
+            margin-bottom: 15px;
         }
-        
-        .eye-card {
-            border: 1px dashed #aaa;
-            padding: 10px;
-            margin: 10px 0;
-            background: white;
+        .eye-badge {
+            font-size: 0.8rem;
+            margin-right: 5px;
         }
-        
-        .data-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 10px 0;
+        .os-badge { background-color: #6f42c1; }
+        .od-badge { background-color: #20c997; }
+        .search-box {
+            position: relative;
+            margin-bottom: 20px;
         }
-        
-        .data-table th, .data-table td {
-            padding: 8px;
-            border: 1px solid #ddd;
-            text-align: left;
+        .search-box i {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #6c757d;
         }
-        
-        .data-table th {
-            background: #3498db;
-            color: white;
+        .search-input {
+            padding-left: 35px;
         }
-        
-        .edit-form input, .edit-form select {
-            width: 100%;
-            padding: 5px;
-            margin: 2px 0;
+        .diagnosis-badge {
+            font-size: 0.75rem;
+            text-transform: uppercase;
         }
-        
-        .action-button {
-            padding: 5px 10px;
-            margin: 2px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 14px;
-        }
-        
-        .edit-button {
-            background: #f39c12;
-            color: white;
-        }
-        
-        .save-button {
-            background: #2ecc71;
-            color: white;
-        }
-        
-        .cancel-button {
-            background: #e74c3c;
-            color: white;
-        }
-        
-        .message {
-            padding: 10px;
-            margin: 10px 0;
-            border-radius: 4px;
-        }
-        
-        .success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        .image-links {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 5px;
-        }
-        
-        .image-link {
-            padding: 3px 6px;
-            background: #eaf2f8;
-            border-radius: 3px;
-            font-size: 12px;
-            text-decoration: none;
-            color: #2980b9;
-        }
+        .normal { background-color: #198754; }
+        .abnormal { background-color: #dc3545; }
+        .exclude { background-color: #6c757d; }
+        .no-input { background-color: #ffc107; color: #000; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Clinical Patient Records</h1>
-        
-        <?php if ($message): ?>
-            <div class="message <?= $message_type ?>">
-                <?= htmlspecialchars($message) ?>
+    <div class="container-fluid py-4">
+        <div class="row mb-4">
+            <div class="col">
+                <h1><i class="bi bi-people-fill"></i> Patient Data Dashboard</h1>
+                <p class="lead">View and manage patient records and test results</p>
             </div>
-        <?php endif; ?>
-        
-        <div class="search-box">
-            <form method="GET" action="index.php" class="search-form">
-                <input type="text" name="search_patient_id" class="search-input" 
-                       placeholder="Enter Patient ID or Subject ID" value="<?= htmlspecialchars($search_patient_id) ?>">
-                <button type="submit" class="search-button">
-                    <i class="fas fa-search"></i> Search
-                </button>
-                <?php if ($search_patient_id): ?>
-                    <a href="index.php" class="action-button cancel-button">
-                        <i class="fas fa-times"></i> Clear
-                    </a>
-                    <?php if (!$edit_mode): ?>
-                        <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>&edit=true" 
-                           class="action-button edit-button">
-                            <i class="fas fa-edit"></i> Edit Mode
-                        </a>
-                    <?php else: ?>
-                        <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" 
-                           class="action-button cancel-button">
-                            <i class="fas fa-times"></i> Cancel Edit
-                        </a>
-                    <?php endif; ?>
-                <?php endif; ?>
-            </form>
+            <div class="col-auto">
+                <a href="csv_import.php" class="btn btn-primary">
+                    <i class="bi bi-upload"></i> Import CSV
+                </a>
+            </div>
         </div>
-        
-        <?php if ($search_patient_id && !empty($search_results)): ?>
-            <!-- Display search results -->
-            <?php 
-            $grouped_results = [];
-            foreach ($search_results as $row) {
-                $patient_id = $row['patient_id'];
-                if (!isset($grouped_results[$patient_id])) {
-                    $grouped_results[$patient_id] = [
-                        'patient' => $row,
-                        'tests' => []
-                    ];
-                }
-                if ($row['test_id']) {
-                    $grouped_results[$patient_id]['tests'][] = $row;
-                }
-            }
-            ?>
-            
-            <?php foreach ($grouped_results as $group): ?>
-                <div class="patient-card">
-                    <div class="patient-header">
-                        <h2>
-                            <?= htmlspecialchars($group['patient']['subject_id']) ?> 
-                            (<?= htmlspecialchars($group['patient']['patient_id']) ?>)
-                        </h2>
-                        <div>
-                            <strong>Location:</strong> <?= htmlspecialchars($group['patient']['location']) ?> | 
-                            <strong>DOB:</strong> <?= htmlspecialchars($group['patient']['date_of_birth']) ?>
+
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-white bg-primary">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-person-vcard"></i> Patients</h5>
+                        <p class="card-text display-6"><?= count($patients) ?></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-success">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-clipboard2-pulse"></i> Total Tests</h5>
+                        <p class="card-text display-6">
+                            <?= array_sum(array_map(fn($p) => count(getTestsByPatient($conn, $p['patient_id'])), $patients)) ?>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-info">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-eye"></i> Eye Records</h5>
+                        <p class="card-text display-6">
+                            <?php
+                            $totalEyes = 0;
+                            foreach ($patients as $patient) {
+                                $tests = getTestsByPatient($conn, $patient['patient_id']);
+                                foreach ($tests as $test) {
+                                    $totalEyes += count(getTestEyes($conn, $test['test_id']));
+                                }
+                            }
+                            echo $totalEyes;
+                            ?>
+                        </p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-white bg-warning">
+                    <div class="card-body">
+                        <h5 class="card-title"><i class="bi bi-hospital"></i> Locations</h5>
+                        <p class="card-text">KH, CHUSJ, IWK, IVEY</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search and Filter -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="search-box">
+                            <i class="bi bi-search"></i>
+                            <input type="text" id="searchInput" class="form-control search-input" placeholder="Search patients...">
                         </div>
                     </div>
-                    
-                    <?php if (empty($group['tests'])): ?>
-                        <p>No tests found for this patient.</p>
-                    <?php else: ?>
-                        <?php foreach ($group['tests'] as $test): ?>
-                            <div class="test-card">
-                                <h3>
-                                    Test ID: <?= htmlspecialchars($test['test_id']) ?> | 
-                                    Date: <?= htmlspecialchars($test['date_of_test']) ?> | 
-                                    Location: <?= htmlspecialchars($test['test_location']) ?>
-                                </h3>
-                                
-                                <?php 
-                                $eyes = getTestEyes($conn, $test['test_id']);
-                                if (empty($eyes)): ?>
-                                    <p>No eye data found for this test.</p>
-                                <?php else: ?>
-                                    <?php foreach ($eyes as $eye): ?>
-                                        <div class="eye-card">
-                                            <?php if ($edit_mode): ?>
-                                                <form method="POST" action="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>&edit=true" class="edit-form">
-                                                    <input type="hidden" name="test_id" value="<?= htmlspecialchars($eye['test_id']) ?>">
-                                                    <input type="hidden" name="eye" value="<?= htmlspecialchars($eye['eye']) ?>">
-                                                    
-                                                    <table class="data-table">
-                                                        <tr>
-                                                            <th>Field</th>
-                                                            <th>Value</th>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Eye</strong></td>
-                                                            <td><?= htmlspecialchars($eye['eye']) ?></td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Age</strong></td>
-                                                            <td>
-                                                                <input type="number" name="age" value="<?= htmlspecialchars($eye['age'] ?? '') ?>" min="0" max="120">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Report Diagnosis</strong></td>
-                                                            <td>
-                                                                <select name="report_diagnosis">
-                                                                    <option value="normal" <?= $eye['report_diagnosis'] === 'normal' ? 'selected' : '' ?>>normal</option>
-                                                                    <option value="abnormal" <?= $eye['report_diagnosis'] === 'abnormal' ? 'selected' : '' ?>>abnormal</option>
-                                                                    <option value="exclude" <?= $eye['report_diagnosis'] === 'exclude' ? 'selected' : '' ?>>exclude</option>
-                                                                    <option value="no input" <?= $eye['report_diagnosis'] === 'no input' ? 'selected' : '' ?>>no input</option>
-                                                                </select>
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Exclusion</strong></td>
-                                                            <td>
-                                                                <select name="exclusion">
-                                                                    <option value="none" <?= $eye['exclusion'] === 'none' ? 'selected' : '' ?>>none</option>
-                                                                    <option value="retinal detachment" <?= $eye['exclusion'] === 'retinal detachment' ? 'selected' : '' ?>>retinal detachment</option>
-                                                                    <option value="generalized retinal dysfunction" <?= $eye['exclusion'] === 'generalized retinal dysfunction' ? 'selected' : '' ?>>generalized retinal dysfunction</option>
-                                                                    <option value="unilateral testing" <?= $eye['exclusion'] === 'unilateral testing' ? 'selected' : '' ?>>unilateral testing</option>
-                                                                </select>
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>MERCI Score</strong></td>
-                                                            <td>
-                                                                <input type="text" name="merci_score" value="<?= htmlspecialchars($eye['merci_score'] ?? '') ?>">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>MERCI Diagnosis</strong></td>
-                                                            <td>
-                                                                <select name="merci_diagnosis">
-                                                                    <option value="normal" <?= $eye['merci_diagnosis'] === 'normal' ? 'selected' : '' ?>>normal</option>
-                                                                    <option value="abnormal" <?= $eye['merci_diagnosis'] === 'abnormal' ? 'selected' : '' ?>>abnormal</option>
-                                                                    <option value="no value" <?= $eye['merci_diagnosis'] === 'no value' ? 'selected' : '' ?>>no value</option>
-                                                                </select>
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Error Type</strong></td>
-                                                            <td>
-                                                                <select name="error_type">
-                                                                    <option value="none" <?= $eye['error_type'] === 'none' ? 'selected' : '' ?>>none</option>
-                                                                    <option value="TN" <?= $eye['error_type'] === 'TN' ? 'selected' : '' ?>>TN</option>
-                                                                    <option value="FP" <?= $eye['error_type'] === 'FP' ? 'selected' : '' ?>>FP</option>
-                                                                    <option value="TP" <?= $eye['error_type'] === 'TP' ? 'selected' : '' ?>>TP</option>
-                                                                    <option value="FN" <?= $eye['error_type'] === 'FN' ? 'selected' : '' ?>>FN</option>
-                                                                </select>
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>FAF Grade</strong></td>
-                                                            <td>
-                                                                <input type="number" name="faf_grade" value="<?= htmlspecialchars($eye['faf_grade'] ?? '') ?>" min="1" max="4">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>OCT Score</strong></td>
-                                                            <td>
-                                                                <input type="number" step="0.01" name="oct_score" value="<?= htmlspecialchars($eye['oct_score'] ?? '') ?>">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>VF Score</strong></td>
-                                                            <td>
-                                                                <input type="number" step="0.01" name="vf_score" value="<?= htmlspecialchars($eye['vf_score'] ?? '') ?>">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Actual Diagnosis</strong></td>
-                                                            <td>
-                                                                <select name="actual_diagnosis">
-                                                                    <option value="RA" <?= $eye['actual_diagnosis'] === 'RA' ? 'selected' : '' ?>>RA</option>
-                                                                    <option value="SLE" <?= $eye['actual_diagnosis'] === 'SLE' ? 'selected' : '' ?>>SLE</option>
-                                                                    <option value="Sjogren" <?= $eye['actual_diagnosis'] === 'Sjogren' ? 'selected' : '' ?>>Sjogren</option>
-                                                                    <option value="other" <?= $eye['actual_diagnosis'] === 'other' ? 'selected' : '' ?>>other</option>
-                                                                </select>
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Medication</strong></td>
-                                                            <td>
-                                                                <input type="text" name="medication_name" value="<?= htmlspecialchars($eye['medication_name'] ?? '') ?>">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Dosage</strong></td>
-                                                            <td>
-                                                                <div style="display: flex; gap: 5px;">
-                                                                    <input type="number" step="0.01" name="dosage" value="<?= htmlspecialchars($eye['dosage'] ?? '') ?>" style="flex: 1;">
-                                                                    <select name="dosage_unit" style="width: 80px;">
-                                                                        <option value="mg" <?= $eye['dosage_unit'] === 'mg' ? 'selected' : '' ?>>mg</option>
-                                                                        <option value="g" <?= $eye['dosage_unit'] === 'g' ? 'selected' : '' ?>>g</option>
-                                                                    </select>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Duration (days)</strong></td>
-                                                            <td>
-                                                                <input type="number" name="duration_days" value="<?= htmlspecialchars($eye['duration_days'] ?? '') ?>">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Cumulative Dosage</strong></td>
-                                                            <td>
-                                                                <input type="number" step="0.01" name="cumulative_dosage" value="<?= htmlspecialchars($eye['cumulative_dosage'] ?? '') ?>">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Date of Continuation</strong></td>
-                                                            <td>
-                                                                <input type="date" name="date_of_continuation" value="<?= htmlspecialchars($eye['date_of_continuation'] ?? '') ?>">
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Treatment Notes</strong></td>
-                                                            <td>
-                                                                <textarea name="treatment_notes" style="width: 100%; min-height: 60px;"><?= htmlspecialchars($eye['treatment_notes'] ?? '') ?></textarea>
-                                                            </td>
-                                                        </tr>
-                                                        <tr>
-                                                            <td><strong>Images</strong></td>
-                                                            <td>
-                                                                <div class="image-links">
-                                                                    <?php if (!empty($eye['faf_reference'])): ?>
-                                                                        <a href="<?= getDynamicImagePath($eye['faf_reference']) ?>" class="image-link" target="_blank">FAF</a>
-                                                                    <?php endif; ?>
-                                                                    <?php if (!empty($eye['oct_reference'])): ?>
-                                                                        <a href="<?= getDynamicImagePath($eye['oct_reference']) ?>" class="image-link" target="_blank">OCT</a>
-                                                                    <?php endif; ?>
-                                                                    <?php if (!empty($eye['vf_reference'])): ?>
-                                                                        <a href="<?= getDynamicImagePath($eye['vf_reference']) ?>" class="image-link" target="_blank">VF</a>
-                                                                    <?php endif; ?>
-                                                                    <?php if (!empty($eye['mferg_reference'])): ?>
-                                                                        <a href="<?= getDynamicImagePath($eye['mferg_reference']) ?>" class="image-link" target="_blank">MFERG</a>
-                                                                    <?php endif; ?>
-                                                                    <?php if (empty($eye['faf_reference']) && empty($eye['oct_reference']) && empty($eye['vf_reference']) && empty($eye['mferg_reference'])): ?>
-                                                                        No images
-                                                                    <?php endif; ?>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    </table>
-                                                    
-                                                    <div style="margin-top: 10px;">
-                                                        <button type="submit" name="update_test_eye" class="action-button save-button">
-                                                            <i class="fas fa-save"></i> Save Changes
-                                                        </button>
-                                                        <a href="index.php?search_patient_id=<?= urlencode($search_patient_id) ?>" class="action-button cancel-button">
-                                                            <i class="fas fa-times"></i> Cancel
-                                                        </a>
-                                                    </div>
-                                                </form>
-                                            <?php else: ?>
-                                                <h4>Eye: <?= htmlspecialchars($eye['eye']) ?></h4>
-                                                <table class="data-table">
-                                                    <tr>
-                                                        <th>Field</th>
-                                                        <th>Value</th>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Age</strong></td>
-                                                        <td><?= htmlspecialchars($eye['age'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Report Diagnosis</strong></td>
-                                                        <td><?= htmlspecialchars($eye['report_diagnosis']) ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Exclusion</strong></td>
-                                                        <td><?= htmlspecialchars($eye['exclusion']) ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>MERCI Score</strong></td>
-                                                        <td><?= htmlspecialchars($eye['merci_score'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>MERCI Diagnosis</strong></td>
-                                                        <td><?= htmlspecialchars($eye['merci_diagnosis']) ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Error Type</strong></td>
-                                                        <td><?= htmlspecialchars($eye['error_type'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>FAF Grade</strong></td>
-                                                        <td><?= htmlspecialchars($eye['faf_grade'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>OCT Score</strong></td>
-                                                        <td><?= htmlspecialchars($eye['oct_score'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>VF Score</strong></td>
-                                                        <td><?= htmlspecialchars($eye['vf_score'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Actual Diagnosis</strong></td>
-                                                        <td><?= htmlspecialchars($eye['actual_diagnosis']) ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Medication</strong></td>
-                                                        <td><?= htmlspecialchars($eye['medication_name'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Dosage</strong></td>
-                                                        <td>
-                                                            <?= htmlspecialchars($eye['dosage'] ?? 'N/A') ?> 
-                                                            <?= htmlspecialchars($eye['dosage_unit'] ?? '') ?>
-                                                        </td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Duration (days)</strong></td>
-                                                        <td><?= htmlspecialchars($eye['duration_days'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Cumulative Dosage</strong></td>
-                                                        <td><?= htmlspecialchars($eye['cumulative_dosage'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Date of Continuation</strong></td>
-                                                        <td><?= htmlspecialchars($eye['date_of_continuation'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Treatment Notes</strong></td>
-                                                        <td><?= htmlspecialchars($eye['treatment_notes'] ?? 'N/A') ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Images</strong></td>
-                                                        <td>
-                                                            <div class="image-links">
-                                                                <?php if (!empty($eye['faf_reference'])): ?>
-                                                                    <a href="<?= getDynamicImagePath($eye['faf_reference']) ?>" class="image-link" target="_blank">FAF</a>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($eye['oct_reference'])): ?>
-                                                                    <a href="<?= getDynamicImagePath($eye['oct_reference']) ?>" class="image-link" target="_blank">OCT</a>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($eye['vf_reference'])): ?>
-                                                                    <a href="<?= getDynamicImagePath($eye['vf_reference']) ?>" class="image-link" target="_blank">VF</a>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($eye['mferg_reference'])): ?>
-                                                                    <a href="<?= getDynamicImagePath($eye['mferg_reference']) ?>" class="image-link" target="_blank">MFERG</a>
-                                                                <?php endif; ?>
-                                                                <?php if (empty($eye['faf_reference']) && empty($eye['oct_reference']) && empty($eye['vf_reference']) && empty($eye['mferg_reference'])): ?>
-                                                                    No images
-                                                                <?php endif; ?>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                </table>
-                                            <?php endif; ?>
-                                        </div>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
+                    <div class="col-md-3">
+                        <select id="locationFilter" class="form-select">
+                            <option value="">All Locations</option>
+                            <option value="KH">KH</option>
+                            <option value="CHUSJ">CHUSJ</option>
+                            <option value="IWK">IWK</option>
+                            <option value="IVEY">IVEY</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="diagnosisFilter" class="form-select">
+                            <option value="">All Diagnoses</option>
+                            <option value="normal">Normal</option>
+                            <option value="abnormal">Abnormal</option>
+                            <option value="exclude">Exclude</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Patients List -->
+        <div class="row" id="patientContainer">
+            <?php foreach ($patients as $patient): ?>
+                <?php
+                $tests = getTestsByPatient($conn, $patient['patient_id']);
+                $dob = new DateTime($patient['date_of_birth']);
+                $age = $dob->diff(new DateTime())->y;
+                ?>
+                <div class="col-lg-6 patient-item" data-location="<?= $patient['location'] ?>">
+                    <div class="card patient-card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="bi bi-person-circle"></i> 
+                                <?= htmlspecialchars($patient['subject_id']) ?>
+                            </h5>
+                            <span class="badge bg-secondary"><?= $patient['location'] ?></span>
+                        </div>
+                        <div class="card-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <p><strong>Patient ID:</strong> <?= $patient['patient_id'] ?></p>
+                                    <p><strong>Age:</strong> <?= $age ?> years</p>
+                                </div>
+                                <div class="col-md-6">
+                                    <p><strong>DOB:</strong> <?= $dob->format('M j, Y') ?></p>
+                                    <p><strong>Tests:</strong> <?= count($tests) ?></p>
+                                </div>
                             </div>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+
+                            <!-- Tests Accordion -->
+                            <div class="accordion" id="testsAccordion-<?= $patient['patient_id'] ?>">
+                                <?php foreach ($tests as $index => $test): ?>
+                                    <?php
+                                    $testEyes = getTestEyes($conn, $test['test_id']);
+                                    $testDate = new DateTime($test['date_of_test']);
+                                    ?>
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header" id="heading-<?= $test['test_id'] ?>">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" 
+                                                    data-bs-target="#collapse-<?= $test['test_id'] ?>" 
+                                                    aria-expanded="false" aria-controls="collapse-<?= $test['test_id'] ?>">
+                                                <i class="bi bi-clipboard2-pulse me-2"></i>
+                                                <strong><?= $testDate->format('M j, Y') ?></strong>
+                                                <span class="ms-2 badge bg-primary"><?= $test['test_id'] ?></span>
+                                                <span class="ms-2 badge bg-dark"><?= count($testEyes) ?> eye records</span>
+                                            </button>
+                                        </h2>
+                                        <div id="collapse-<?= $test['test_id'] ?>" class="accordion-collapse collapse" 
+                                             aria-labelledby="heading-<?= $test['test_id'] ?>" 
+                                             data-bs-parent="#testsAccordion-<?= $patient['patient_id'] ?>">
+                                            <div class="accordion-body">
+                                                <?php foreach ($testEyes as $eye): ?>
+                                                    <div class="card test-card mb-3">
+                                                        <div class="card-body">
+                                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                                <span class="badge <?= strtolower($eye['eye']) ?>-badge eye-badge">
+                                                                    <?= $eye['eye'] ?>
+                                                                </span>
+                                                                <span class="badge diagnosis-badge <?= $eye['report_diagnosis'] ?>">
+                                                                    <?= $eye['report_diagnosis'] ?>
+                                                                </span>
+                                                            </div>
+                                                            
+                                                            <div class="row">
+                                                                <div class="col-md-6">
+                                                                    <p><strong>Age at Test:</strong> <?= $eye['age'] ?? 'N/A' ?></p>
+                                                                    <p><strong>MERCI Score:</strong> <?= $eye['merci_score'] ?? 'N/A' ?></p>
+                                                                    <p><strong>OCT Score:</strong> <?= $eye['oct_score'] ?? 'N/A' ?></p>
+                                                                </div>
+                                                                <div class="col-md-6">
+                                                                    <p><strong>VF Score:</strong> <?= $eye['vf_score'] ?? 'N/A' ?></p>
+                                                                    <p><strong>FAF Grade:</strong> <?= $eye['faf_grade'] ?? 'N/A' ?></p>
+                                                                    <p><strong>Diagnosis:</strong> <?= $eye['actual_diagnosis'] ?></p>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <?php if ($eye['medication_name'] || $eye['dosage']): ?>
+                                                                <div class="alert alert-info mt-2 p-2">
+                                                                    <strong>Medication:</strong> 
+                                                                    <?= $eye['medication_name'] ? htmlspecialchars($eye['medication_name']) : 'N/A' ?>
+                                                                    <?php if ($eye['dosage']): ?>
+                                                                        (<?= $eye['dosage'] ?> <?= $eye['dosage_unit'] ?>)
+                                                                    <?php endif; ?>
+                                                                </div>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    </div>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             <?php endforeach; ?>
-            
-        <?php elseif ($search_patient_id): ?>
-            <p>No patient found with ID: <?= htmlspecialchars($search_patient_id) ?></p>
-        <?php else: ?>
-            <!-- Display all patients -->
-            <?php if (empty($patients)): ?>
-                <p>No patient data found.</p>
-            <?php else: ?>
-                <?php foreach ($patients as $patient): ?>
-                    <div class="patient-card">
-                        <div class="patient-header">
-                            <h2>
-                                <?= htmlspecialchars($patient['subject_id']) ?> 
-                                (<?= htmlspecialchars($patient['patient_id']) ?>)
-                            </h2>
-                            <div>
-                                <strong>Location:</strong> <?= htmlspecialchars($patient['location']) ?> | 
-                                <strong>DOB:</strong> <?= htmlspecialchars($patient['date_of_birth']) ?>
-                            </div>
-                        </div>
-                        
-                        <?php 
-                        $tests = getTestsByPatient($conn, $patient['patient_id']);
-                        if (empty($tests)): ?>
-                            <p>No tests found for this patient.</p>
-                        <?php else: ?>
-                            <?php foreach ($tests as $test): ?>
-                                <div class="test-card">
-                                    <h3>
-                                        Test ID: <?= htmlspecialchars($test['test_id']) ?> | 
-                                        Date: <?= htmlspecialchars($test['date_of_test']) ?> | 
-                                        Location: <?= htmlspecialchars($test['location']) ?>
-                                    </h3>
-                                    
-                                    <?php 
-                                    $eyes = getTestEyes($conn, $test['test_id']);
-                                    if (empty($eyes)): ?>
-                                        <p>No eye data found for this test.</p>
-                                    <?php else: ?>
-                                        <?php foreach ($eyes as $eye): ?>
-                                            <div class="eye-card">
-                                                <h4>Eye: <?= htmlspecialchars($eye['eye']) ?></h4>
-                                                <table class="data-table">
-                                                    <tr>
-                                                        <td><strong>Report Diagnosis</strong></td>
-                                                        <td><?= htmlspecialchars($eye['report_diagnosis']) ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>MERCI Diagnosis</strong></td>
-                                                        <td><?= htmlspecialchars($eye['merci_diagnosis']) ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Actual Diagnosis</strong></td>
-                                                        <td><?= htmlspecialchars($eye['actual_diagnosis']) ?></td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td><strong>Images</strong></td>
-                                                        <td>
-                                                            <div class="image-links">
-                                                                <?php if (!empty($eye['faf_reference'])): ?>
-                                                                    <a href="<?= getDynamicImagePath($eye['faf_reference']) ?>" class="image-link" target="_blank">FAF</a>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($eye['oct_reference'])): ?>
-                                                                    <a href="<?= getDynamicImagePath($eye['oct_reference']) ?>" class="image-link" target="_blank">OCT</a>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($eye['vf_reference'])): ?>
-                                                                    <a href="<?= getDynamicImagePath($eye['vf_reference']) ?>" class="image-link" target="_blank">VF</a>
-                                                                <?php endif; ?>
-                                                                <?php if (!empty($eye['mferg_reference'])): ?>
-                                                                    <a href="<?= getDynamicImagePath($eye['mferg_reference']) ?>" class="image-link" target="_blank">MFERG</a>
-                                                                <?php endif; ?>
-                                                                <?php if (empty($eye['faf_reference']) && empty($eye['oct_reference']) && empty($eye['vf_reference']) && empty($eye['mferg_reference'])): ?>
-                                                                    No images
-                                                                <?php endif; ?>
-                                                            </div>
-                                                        </td>
-                                                    </tr>
-                                                </table>
-                                                <div style="margin-top: 10px;">
-                                                    <a href="index.php?search_patient_id=<?= urlencode($patient['patient_id']) ?>" class="action-button">
-                                                        <i class="fas fa-search"></i> View Details
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    <?php endif; ?>
-                                </div>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        <?php endif; ?>
+        </div>
     </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Search and filter functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchInput');
+            const locationFilter = document.getElementById('locationFilter');
+            const diagnosisFilter = document.getElementById('diagnosisFilter');
+            const patientItems = document.querySelectorAll('.patient-item');
+            
+            function filterPatients() {
+                const searchTerm = searchInput.value.toLowerCase();
+                const locationValue = locationFilter.value;
+                const diagnosisValue = diagnosisFilter.value.toLowerCase();
+                
+                patientItems.forEach(item => {
+                    const patientText = item.textContent.toLowerCase();
+                    const patientLocation = item.getAttribute('data-location');
+                    const patientDiagnoses = item.querySelectorAll('.diagnosis-badge');
+                    
+                    let matchesSearch = searchTerm === '' || patientText.includes(searchTerm);
+                    let matchesLocation = locationValue === '' || patientLocation === locationValue;
+                    let matchesDiagnosis = diagnosisValue === '' || 
+                        Array.from(patientDiagnoses).some(badge => 
+                            badge.textContent.toLowerCase().includes(diagnosisValue));
+                    
+                    if (matchesSearch && matchesLocation && matchesDiagnosis) {
+                        item.style.display = 'block';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+            }
+            
+            searchInput.addEventListener('input', filterPatients);
+            locationFilter.addEventListener('change', filterPatients);
+            diagnosisFilter.addEventListener('change', filterPatients);
+        });
+    </script>
 </body>
 </html>
-<?php
-$conn->close();
-?>
