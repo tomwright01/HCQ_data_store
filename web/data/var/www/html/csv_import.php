@@ -128,9 +128,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $vfScore = (isset($data[13]) && is_numeric($data[13])) ? round((float)$data[13], 2) : null;
 
                     // ================= DIAGNOSIS & MEDICATION =================
-                    $actualDiagnosis = ucfirst(strtolower($data[14] ?? 'other'));
-                    if (!in_array($actualDiagnosis, ['RA', 'SLE', 'Sjogren', 'Other'])) {
-                        $actualDiagnosis = 'Other';
+                    $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
+                    $actualDiagnosis  = 'other';            // ← default value
+                    if (!empty($data[14])) {
+                      $d = ucfirst(strtolower(trim($data[14])));
+                      $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
                     }
 
                     $dosage = (isset($data[15]) && is_numeric($data[15])) ? round((float)$data[15], 2) : null;
@@ -138,13 +140,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $cumulativeDosage = (isset($data[17]) && is_numeric($data[17])) ? round((float)$data[17], 2) : null;
 
                     // Date of continuation
-                    $dateOfContinuation = null;
-                    if (!empty($data[18])) {
-                        $contDate = DateTime::createFromFormat('m/d/Y', $data[18]);
-                        if ($contDate) {
-                            $dateOfContinuation = $contDate->format('Y-m-d');
-                        }
+                    $date_of_continuation = trim($data[18] ?? '');  // Get value from column 18
+                    if ($date_of_continuation === '') {
+                        $date_of_continuation = null;  // Store NULL if empty
                     }
+
 
                     // ================= DATABASE OPERATIONS =================
                     // Default location
