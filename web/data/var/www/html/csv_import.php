@@ -104,11 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $testId = preg_replace('/\s+/', '_', $testIdRaw);
                         
                         // Change the eye filter section to be more flexible:
-                        $eyeValue = trim(strtoupper($data[5] ?? ''));
-                        $eye = in_array($eyeValue, ['OD', 'OS']) ? $eyeValue : null;
-                        if ($eyeValue && !in_array($eyeValue, ['OD', 'OS'])) {
-                            $import_results['errors'][] = "Line $lineNumber: Invalid eye value '{$data[5]}' - must be OD or OS";
-                        }
+                        $eyeValue = trim($data[5] ?? '');
+                        $eye = (strtoupper($eyeValue) === 'OD') ? 'OD' : 
+                               (strtoupper($eyeValue) === 'OS') ? 'OS' : null;
 
                         // Default location
                         $location = 'KH';
