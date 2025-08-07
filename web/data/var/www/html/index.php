@@ -3,7 +3,6 @@ require_once 'config.php';  // Provides $conn and helper functions
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-
 // Fetch all patients, ordered by subject_id
 $patients_sql = "SELECT * FROM patients ORDER BY subject_id";
 $patients_result = $conn->query($patients_sql);
@@ -113,6 +112,10 @@ if (!$patients_result) {
                             </tbody>
                         </table>
                     <?php endif; ?>
+
+                    <?php
+                    $eye_stmt->close();
+                    ?>
                 </div>
             <?php endwhile; ?>
         <?php endif; ?>
@@ -130,4 +133,3 @@ $conn->close();
 
 </body>
 </html>
-
