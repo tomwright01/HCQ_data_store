@@ -1,125 +1,159 @@
 <?php
-function generatePatientId($conn, $patient_name, $patient_dob) {
-    $patient_id = md5($patient_name . $patient_dob);
-    return $patient_id;
+// Include your DB connection and functions
+require_once 'config.php';      // contains $conn setup
+require_once 'functions.php';   // contains getOrCreatePatient, insertOrUpdateTest
+
+// Path to your CSV file
+$csvFile = 'path/to/your/file.csv';
+
+// Open CSV file
+if (!file_exists($csvFile) || !is_readable($csvFile)) {
+    die("CSV file not found or not readable");
 }
 
-function getOrCreatePatient($conn, $patient_name, $patient_dob) {
-    $patient_id = generatePatientId($conn, $patient_name, $patient_dob);
+if (($handle = fopen($csvFile, 'r')) === false) {
+    die("Failed to open CSV file");
+}
 
-    $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
-    $stmt->bind_param("s", $patient_id);
-    $stmt->execute();
-    $stmt->store_result();
+$lineNumber = 0;
 
-    if ($stmt->num_rows === 0) {
-        $stmt->close();
-        $stmt = $conn->prepare("INSERT INTO patients (patient_id, name, dob) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $patient_id, $patient_name, $patient_dob);
-        $stmt->execute();
+// Optional: if CSV has header, uncomment this line to skip header
+// fgetcsv($handle);
+
+while (($data = fgetcsv($handle)) !== false) {
+    $lineNumber++;
+
+    try {
+        // [0] Subject ID
+        $subjectId = trim($data[0] ?? '');
+        if ($subjectId === '') {
+            throw new Exception("Missing Subject ID");
+        }
+
+        // [1] Date of Birth (MM/DD/YYYY)
+        $dobObj = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
+        if (!$dobObj) {
+            throw new Exception("Invalid date format for DoB: " . ($data[1] ?? 'NULL'));
+        }
+        $dobFormatted = $dobObj->format('Y-m-d');
+
+        // Get or create patient
+        $patientId = getOrCreatePatient($conn, $subjectId, $dobFormatted);
+
+        // [2] Date of Test (MM/DD/YYYY)
+        $testDateObj = DateTime::createFromFormat('m/d/Y', $data[2] ?? '');
+        if (!$testDateObj) {
+            throw new Exception("Invalid date format for test date: " . ($data[2] ?? 'NULL'));
+        }
+        $testDateFormatted = $testDateObj->format('Y-m-d');
+
+        // [3] Age (optional, numeric 0-100)
+        $age = (isset($data[3]) && is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 100) ? (int)$data[3] : null;
+
+        // [4] Test ID (string, fallback to generated)
+        $testIdRaw = trim($data[4] ?? '');
+        if ($testIdRaw === '') {
+            $testIdRaw = 'gen_' . date('YmdHis') . '_' . bin2hex(random_bytes(3));
+        }
+        $testId = preg_replace('/\s+/', '_', $testIdRaw);
+
+        // [5] Eye ('OD' or 'OS')
+        $eyeValue = strtoupper(trim($data[5] ?? ''));
+        $eye = in_array($eyeValue, ['OD', 'OS']) ? $eyeValue : null;
+        if ($eye === null) {
+            throw new Exception("Invalid eye value '{$data[5]}' - must be 'OD' or 'OS'");
+        }
+
+        // [6] Report Diagnosis ('normal', 'abnormal', 'exclude', or default 'no input')
+        $reportDiagnosisValue = strtolower(trim($data[6] ?? ''));
+        $validReportDiagnosis = ['normal', 'abnormal', 'exclude'];
+        $reportDiagnosis = in_array($reportDiagnosisValue, $validReportDiagnosis) ? $reportDiagnosisValue : 'no input';
+
+        // [7] Exclusion ('retinal detachment', 'generalized retinal dysfunction', 'unilateral testing', or default 'none')
+        $exclusionValue = strtolower(trim($data[7] ?? ''));
+        $validExclusions = ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'];
+        $exclusion = in_array($exclusionValue, $validExclusions) ? $exclusionValue : 'none';
+
+        // [8] MERCI Score (int 0-100 or 'unable' or null)
+        $merciScoreRaw = strtolower(trim($data[8] ?? ''));
+        if ($merciScoreRaw === 'unable') {
+            $merciScore = 'unable';
+        } elseif (is_numeric($merciScoreRaw) && $merciScoreRaw >= 0 && $merciScoreRaw <= 100) {
+            $merciScore = (int)$merciScoreRaw;
+        } else {
+            $merciScore = null;
+        }
+
+        // [9] MERCI Diagnosis ('normal', 'abnormal', or default 'no value')
+        $merciDiagnosisRaw = strtolower(trim($data[9] ?? ''));
+        $validMerciDiagnosis = ['normal', 'abnormal'];
+        $merciDiagnosis = in_array($merciDiagnosisRaw, $validMerciDiagnosis) ? $merciDiagnosisRaw : 'no value';
+
+        // [10] Error Type ('TN','FP','TP','FN','none' or null)
+        $errorTypeRaw = strtoupper(trim($data[10] ?? ''));
+        $validErrorTypes = ['TN', 'FP', 'TP', 'FN', 'NONE'];
+        $errorType = in_array($errorTypeRaw, $validErrorTypes) ? ($errorTypeRaw === 'NONE' ? 'none' : $errorTypeRaw) : null;
+
+        // [11] FAF Grade (int 1-4 or null)
+        $fafGrade = (isset($data[11]) && is_numeric($data[11]) && $data[11] >= 1 && $data[11] <= 4) ? (int)$data[11] : null;
+
+        // [12] OCT Score (float or null)
+        $octScore = (isset($data[12]) && is_numeric($data[12])) ? round(floatval($data[12]), 2) : null;
+
+        // [13] VF Score (float or null)
+        $vfScore = (isset($data[13]) && is_numeric($data[13])) ? round(floatval($data[13]), 2) : null;
+
+        // [14] Actual Diagnosis ('RA','SLE','Sjogren','other')
+        $actualDiagnosisRaw = ucfirst(strtolower(trim($data[14] ?? '')));
+        $validActualDiagnosis = ['RA', 'SLE', 'Sjogren'];
+        $actualDiagnosis = in_array($actualDiagnosisRaw, $validActualDiagnosis) ? $actualDiagnosisRaw : 'other';
+
+        // [15] Dosage (float or null)
+        $dosage = (isset($data[15]) && is_numeric($data[15])) ? round(floatval($data[15]), 2) : null;
+
+        // [16] Duration Days (int or null)
+        $durationDays = (isset($data[16]) && is_numeric($data[16])) ? (int)$data[16] : null;
+
+        // [17] Cumulative Dosage (float or null)
+        $cumulativeDosage = (isset($data[17]) && is_numeric($data[17])) ? round(floatval($data[17]), 2) : null;
+
+        // [18] Date of Continuation (string or null)
+        $dateOfContinuationRaw = trim($data[18] ?? '');
+        $dateOfContinuation = $dateOfContinuationRaw !== '' ? $dateOfContinuationRaw : null;
+
+        // Build eye data array for DB insert/update
+        $eyeData = [
+            'eye' => $eye,
+            'age' => $age,
+            'report_diagnosis' => $reportDiagnosis,
+            'exclusion' => $exclusion,
+            'merci_score' => $merciScore,
+            'merci_diagnosis' => $merciDiagnosis,
+            'error_type' => $errorType,
+            'faf_grade' => $fafGrade,
+            'oct_score' => $octScore,
+            'vf_score' => $vfScore,
+            'actual_diagnosis' => $actualDiagnosis,
+            'medication_name' => null,         // No CSV data, default NULL
+            'dosage' => $dosage,
+            'dosage_unit' => 'mg',             // Default unit
+            'duration_days' => $durationDays,
+            'cumulative_dosage' => $cumulativeDosage,
+            'date_of_continuation' => $dateOfContinuation,
+            'treatment_notes' => null          // No CSV data, default NULL
+        ];
+
+        // Default test location
+        $location = 'KH';
+
+        // Insert or update test and eye data
+        insertOrUpdateTest($conn, $testId, $patientId, $location, $testDateFormatted, $eyeData);
+
+        echo "Line $lineNumber: Imported test $testId for patient $patientId eye $eye\n";
+
+    } catch (Exception $e) {
+        echo "Line $lineNumber: Error - " . $e->getMessage() . "\n";
     }
-
-    $stmt->close();
-    return $patient_id;
 }
 
-function insertOrUpdateTest($conn, $test_id, $patient_id, $location, $date_of_test, $eye_data) {
-    // Insert or update main test row
-    $stmt = $conn->prepare("
-        INSERT INTO tests (test_id, patient_id, location, date_of_test)
-        VALUES (?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE location = VALUES(location), date_of_test = VALUES(date_of_test)
-    ");
-    $stmt->bind_param("ssss", $test_id, $patient_id, $location, $date_of_test);
-    $stmt->execute();
-    $stmt->close();
-
-    // Insert or update per-eye data
-    $stmt = $conn->prepare("
-        INSERT INTO test_eyes (
-            test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
-            faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
-            duration_days, cumulative_dosage, date_of_continuation, treatment_notes
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-            age = VALUES(age),
-            report_diagnosis = VALUES(report_diagnosis),
-            exclusion = VALUES(exclusion),
-            merci_score = VALUES(merci_score),
-            merci_diagnosis = VALUES(merci_diagnosis),
-            error_type = VALUES(error_type),
-            faf_grade = VALUES(faf_grade),
-            oct_score = VALUES(oct_score),
-            vf_score = VALUES(vf_score),
-            actual_diagnosis = VALUES(actual_diagnosis),
-            medication_name = VALUES(medication_name),
-            dosage = VALUES(dosage),
-            dosage_unit = VALUES(dosage_unit),
-            duration_days = VALUES(duration_days),
-            cumulative_dosage = VALUES(cumulative_dosage),
-            date_of_continuation = VALUES(date_of_continuation),
-            treatment_notes = VALUES(treatment_notes)
-    ");
-
-    $stmt->bind_param(
-        "ssissssssdddsisdisss",
-        $test_id,
-        $eye_data['eye'],
-        $eye_data['age'],
-        $eye_data['report_diagnosis'],
-        $eye_data['exclusion'],
-        $eye_data['merci_score'],
-        $eye_data['merci_diagnosis'],
-        $eye_data['error_type'],
-        $eye_data['faf_grade'],
-        $eye_data['oct_score'],
-        $eye_data['vf_score'],
-        $eye_data['actual_diagnosis'],
-        $eye_data['medication_name'],
-        $eye_data['dosage'],
-        $eye_data['dosage_unit'],
-        $eye_data['duration_days'],
-        $eye_data['cumulative_dosage'],
-        $eye_data['date_of_continuation'],
-        $eye_data['treatment_notes']
-    );
-
-    $stmt->execute();
-    $stmt->close();
-}
-
-function checkDuplicateTest($conn, $patient_id, $date_of_test, $eye) {
-    $query = "
-        SELECT te.test_id
-        FROM tests t
-        JOIN test_eyes te ON t.test_id = te.test_id
-        WHERE t.patient_id = ? AND t.date_of_test = ? AND te.eye = ?
-    ";
-    $stmt = $conn->prepare($query);
-    $stmt->bind_param("sss", $patient_id, $date_of_test, $eye);
-    $stmt->execute();
-    $stmt->store_result();
-    $is_duplicate = $stmt->num_rows > 0;
-    $stmt->close();
-
-    return $is_duplicate;
-}
-
-function importTestImage($conn, $test_id, $eye, $image_type, $file_path) {
-    // Example: image_type = 'oct_reference', file_path = 'uploads/abc.jpg'
-    // This will update test_eyes.oct_reference or other image field
-    $allowed_fields = ['oct_reference', 'vf_reference', 'faf_reference'];
-
-    if (!in_array($image_type, $allowed_fields)) {
-        throw new Exception("Invalid image type: $image_type");
-    }
-
-    // Ensure the column exists in your `test_eyes` table
-    $sql = "UPDATE test_eyes SET {$image_type} = ? WHERE test_id = ? AND eye = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("sss", $file_path, $test_id, $eye);
-    $stmt->execute();
-    $stmt->close();
-}
-?>
+fclose($handle);
