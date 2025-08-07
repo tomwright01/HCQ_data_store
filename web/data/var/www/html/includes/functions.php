@@ -155,30 +155,18 @@ function importTestImage(
     $field = strtolower($testType) . "_reference_" . strtolower($eye);
     $date  = date('Y-m-d', strtotime($test_date));
 
-// Check if test already exists
-    $check = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ? AND eye = ?");
-    $check->bind_param("sss", $patient_id, $date, $eye);
-    $check->execute();
-    $result = $check->get_result();
-    
-    if ($result->num_rows > 0) {
-        // Update existing test
-        $row = $result->fetch_assoc();
-        $test_id = $row['test_id'];
-        
-        $upd = $conn->prepare("UPDATE tests SET {$field} = ? WHERE test_id = ?");
-        $upd->bind_param("ss", $filename, $test_id);
-        $upd->execute();
-    } else {
-        // Insert new test
-        $test_id = date('YmdHis') . '_' . $eye . '_' . substr(md5(uniqid()), 0, 4);
+    $upd = $conn->prepare("UPDATE tests SET {$field} = ? WHERE patient_id = ? AND date_of_test = ? AND eye = ?");
+    $upd->bind_param("ssss", $filename, $patient_id, $date, $eye);
+    $upd->execute();
+
+    if ($upd->affected_rows < 1) {
         $ins = $conn->prepare(
             "INSERT INTO tests (test_id, patient_id, date_of_test, eye, {$field}) VALUES (?, ?, ?, ?, ?)"
         );
-        $ins->bind_param("sssss", $test_id, $patient_id, $date, $eye, $filename);
+        $newId = date('YmdHis') . '_' . $eye . '_' . substr(md5(uniqid()),0,4);
+        $ins->bind_param("sssss", $newId, $patient_id, $date, $eye, $filename);
         $ins->execute();
     }
-
 
     return true;
 }
