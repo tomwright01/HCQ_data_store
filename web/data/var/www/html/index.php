@@ -319,6 +319,7 @@ if ($search_patient_id || $filter_active) {
             t.mferg_reference_od,
             t.mferg_reference_os,
             p.subject_id, 
+            p.patient_id,
             p.date_of_birth, 
             p.location AS patient_location
         FROM tests t
