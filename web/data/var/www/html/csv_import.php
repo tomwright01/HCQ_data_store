@@ -1,110 +1,133 @@
 <?php
-require_once 'config.php';
+require_once 'db.php';
 require_once 'functions.php';
-?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Clinical Patient Data Viewer</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
+    $file = $_FILES['csv_file']['tmp_name'];
 
-        .patient-box {
-            border: 1px solid #ccc;
-            margin-bottom: 30px;
-            padding: 15px;
-            background-color: #f8f8f8;
-        }
-
-        .test-box {
-            border-left: 3px solid #888;
-            margin-top: 15px;
-            padding-left: 15px;
-        }
-
-        .eye-box {
-            background-color: #fff;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px dashed #aaa;
-        }
-
-        h1, h2, h3, h4 {
-            margin-top: 0;
-        }
-
-        ul {
-            margin: 0;
-            padding-left: 20px;
-        }
-    </style>
-</head>
-<body>
-    <h1>Clinical Patient Records</h1>
-
-    <?php
-    $patients = getPatientsWithTests($conn);
-
-    if (empty($patients)) {
-        echo "<p>No patient data found.</p>";
+    if (!file_exists($file)) {
+        die("File not found.");
     }
 
-    foreach ($patients as $patient):
-    ?>
-        <div class="patient-box">
-            <h2><?= htmlspecialchars($patient['subject_id']) ?> (<?= htmlspecialchars($patient['patient_id']) ?>)</h2>
-            <p><strong>Location:</strong> <?= htmlspecialchars($patient['location']) ?><br>
-               <strong>Date of Birth:</strong> <?= htmlspecialchars($patient['date_of_birth']) ?></p>
+    $results = [
+        'inserted' => 0,
+        'errors' => [],
+        'patients' => 0
+    ];
 
-            <?php
-            $tests = getTestsByPatient($conn, $patient['patient_id']);
+    if (($handle = fopen($file, 'r')) !== false) {
+        $lineNumber = 0;
+        while (($data = fgetcsv($handle)) !== false) {
+            $lineNumber++;
+            if ($lineNumber === 1) continue; // Skip header
 
-            if (empty($tests)) {
-                echo "<p>No tests found for this patient.</p>";
+            if (count($data) < 18) {
+                $results['errors'][] = "Line $lineNumber: Not enough columns.";
+                continue;
             }
 
-            foreach ($tests as $test):
-                $test_id = $test['test_id'];
-                $eyes = getTestEyes($conn, $test_id);
-            ?>
-                <div class="test-box">
-                    <h3>Test ID: <?= htmlspecialchars($test_id) ?> | Date: <?= htmlspecialchars($test['date_of_test']) ?> | Location: <?= htmlspecialchars($test['location']) ?></h3>
+            $data = array_map('trim', $data);
+            $data = array_map(function ($v) {
+                $v = trim($v ?? '');
+                return in_array(strtolower($v), ['null', 'no value', 'missing', '']) ? null : $v;
+            }, $data);
 
-                    <?php
-                    if (empty($eyes)) {
-                        echo "<p>No eye data found for this test.</p>";
+            try {
+                $subjectId = $data[0];
+                $dobObj = DateTime::createFromFormat('m/d/Y', $data[1]);
+                if (!$dobObj) throw new Exception("Invalid DoB format");
+                $dobFormatted = $dobObj->format('Y-m-d');
+
+                $testDateObj = DateTime::createFromFormat('m/d/Y', $data[2]);
+                if (!$testDateObj) throw new Exception("Invalid test date format");
+                $testDateFormatted = $testDateObj->format('Y-m-d');
+
+                $age = (is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 120) ? (int)$data[3] : null;
+
+                $testIdRaw = $data[4] ?? '';
+                $testId = $testIdRaw !== '' ? preg_replace('/\s+/', '_', $testIdRaw) : 'gen_' . date('YmdHis') . '_' . bin2hex(random_bytes(3));
+
+                $eyeValue = strtoupper($data[5] ?? '');
+                $eye = in_array($eyeValue, ['OD', 'OS']) ? $eyeValue : null;
+
+                $reportDiagnosis = in_array(strtolower($data[6]), ['normal', 'abnormal', 'exclude']) ? strtolower($data[6]) : 'no input';
+
+                $exclusion = in_array(strtolower($data[7]), ['retinal detachment', 'generalized retinal dysfunction', 'unilateral testing']) ? strtolower($data[7]) : 'none';
+
+                $merciScore = is_numeric($data[8]) && $data[8] >= 0 && $data[8] <= 100 ? (int)$data[8] : (strtolower($data[8]) === 'unable' ? 'unable' : null);
+
+                $merciDiagnosis = in_array(strtolower($data[9]), ['normal', 'abnormal']) ? strtolower($data[9]) : 'no value';
+
+                $errorType = in_array(strtoupper($data[10]), ['TN', 'FP', 'TP', 'FN', 'NONE']) ? strtolower($data[10]) : null;
+
+                $fafGrade = (is_numeric($data[11]) && $data[11] >= 1 && $data[11] <= 4) ? (int)$data[11] : null;
+                $octScore = is_numeric($data[12]) ? round((float)$data[12], 2) : null;
+                $vfScore = is_numeric($data[13]) ? round((float)$data[13], 2) : null;
+
+                $actualDiagnosis = in_array(ucfirst(strtolower($data[14])), ['RA', 'SLE', 'Sjogren', 'Other']) ? ucfirst(strtolower($data[14])) : 'Other';
+
+                $dosage = is_numeric($data[15]) ? round((float)$data[15], 2) : null;
+                $durationDays = is_numeric($data[16]) ? (int)$data[16] : null;
+                $cumulativeDosage = is_numeric($data[17]) ? round((float)$data[17], 2) : null;
+
+                $dateOfContinuation = null;
+                if (!empty($data[18])) {
+                    $contObj = DateTime::createFromFormat('m/d/Y', $data[18]);
+                    if ($contObj) {
+                        $dateOfContinuation = $contObj->format('Y-m-d');
                     }
+                }
 
-                    foreach ($eyes as $eye): ?>
-                        <div class="eye-box">
-                            <h4>Eye: <?= htmlspecialchars($eye['eye']) ?></h4>
-                            <ul>
-                                <li><strong>Age:</strong> <?= htmlspecialchars($eye['age']) ?></li>
-                                <li><strong>Report Diagnosis:</strong> <?= htmlspecialchars($eye['report_diagnosis']) ?></li>
-                                <li><strong>Exclusion:</strong> <?= htmlspecialchars($eye['exclusion']) ?></li>
-                                <li><strong>Merci Score:</strong> <?= htmlspecialchars($eye['merci_score']) ?></li>
-                                <li><strong>Merci Diagnosis:</strong> <?= htmlspecialchars($eye['merci_diagnosis']) ?></li>
-                                <li><strong>Error Type:</strong> <?= htmlspecialchars($eye['error_type']) ?></li>
-                                <li><strong>FAF Grade:</strong> <?= htmlspecialchars($eye['faf_grade']) ?></li>
-                                <li><strong>OCT Score:</strong> <?= htmlspecialchars($eye['oct_score']) ?></li>
-                                <li><strong>VF Score:</strong> <?= htmlspecialchars($eye['vf_score']) ?></li>
-                                <li><strong>Actual Diagnosis:</strong> <?= htmlspecialchars($eye['actual_diagnosis']) ?></li>
-                                <li><strong>Medication:</strong> <?= htmlspecialchars($eye['medication_name']) ?> (<?= htmlspecialchars($eye['dosage']) ?> <?= htmlspecialchars($eye['dosage_unit']) ?>)</li>
-                                <li><strong>Duration:</strong> <?= htmlspecialchars($eye['duration_days']) ?> days</li>
-                                <li><strong>Cumulative Dosage:</strong> <?= htmlspecialchars($eye['cumulative_dosage']) ?></li>
-                                <li><strong>Date of Continuation:</strong> <?= htmlspecialchars($eye['date_of_continuation']) ?></li>
-                                <li><strong>Treatment Notes:</strong> <?= htmlspecialchars($eye['treatment_notes']) ?></li>
-                            </ul>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            <?php endforeach; ?>
-        </div>
-    <?php endforeach; ?>
-</body>
-</html>
+                $location = 'KH'; // Default location
+                $patientId = getOrCreatePatient($conn, $subjectId, $subjectId, $dobFormatted, $location);
+                $results['patients']++;
+
+                $testData = [
+                    'test_id'              => $testId,
+                    'patient_id'           => $patientId,
+                    'location'             => $location,
+                    'date_of_test'         => $testDateFormatted,
+                    'age'                  => $age,
+                    'eye'                  => $eye,
+                    'report_diagnosis'     => $reportDiagnosis,
+                    'exclusion'            => $exclusion,
+                    'merci_score'          => $merciScore,
+                    'merci_diagnosis'      => $merciDiagnosis,
+                    'error_type'           => $errorType,
+                    'faf_grade'            => $fafGrade,
+                    'oct_score'            => $octScore,
+                    'vf_score'             => $vfScore,
+                    'actual_diagnosis'     => $actualDiagnosis,
+                    'medication_name'      => null,
+                    'dosage'               => $dosage,
+                    'dosage_unit'          => 'mg',
+                    'duration_days'        => $durationDays,
+                    'cumulative_dosage'    => $cumulativeDosage,
+                    'date_of_continuation' => $dateOfContinuation,
+                    'treatment_notes'      => null
+                ];
+
+                $testDbId = insertTest($conn, $testData);
+                $results['inserted']++;
+
+                if ($eye) {
+                    insertTestEye($conn, $testDbId, $eye);
+                }
+
+                insertAuditLog($conn, $testId, "Imported test for subject $subjectId");
+
+            } catch (Exception $e) {
+                $results['errors'][] = "Line $lineNumber: " . $e->getMessage();
+            }
+        }
+
+        fclose($handle);
+    }
+
+    // Redirect or display results
+    echo "<pre>";
+    print_r($results);
+    echo "</pre>";
+} else {
+    echo "No file uploaded.";
+}
