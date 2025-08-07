@@ -1,6 +1,6 @@
 <?php
-require_once 'config.php';
-require_once 'functions.php';
+require_once 'includes/config.php';
+require_once 'includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     // Set headers for CSV upload
