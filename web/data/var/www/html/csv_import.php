@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $testId = preg_replace('/\s+/', '_', $testIdRaw);
                         
                         // Change the eye filter section to be more flexible:
-                        $eyeValue = $data[5] ?? null;
+                        $eyeValue = $data[5] ?? null; // Double-check index!
                         $eye = ($eyeValue !== null && in_array(strtoupper($eyeValue), ['OD', 'OS'])) ? strtoupper($eyeValue) : null;
 
                         // Add validation feedback
