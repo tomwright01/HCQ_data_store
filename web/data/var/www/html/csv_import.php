@@ -135,9 +135,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                       $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
                     }
 
-                    $dosage = (isset($data[15]) && is_numeric($data[15])) ? round((float)$data[15], 2) : null;
-                    $durationDays = (isset($data[16]) && is_numeric($data[16])) ? (int)$data[16] : null;
-                    $cumulativeDosage = (isset($data[17]) && is_numeric($data[17])) ? round((float)$data[17], 2) : null;
+                        // [14] Dosage
+                    $dosage = is_numeric($data[15])
+                        ? round(floatval($data[15]), 2)
+                        : null;
+
+                        // [15] Duration Days
+                    $durationDays = is_numeric($data[16])
+                        ? (int)$data[16]
+                        : null;
+
+                        // [16] Cumulative Dosage
+                    $cumulativeDosage = is_numeric($data[17])
+                        ? round(floatval($data[17]), 2)
+                        : null;
 
                     // Date of continuation
                     $date_of_continuation = trim($data[18] ?? '');  // Get value from column 18
