@@ -4,6 +4,7 @@ require_once __DIR__ . '/config.php';
 
 /**
  * Look up an existing patient or create a new one.
+ * Returns patient_id (string).
  */
 function getOrCreatePatient(
     mysqli $conn,
@@ -13,13 +14,18 @@ function getOrCreatePatient(
     string $location = 'KH',
     ?array &$results = null
 ): string {
+    // Check if patient_id exists
     $sel = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $sel->bind_param("s", $patientId);
     $sel->execute();
-    if ($sel->get_result()->num_rows > 0) {
+    $res = $sel->get_result();
+    if ($res && $res->num_rows > 0) {
+        $sel->close();
         return $patientId;
     }
+    $sel->close();
 
+    // Insert new patient
     $ins = $conn->prepare(
         "INSERT INTO patients (patient_id, subject_id, date_of_birth, location) VALUES (?, ?, ?, ?)"
     );
@@ -27,6 +33,7 @@ function getOrCreatePatient(
     if (!$ins->execute()) {
         throw new Exception("Patient insert failed: " . $ins->error);
     }
+    $ins->close();
 
     if (isset($results) && is_array($results)) {
         $results['patients'] = ($results['patients'] ?? 0) + 1;
@@ -37,6 +44,8 @@ function getOrCreatePatient(
 
 /**
  * Insert or update a test record.
+ * Uses ON DUPLICATE KEY UPDATE to update existing rows.
+ * Expects all fields in $testData array.
  */
 function insertTest(array $testData): void {
     global $conn;
@@ -77,12 +86,58 @@ function insertTest(array $testData): void {
         throw new Exception("Prepare failed: " . $conn->error);
     }
 
-    $merci = $testData['merci_score'] === 'unable'
-        ? 'unable'
-        : ($testData['merci_score'] === null ? null : $testData['merci_score']);
+    // Normalize nullable fields: convert empty strings or 'NULL' to null
+    $nullableFields = [
+        'age', 'merci_score', 'faf_grade', 'oct_score', 'vf_score',
+        'medication_name', 'dosage', 'dosage_unit', 'duration_days',
+        'cumulative_dosage', 'date_of_continuation', 'treatment_notes'
+    ];
+    foreach ($nullableFields as $field) {
+        if (!isset($testData[$field]) || $testData[$field] === '' || strtoupper($testData[$field]) === 'NULL') {
+            $testData[$field] = null;
+        }
+    }
+
+    // Handle merci_score: treat all as string or null ('unable' stays as string)
+    if ($testData['merci_score'] !== null && is_int($testData['merci_score'])) {
+        $testData['merci_score'] = (string)$testData['merci_score'];
+    }
+
+    /*
+    Types string breakdown:
+    s - string
+    i - integer
+    d - double (float)
+    
+    Parameters:
+    1: test_id (s)
+    2: patient_id (s)
+    3: location (s)
+    4: date_of_test (s)
+    5: age (s|null)
+    6: eye (s)
+    7: report_diagnosis (s)
+    8: exclusion (s)
+    9: merci_score (s|null)
+    10: merci_diagnosis (s)
+    11: error_type (s)
+    12: faf_grade (i|null)
+    13: oct_score (d|null)
+    14: vf_score (d|null)
+    15: actual_diagnosis (s)
+    16: medication_name (s|null)
+    17: dosage (d|null)
+    18: dosage_unit (s|null)
+    19: duration_days (i|null)
+    20: cumulative_dosage (d|null)
+    21: date_of_continuation (s|null)
+    22: treatment_notes (s|null)
+    */
+
+    $types = "ssssssssssssddsssssdss";
 
     $stmt->bind_param(
-        "ssssissssssdddsisdisss",
+        $types,
         $testData['test_id'],
         $testData['patient_id'],
         $testData['location'],
@@ -91,7 +146,7 @@ function insertTest(array $testData): void {
         $testData['eye'],
         $testData['report_diagnosis'],
         $testData['exclusion'],
-        $merci,
+        $testData['merci_score'],
         $testData['merci_diagnosis'],
         $testData['error_type'],
         $testData['faf_grade'],
@@ -110,6 +165,8 @@ function insertTest(array $testData): void {
     if (!$stmt->execute()) {
         throw new Exception("Test insert failed: " . $stmt->error);
     }
+
+    $stmt->close();
 }
 
 /**
@@ -169,6 +226,7 @@ function importTestImage(
         $upd = $conn->prepare("UPDATE tests SET {$field} = ? WHERE test_id = ?");
         $upd->bind_param("ss", $filename, $test_id);
         $upd->execute();
+        $upd->close();
     } else {
         // Insert new test record
         $test_id = date('YmdHis') . '_' . $eye . '_' . substr(md5(uniqid()), 0, 4);
@@ -178,37 +236,45 @@ function importTestImage(
         );
         $ins->bind_param("sssss", $test_id, $patient_id, $date, $eye, $filename);
         $ins->execute();
+        $ins->close();
     }
 
+    $check->close();
 
     return true;
 }
 
 /**
- * Check for an existing test
+ * Check for an existing test (for duplicates).
+ * Returns true if test exists.
  */
 function checkDuplicateTest(string $patient_id, string $date, string $eye): bool {
     global $conn;
     $stmt = $conn->prepare("SELECT 1 FROM tests WHERE patient_id = ? AND date_of_test = ? AND eye = ?");
     $stmt->bind_param("sss", $patient_id, $date, $eye);
     $stmt->execute();
-    return (bool)$stmt->get_result()->fetch_row();
+    $res = $stmt->get_result();
+    $exists = $res && $res->fetch_row() !== null;
+    $stmt->close();
+    return $exists;
 }
 
 /**
- * Create a mysqldump backup
+ * Create a mysqldump backup.
+ * Returns filepath or false on failure.
  */
 function backupDatabase(): string|false {
     $dir  = '/var/www/html/backups/';
     if (!is_dir($dir)) mkdir($dir, 0755, true);
     $file = $dir . 'PatientData_' . date('Ymd_His') . '.sql';
-    $cmd  = sprintf('mysqldump -u%s -p%s -h%s %s > %s', DB_USERNAME, DB_PASSWORD, DB_SERVER, DB_NAME, $file);
+    $cmd  = sprintf('mysqldump -u%s -p%s -h%s %s > %s', DB_USERNAME, DB_PASSWORD, DB_SERVER, DB_NAME, escapeshellarg($file));
     system($cmd, $ret);
     return $ret === 0 ? $file : false;
 }
 
 /**
- * Get public URL for a stored image
+ * Get public URL for a stored image by filename.
+ * Returns URL string or null if not found.
  */
 function getStoredImagePath(string $filename): ?string {
     foreach (ALLOWED_TEST_TYPES as $type => $dir) {
