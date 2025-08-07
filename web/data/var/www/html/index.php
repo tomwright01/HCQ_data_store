@@ -1,9 +1,24 @@
 <?php
-error_reporting(E_ALL);
+// Basic error reporting for development
 ini_set('display_errors', 1);
-require_once 'config.php';
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 
-// Fetch all test data with related patient info
+// Database configuration
+$servername = "mariadb";
+$username = "root";
+$password = "notgood";
+$dbname = "PatientData";
+
+// Create connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+
+// Check connection
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// Query to fetch patient + test + test_eye data
 $sql = "
     SELECT 
         p.patient_id, p.subject_id, p.location AS patient_location, p.date_of_birth,
@@ -28,16 +43,16 @@ if (!$result) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>Clinical Data</title>
-<style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #aaa; padding: 8px; text-align: left; }
-    th { background-color: #333; color: white; }
-    tr:nth-child(even) { background-color: #f2f2f2; }
-    caption { font-size: 1.5em; margin-bottom: 10px; font-weight: bold; }
-</style>
+    <meta charset="UTF-8" />
+    <title>Clinical Data Viewer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #aaa; padding: 8px; text-align: left; }
+        th { background-color: #333; color: white; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+        caption { font-size: 1.5em; margin-bottom: 10px; font-weight: bold; }
+    </style>
 </head>
 <body>
 
