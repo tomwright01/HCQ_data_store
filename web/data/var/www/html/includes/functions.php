@@ -1,6 +1,5 @@
 <?php
-require_once 'config.php';
-
+require_once 'config.php';  // Ensure the database connection is available
 
 /**
  * Insert a new test record into the tests table
