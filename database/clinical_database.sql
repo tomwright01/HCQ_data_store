@@ -50,21 +50,22 @@ CREATE TABLE tests (
 );
 
 -- ==========================
--- TEST_EYES TABLE
+-- TEST_EYES TABLE (Updated)
 -- ==========================
 CREATE TABLE test_eyes (
-    test_id VARCHAR(25),
-    eye ENUM('OD', 'OS') NOT NULL,
+    result_id INT AUTO_INCREMENT PRIMARY KEY,  -- Unique result entry
+    test_id VARCHAR(25) NOT NULL,              -- Reference to the test
+    eye ENUM('OD', 'OS') NOT NULL,             -- 'OD' for right eye, 'OS' for left eye
     age TINYINT UNSIGNED NULL,
-    report_diagnosis ENUM('normal','abnormal', 'exclude','no input') NOT NULL DEFAULT 'no input',
-    exclusion ENUM('none','retinal detachment','generalized retinal dysfunction','unilateral testing') NOT NULL DEFAULT 'none',
+    report_diagnosis ENUM('normal', 'abnormal', 'exclude', 'no input') NOT NULL DEFAULT 'no input',
+    exclusion ENUM('none', 'retinal detachment', 'generalized retinal dysfunction', 'unilateral testing') NOT NULL DEFAULT 'none',
     merci_score VARCHAR(10) NULL,
-    merci_diagnosis ENUM('normal','abnormal','no value') NOT NULL DEFAULT 'no value',
-    error_type ENUM('TN','FP','TP','FN','none') DEFAULT NULL,
+    merci_diagnosis ENUM('normal', 'abnormal', 'no value') NOT NULL DEFAULT 'no value',
+    error_type ENUM('TN', 'FP', 'TP', 'FN', 'none') DEFAULT NULL,
     faf_grade TINYINT UNSIGNED NULL,
     oct_score DECIMAL(10,2) NULL,
     vf_score DECIMAL(10,2) NULL,
-    actual_diagnosis ENUM('RA','SLE','Sjogren','other') NOT NULL DEFAULT 'other',
+    actual_diagnosis ENUM('RA', 'SLE', 'Sjogren', 'other') NOT NULL DEFAULT 'other',
     medication_name VARCHAR(100) NULL,
     dosage DECIMAL(10,2) NULL,
     dosage_unit VARCHAR(10) DEFAULT 'mg',
@@ -79,7 +80,7 @@ CREATE TABLE test_eyes (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE,
-    PRIMARY KEY (test_id, eye)
+    INDEX idx_test_eye (test_id, eye)
 );
 
 -- ==========================
@@ -131,3 +132,5 @@ BEGIN
 END//
 
 DELIMITER ;
+
+
