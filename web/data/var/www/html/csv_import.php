@@ -6,18 +6,11 @@ require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
-    // Set headers for CSV upload
     header('Content-Type: text/html; charset=utf-8');
     
-    // Get the uploaded file details
     $file = $_FILES['csv_file']['tmp_name'];
     $filename = $_FILES['csv_file']['name'];
 
-    // Debugging: Output file details
-    echo "File uploaded: $filename<br>";
-    echo "File path: $file<br>";
-
-    // Check if file is successfully uploaded
     if ($_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         die("<div class='error'>Error uploading file: " . $_FILES['csv_file']['error'] . "</div>");
     }
@@ -26,7 +19,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
         die("<div class='error'>Error: File not found.</div>");
     }
 
-    // Initialize results array
     $results = [
         'total_rows' => 0,
         'patients_processed' => 0,
@@ -37,27 +29,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     ];
 
     try {
-        // Check database connection
-        if ($conn->connect_error) {
-            die("Connection failed: " . $conn->connect_error);
-        }
-
-        // Begin transaction
         $conn->begin_transaction();
 
-        // Open the CSV file
         if (($handle = fopen($file, 'r')) !== false) {
-            echo "File opened successfully<br>";
             $lineNumber = 0;
             
-            while (($data = fgetcsv($handle)) !== false) {
+            while (($data = fgetcsv($handle, 0, ',', '"')) !== false) { // Added escape handling here
                 $lineNumber++;
                 $results['total_rows']++;
                 
-                // Skip header row
-                if ($lineNumber === 1) continue;
+                if ($lineNumber === 1) continue; // Skip header row
 
-                // Validate minimum columns
                 if (count($data) < 18) {
                     $results['errors'][] = "Line $lineNumber: Skipped - Insufficient columns (expected 18, found " . count($data) . ")";
                     continue;
@@ -76,7 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         throw new Exception("Missing subject ID");
                     }
 
-                    // Parse dates with validation
                     $dob = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
                     if (!$dob) {
                         throw new Exception("Invalid date of birth format (expected MM/DD/YYYY)");
@@ -89,23 +70,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     }
                     $testDateFormatted = $testDate->format('Y-m-d');
 
-                    // Validate age
-                    $age = null;
-                    if (isset($data[3]) && is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 120) {
-                        $age = (int)$data[3];
-                    }
+                    $age = isset($data[3]) && is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 120 ? (int)$data[3] : null;
 
                     // ================= TEST DATA =================
                     $testId = $data[4] ?? null;
                     if (empty($testId)) {
                         $testId = 'TEST_' . $subjectId . '_' . $testDate->format('Ymd') . '_' . bin2hex(random_bytes(2));
-                    } else {
-                        $testId = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $testId);
                     }
 
+                    $eye = strtoupper($data[5] ?? '');
+                    if (!in_array($eye, ['OD', 'OS'])) {
+                        $results['warnings'][] = "Line $lineNumber: Invalid eye value '$eye' - must be OD or OS";
+                        $eye = null;
+                    }
+
+                    // ================= DIAGNOSIS DATA =================
+                    $reportDiagnosis = strtolower($data[6] ?? 'no input');
+                    $exclusion = strtolower($data[7] ?? 'none');
+                    $merciScore = isset($data[8]) ? (strtolower($data[8]) === 'unable' ? 'unable' : (is_numeric($data[8]) ? (int)$data[8] : null)) : null;
+                    $merciDiagnosis = strtolower($data[9] ?? 'no value');
+                    $errorType = strtoupper($data[10] ?? 'none');
+                    $fafGrade = isset($data[11]) && is_numeric($data[11]) ? (int)$data[11] : null;
+                    $octScore = isset($data[12]) && is_numeric($data[12]) ? round((float)$data[12], 2) : null;
+                    $vfScore = isset($data[13]) && is_numeric($data[13]) ? round((float)$data[13], 2) : null;
+                    $actualDiagnosis = strtolower($data[14] ?? 'other');
+                    $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
+                    $durationDays = isset($data[16]) && is_numeric($data[16]) ? (int)$data[16] : null;
+                    $cumulativeDosage = isset($data[17]) && is_numeric($data[17]) ? round(floatval($data[17]), 2) : null;
+                    $date_of_continuation = trim($data[18] ?? '');
+
                     // ================= DATABASE OPERATIONS =================
-                    // Default location
-                    $location = 'KH';
+                    $location = 'KH';  // Default location
                     
                     // Create or get patient
                     $patientId = generatePatientId($subjectId);
@@ -235,4 +230,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
-
