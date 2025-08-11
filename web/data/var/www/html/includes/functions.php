@@ -109,12 +109,14 @@ function insertTestEye(
     $dateOfContinuation,
     $treatmentNotes
 ) {
+    // Correcting the number of placeholders to match the number of variables.
     $stmt = $conn->prepare("INSERT INTO test_eyes (
         test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
         faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
         duration_days, cumulative_dosage, date_of_continuation, treatment_notes
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-    
+
+    // Bind the parameters - 19 variables to 19 placeholders
     $stmt->bind_param(
         "ssssssssdddsdsdsss",
         $testId, $eye, $age, $reportDiagnosis, $exclusion, $merciScore, $merciDiagnosis,
@@ -122,9 +124,12 @@ function insertTestEye(
         $dosageUnit, $durationDays, $cumulativeDosage, $dateOfContinuation, $treatmentNotes
     );
 
+    // Check if the statement executes successfully
     if (!$stmt->execute()) {
         throw new Exception("Error inserting test eye: " . $stmt->error);
     }
+
+    // Close the statement after execution
     $stmt->close();
 }
 
