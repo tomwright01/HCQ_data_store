@@ -136,8 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             'mg', // dosage_unit
                             $durationDays,
                             $cumulativeDosage,
-                            $dateOfContinuation,
-                            null  // treatment_notes (optional)
+                            $dateOfContinuation
                         );
                         $results['eyes_processed']++;
                     }
