@@ -3,22 +3,17 @@ require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
-    // Debugging: Check if file was uploaded
-    if ($_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
-        die("<div class='error'>Error uploading file: " . $_FILES['csv_file']['error'] . "</div>");
-    }
-
     // Set headers for CSV upload
     header('Content-Type: text/html; charset=utf-8');
     
+    // Get the uploaded file details
     $file = $_FILES['csv_file']['tmp_name'];
     $filename = $_FILES['csv_file']['name'];
 
-    // Debugging: Output file details
-    echo "File details:<br>";
-    echo "File name: $filename<br>";
-    echo "File size: " . $_FILES['csv_file']['size'] . " bytes<br>";
-    echo "Temporary file: $file<br>";
+    // Check if file is successfully uploaded
+    if ($_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+        die("<div class='error'>Error uploading file: " . $_FILES['csv_file']['error'] . "</div>");
+    }
 
     if (!file_exists($file)) {
         die("<div class='error'>Error: File not found.</div>");
@@ -56,7 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 // Clean and normalize data
                 $data = array_map('trim', $data);
                 $data = array_map(function ($value) {
-                    $value = trim($value ?? '');
                     return in_array(strtolower($value), ['null', 'no value', 'missing', '']) ? null : $value;
                 }, $data);
 
@@ -89,7 +83,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     // ================= TEST DATA =================
                     $testId = $data[4] ?? null;
                     if (empty($testId)) {
-                        // Generate a test ID if not provided
                         $testId = 'TEST_' . $subjectId . '_' . $testDate->format('Ymd') . '_' . bin2hex(random_bytes(2));
                     } else {
                         $testId = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $testId);
@@ -219,8 +212,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
             // Display results
             echo "<div class='results'>";
-
-            // Display summary
             echo "<h2>CSV Import Results</h2>";
             echo "<p><strong>File:</strong> " . htmlspecialchars($filename) . "</p>";
             echo "<p><strong>Total rows processed:</strong> " . $results['total_rows'] . "</p>";
@@ -301,3 +292,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
+
