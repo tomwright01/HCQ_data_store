@@ -42,7 +42,7 @@ CREATE TABLE tests (
     date_of_test DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,  -- Adding foreign key
     INDEX idx_patient (patient_id),
     INDEX idx_date (date_of_test)
 );
@@ -53,6 +53,7 @@ CREATE TABLE tests (
 CREATE TABLE test_eyes (
     result_id INT AUTO_INCREMENT PRIMARY KEY,  
     test_id VARCHAR(25) NOT NULL,              
+    patient_id VARCHAR(25) NOT NULL,  -- Add this column
     eye ENUM('OD', 'OS') NOT NULL,             
     age TINYINT UNSIGNED NULL,
     report_diagnosis ENUM('normal', 'abnormal', 'exclude', 'no input') NOT NULL DEFAULT 'no input',
@@ -77,6 +78,7 @@ CREATE TABLE test_eyes (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,  -- Adding foreign key
     INDEX idx_test_eye (test_id, eye)
 );
 
