@@ -7,12 +7,11 @@ require_once 'includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     header('Content-Type: text/html; charset=utf-8');
-    
-    // Get the uploaded file details
+
     $file = $_FILES['csv_file']['tmp_name'];
     $filename = $_FILES['csv_file']['name'];
 
-    // Check if file is successfully uploaded
+    // Check for errors
     if ($_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         die("<div class='error'>Error uploading file: " . $_FILES['csv_file']['error'] . "</div>");
     }
@@ -21,7 +20,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
         die("<div class='error'>Error: File not found.</div>");
     }
 
-    // Initialize results array
     $results = [
         'total_rows' => 0,
         'patients_processed' => 0,
@@ -37,59 +35,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
         if (($handle = fopen($file, 'r')) !== false) {
             $lineNumber = 0;
 
-            while (($data = fgetcsv($handle, 0, ',', '"')) !== false) {  // Added escape handling here
+            // Read the CSV data
+            while (($data = fgetcsv($handle, 0, ',', '"')) !== false) {
                 $lineNumber++;
                 $results['total_rows']++;
 
-                if ($lineNumber === 1) continue; // Skip header row
+                // Skip header row
+                if ($lineNumber === 1) continue;
 
-                if (count($data) < 19) {
-                    $results['errors'][] = "Line $lineNumber: Skipped - Insufficient columns (expected 19, found " . count($data) . ")";
+                // Validate columns
+                if (count($data) < 18) {
+                    $results['errors'][] = "Line $lineNumber: Skipped - Insufficient columns";
                     continue;
                 }
 
-                // Clean and normalize data
+                // Normalize data
                 $data = array_map('trim', $data);
                 $data = array_map(function ($value) {
                     return in_array(strtolower($value), ['null', 'no value', 'missing', '']) ? null : $value;
                 }, $data);
 
                 try {
-                    // ================= PATIENT DATA =================
-                    $subjectId = $data[0] ?? null;
-                    if (empty($subjectId)) {
-                        throw new Exception("Missing subject ID");
+                    // Extract patient data from CSV
+                    $patientId = $data[0] ?? null; // The first column is patient_id
+                    if (empty($patientId)) {
+                        throw new Exception("Missing patient ID in CSV on line $lineNumber");
                     }
 
-                    // Parse dates with validation
+                    // Parse patient date of birth
                     $dob = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
                     if (!$dob) {
-                        throw new Exception("Invalid date of birth format (expected MM/DD/YYYY)");
+                        throw new Exception("Invalid date of birth format (MM/DD/YYYY) on line $lineNumber");
                     }
                     $dobFormatted = $dob->format('Y-m-d');
 
+                    // Insert or retrieve the patient ID
+                    $patientId = getOrCreatePatient($conn, $patientId, $patientId, 'KH', $dobFormatted);
+                    $results['patients_processed']++;
+
+                    // Extract test data
+                    $testId = $data[4] ?? null;
+                    if (empty($testId)) {
+                        $testId = 'TEST_' . $patientId . '_' . $dob->format('Ymd') . '_' . bin2hex(random_bytes(2));
+                    }
+
                     $testDate = DateTime::createFromFormat('m/d/Y', $data[2] ?? '');
                     if (!$testDate) {
-                        throw new Exception("Invalid test date format (expected MM/DD/YYYY)");
+                        throw new Exception("Invalid test date format (MM/DD/YYYY) on line $lineNumber");
                     }
                     $testDateFormatted = $testDate->format('Y-m-d');
 
-                    // Validate age
+                    // Extract age (from CSV or calculate it)
                     $age = isset($data[3]) && is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 120 ? (int)$data[3] : null;
-
-                    // ================= TEST DATA =================
-                    $testId = $data[4] ?? null;
-                    if (empty($testId)) {
-                        $testId = 'TEST_' . $subjectId . '_' . $testDate->format('Ymd') . '_' . bin2hex(random_bytes(2));
+                    if ($age === null && isset($data[1])) {
+                        $dob = DateTime::createFromFormat('m/d/Y', $data[1]);
+                        if ($dob) {
+                            $today = new DateTime();
+                            $age = $today->diff($dob)->y; // Calculate age from date_of_birth
+                        }
                     }
 
-                    $eye = strtoupper($data[5] ?? '');
-                    if (!in_array($eye, ['OD', 'OS'])) {
-                        $results['warnings'][] = "Line $lineNumber: Invalid eye value '$eye' - must be OD or OS";
-                        $eye = null;
-                    }
+                    // Insert test data into the tests table
+                    insertTest($conn, $testId, $patientId, 'KH', $testDateFormatted);
+                    $results['tests_processed']++;
 
-                    // ================= DIAGNOSIS DATA =================
+                    // Extract eye-related test data
+                    $eyes = ['OD', 'OS'];
                     $reportDiagnosis = strtolower($data[6] ?? 'no input');
                     $exclusion = strtolower($data[7] ?? 'none');
                     $merciScore = isset($data[8]) ? (strtolower($data[8]) === 'unable' ? 'unable' : (is_numeric($data[8]) ? (int)$data[8] : null)) : null;
@@ -97,32 +108,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $errorType = strtoupper($data[10] ?? 'none');
                     $fafGrade = isset($data[11]) && is_numeric($data[11]) ? (int)$data[11] : null;
                     $octScore = isset($data[12]) && is_numeric($data[12]) ? round((float)$data[12], 2) : null;
-                    $vfScore = isset($data[13]) && is_numeric($data[13])) ? round((float)$data[13], 2) : null;
+                    $vfScore = isset($data[13]) && is_numeric($data[13]) ? round((float)$data[13], 2) : null;
                     $actualDiagnosis = strtolower($data[14] ?? 'other');
                     $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
                     $durationDays = isset($data[16]) && is_numeric($data[16]) ? (int)$data[16] : null;
                     $cumulativeDosage = isset($data[17]) && is_numeric($data[17]) ? round(floatval($data[17]), 2) : null;
-                    $date_of_continuation = trim($data[18] ?? '');
+                    $dateOfContinuation = trim($data[18] ?? '');
 
-                    // ================= DATABASE OPERATIONS =================
-                    $location = 'KH';  // Default location
-                    
-                    // Create or get patient
-                    $patientId = generatePatientId($subjectId);
-                    $patientId = getOrCreatePatient($conn, $patientId, $subjectId, $location, $dobFormatted);
-                    $results['patients_processed']++;
-
-                    // Insert test record
-                    insertTest($conn, $testId, $patientId, $location, $testDateFormatted);
-                    $results['tests_processed']++;
-
-                    // Insert test eye data for both eyes (OD and OS)
-                    $eyes = ['OD', 'OS'];
+                    // Insert test eye data for both eyes
                     foreach ($eyes as $eye) {
                         insertTestEye(
                             $conn,
                             $testId,
-                            $patientId,
                             $eye,
                             $age,
                             $reportDiagnosis,
@@ -139,7 +136,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             'mg', // dosage_unit
                             $durationDays,
                             $cumulativeDosage,
-                            $date_of_continuation
+                            $dateOfContinuation,
+                            null  // treatment_notes (optional)
                         );
                         $results['eyes_processed']++;
                     }
@@ -225,7 +223,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 <h3>CSV Format Requirements:</h3>
                 <ul>
                     <li>First row should be headers (will be skipped)</li>
-                    <li>Minimum 19 columns required</li>
+                    <li>Minimum 18 columns required</li>
                     <li>Date formats: MM/DD/YYYY</li>
                 </ul>
             </div>
@@ -235,3 +233,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
+
