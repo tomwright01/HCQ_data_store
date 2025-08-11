@@ -128,16 +128,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $vfScore = (isset($data[13]) && is_numeric($data[13])) ? round((float)$data[13], 2) : null;
 
                     // ================= DIAGNOSIS & MEDICATION =================
-                    $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
-                    $actualDiagnosis  = 'other';            // ← default value
-                    if (!empty($data[14])) {
-                        $d = strtoupper(trim($data[14])); // Convert input to uppercase
-                        // Special case for 'Sjogren' (mixed case in DB)
-                        if (strtolower($d) === 'sjogren') {
-                            $d = 'Sjogren';
-                        }
-                        $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
+                    // [14] Actual Diagnosis (robust enum matching)
+                    $diagnosisInput = strtolower(trim($data[14] ?? ''));
+                    switch ($diagnosisInput) {
+                        case 'ra':
+                            $actualDiagnosis = 'RA';
+                            break;
+                        case 'sle':
+                            $actualDiagnosis = 'SLE';
+                            break;
+                        case 'sjogren':
+                            $actualDiagnosis = 'Sjogren';
+                            break;
+                        case 'other':
+                            $actualDiagnosis = 'other';
+                            break;
+                        default:
+                            $actualDiagnosis = 'other';
+                            break;
                     }
+
 
                         // [14] Dosage
                     $dosage = is_numeric($data[15])
