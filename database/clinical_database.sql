@@ -38,6 +38,7 @@ CREATE TABLE audit_log (
 -- TESTS TABLE
 -- ==========================
 CREATE TABLE tests (
+    test_id VARCHAR(25) PRIMARY KEY,
     patient_id VARCHAR(25) NOT NULL,
     location ENUM('KH', 'CHUSJ', 'IWK', 'IVEY') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
@@ -52,7 +53,7 @@ CREATE TABLE tests (
 -- TEST_EYES TABLE
 -- ==========================
 CREATE TABLE test_eyes (
-    test_id VARCHAR(25) PRIMARY KEY,
+    test_id VARCHAR(25),
     eye ENUM('OD', 'OS') NOT NULL,
     age TINYINT UNSIGNED NULL,
     report_diagnosis ENUM('normal','abnormal', 'exclude','no input') NOT NULL DEFAULT 'no input',
@@ -63,7 +64,7 @@ CREATE TABLE test_eyes (
     faf_grade TINYINT UNSIGNED NULL,
     oct_score DECIMAL(10,2) NULL,
     vf_score DECIMAL(10,2) NULL,
-    actual_diagnosis VARCHAR(255) NULL,
+    actual_diagnosis ENUM('RA','SLE','Sjogren','other') NOT NULL DEFAULT 'other',
     medication_name VARCHAR(100) NULL,
     dosage DECIMAL(10,2) NULL,
     dosage_unit VARCHAR(10) DEFAULT 'mg',
