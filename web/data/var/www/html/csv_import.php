@@ -131,8 +131,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
                     $actualDiagnosis  = 'other';            // ← default value
                     if (!empty($data[14])) {
-                      $d = ucfirst(strtolower(trim($data[14])));
-                      $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
+                        $d = strtoupper(trim($data[14])); // Convert input to uppercase
+                        // Special case for 'Sjogren' (mixed case in DB)
+                        if (strtolower($d) === 'sjogren') {
+                            $d = 'Sjogren';
+                        }
+                        $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
                     }
 
                         // [14] Dosage
