@@ -56,13 +56,13 @@ function insertTest($conn, $test_id, $patient_id, $location, $date_of_test) {
 function insertTestEye(
     $conn, $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score,
     $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score,
-    $actual_diagnosis, $medication_name, $dosage, $dosage_unit,
+    $actual_diagnosis, $dosage, 
     $duration_days, $cumulative_dosage, $date_of_continuation
 ) {
     $stmt = $conn->prepare("
         INSERT INTO test_eyes 
         (test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
-        faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
+        faf_grade, oct_score, vf_score, actual_diagnosis, dosage,
         duration_days, cumulative_dosage, date_of_continuation)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
@@ -76,9 +76,7 @@ function insertTestEye(
             oct_score = VALUES(oct_score),
             vf_score = VALUES(vf_score),
             actual_diagnosis = VALUES(actual_diagnosis),
-            medication_name = VALUES(medication_name),
             dosage = VALUES(dosage),
-            dosage_unit = VALUES(dosage_unit),
             duration_days = VALUES(duration_days),
             cumulative_dosage = VALUES(cumulative_dosage),
             date_of_continuation = VALUES(date_of_continuation),
@@ -86,7 +84,7 @@ function insertTestEye(
     ");
     $stmt->bind_param("ssissssssdddsdss",
         $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score, $merci_diagnosis, $error_type,
-        $faf_grade, $oct_score, $vf_score, $actual_diagnosis, $medication_name, $dosage, $dosage_unit,
+        $faf_grade, $oct_score, $vf_score, $actual_diagnosis, $dosage,
         $duration_days, $cumulative_dosage, $date_of_continuation
     );
     if (!$stmt->execute()) {
@@ -127,5 +125,7 @@ function getTestEyes($conn, $test_id) {
     return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 }
 ?>
+
+
 
 
