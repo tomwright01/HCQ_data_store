@@ -34,14 +34,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
         if (($handle = fopen($file, 'r')) !== false) {
             $lineNumber = 0;
             
-            while (($data = fgetcsv($handle, 0, ',', '"')) !== false) { // Added escape handling here
+            while (($data = fgetcsv($handle, 0, ',', '"', '\\')) !== false) { // Added escape handling here
                 $lineNumber++;
                 $results['total_rows']++;
                 
                 if ($lineNumber === 1) continue; // Skip header row
 
-                if (count($data) < 18) {
-                    $results['errors'][] = "Line $lineNumber: Skipped - Insufficient columns (expected 18, found " . count($data) . ")";
+                if (count($data) < 19) { // 19 columns as per the updated CSV structure
+                    $results['errors'][] = "Line $lineNumber: Skipped - Insufficient columns (expected 19, found " . count($data) . ")";
                     continue;
                 }
 
@@ -53,11 +53,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
                 try {
                     // ================= PATIENT DATA =================
-                    $subjectId = $data[0] ?? null;
+                    $subjectId = $data[0] ?? null;  // Patient ID
                     if (empty($subjectId)) {
                         throw new Exception("Missing subject ID");
                     }
 
+                    // Parse dates with validation
                     $dob = DateTime::createFromFormat('m/d/Y', $data[1] ?? '');
                     if (!$dob) {
                         throw new Exception("Invalid date of birth format (expected MM/DD/YYYY)");
@@ -220,7 +221,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 <h3>CSV Format Requirements:</h3>
                 <ul>
                     <li>First row should be headers (will be skipped)</li>
-                    <li>Minimum 18 columns required</li>
+                    <li>Minimum 19 columns required</li>
                     <li>Date formats: MM/DD/YYYY</li>
                 </ul>
             </div>
@@ -230,3 +231,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
+
