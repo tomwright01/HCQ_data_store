@@ -64,7 +64,7 @@ function insertTestEye(
         (test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
         faf_grade, oct_score, vf_score, actual_diagnosis, dosage,
         duration_days, cumulative_dosage, date_of_continuation)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             age = VALUES(age),
             report_diagnosis = VALUES(report_diagnosis),
