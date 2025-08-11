@@ -38,7 +38,7 @@ CREATE TABLE audit_log (
 -- TESTS TABLE
 -- ==========================
 CREATE TABLE tests (
-    test_id VARCHAR(25) NOT NULL,
+    test_id VARCHAR(25) NOT NULL PRIMARY KEY,
     patient_id VARCHAR(25) NOT NULL,
     location ENUM('KH', 'CHUSJ', 'IWK', 'IVEY') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
@@ -53,10 +53,10 @@ CREATE TABLE tests (
 -- TEST_EYES TABLE
 -- ==========================
 CREATE TABLE test_eyes (
-    test_id VARCHAR(25) PRIMARY KEY,
+    test_id VARCHAR(25) NOT NULL,
     eye ENUM('OD', 'OS') NOT NULL,
     age TINYINT UNSIGNED NULL,
-    report_diagnosis ENUM('normal','abnormal', 'exclude','no input') NOT NULL DEFAULT 'no input',
+    report_diagnosis ENUM('normal','abnormal','exclude','no input') NOT NULL DEFAULT 'no input',
     exclusion ENUM('none','retinal detachment','generalized retinal dysfunction','unilateral testing') NOT NULL DEFAULT 'none',
     merci_score VARCHAR(10) NULL,
     merci_diagnosis ENUM('normal','abnormal','no value') NOT NULL DEFAULT 'no value',
@@ -78,8 +78,8 @@ CREATE TABLE test_eyes (
     mferg_reference VARCHAR(255) NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE,
-    PRIMARY KEY (test_id, eye)
+    PRIMARY KEY (test_id, eye),
+    FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE
 );
 
 -- ==========================
@@ -95,8 +95,13 @@ BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, new_values, changed_by
     ) VALUES (
-        'tests', NEW.test_id, 'INSERT',
-        CONCAT('{"test_id":"', NEW.test_id, '","patient_id":"', NEW.patient_id, '"}'),
+        'tests', 
+        NEW.test_id, 
+        'INSERT',
+        CONCAT(
+            '{"test_id":"', REPLACE(NEW.test_id,'"','\"'), 
+            '","patient_id":"', REPLACE(NEW.patient_id,'"','\"'), '"}'
+        ),
         CURRENT_USER()
     );
 END//
@@ -109,9 +114,17 @@ BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, old_values, new_values, changed_by
     ) VALUES (
-        'tests', NEW.test_id, 'UPDATE',
-        CONCAT('{"test_id":"', OLD.test_id, '","patient_id":"', OLD.patient_id, '"}'),
-        CONCAT('{"test_id":"', NEW.test_id, '","patient_id":"', NEW.patient_id, '"}'),
+        'tests', 
+        NEW.test_id, 
+        'UPDATE',
+        CONCAT(
+            '{"test_id":"', REPLACE(OLD.test_id,'"','\"'), 
+            '","patient_id":"', REPLACE(OLD.patient_id,'"','\"'), '"}'
+        ),
+        CONCAT(
+            '{"test_id":"', REPLACE(NEW.test_id,'"','\"'), 
+            '","patient_id":"', REPLACE(NEW.patient_id,'"','\"'), '"}'
+        ),
         CURRENT_USER()
     );
 END//
@@ -124,8 +137,13 @@ BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, old_values, changed_by
     ) VALUES (
-        'tests', OLD.test_id, 'DELETE',
-        CONCAT('{"test_id":"', OLD.test_id, '","patient_id":"', OLD.patient_id, '"}'),
+        'tests', 
+        OLD.test_id, 
+        'DELETE',
+        CONCAT(
+            '{"test_id":"', REPLACE(OLD.test_id,'"','\"'), 
+            '","patient_id":"', REPLACE(OLD.patient_id,'"','\"'), '"}'
+        ),
         CURRENT_USER()
     );
 END//
