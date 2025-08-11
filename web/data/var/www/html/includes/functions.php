@@ -59,30 +59,6 @@ function insertTestEye(
     $actual_diagnosis, $dosage, 
     $duration_days, $cumulative_dosage, $date_of_continuation
 ) {
-    // Debugging: Output the values being inserted
-    echo "<pre>";
-    echo "Inserting Test Eye Data for test_id: $test_id, eye: $eye\n";
-    print_r([
-        'test_id' => $test_id,
-        'eye' => $eye,
-        'age' => $age,
-        'report_diagnosis' => $report_diagnosis,
-        'exclusion' => $exclusion,
-        'merci_score' => $merci_score,
-        'merci_diagnosis' => $merci_diagnosis,
-        'error_type' => $error_type,
-        'faf_grade' => $faf_grade,
-        'oct_score' => $oct_score,
-        'vf_score' => $vf_score,
-        'actual_diagnosis' => $actual_diagnosis,
-        'dosage' => $dosage,
-        'duration_days' => $duration_days,
-        'cumulative_dosage' => $cumulative_dosage,
-        'date_of_continuation' => $date_of_continuation
-    ]);
-    echo "</pre>";
-
-    // Prepare the SQL query
     $stmt = $conn->prepare("
         INSERT INTO test_eyes 
         (test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
@@ -106,34 +82,14 @@ function insertTestEye(
             date_of_continuation = VALUES(date_of_continuation),
             updated_at = CURRENT_TIMESTAMP
     ");
-
-    // Bind the parameters
-    $stmt->bind_param("iiissiiiiiiddsds", 
-        $test_id,   // i: test_id (integer)
-        $eye,       // s: eye (string)
-        $age,       // i: age (integer)
-        $report_diagnosis, // s: report_diagnosis (string)
-        $exclusion, // s: exclusion (string)
-        $merci_score, // i: merci_score (integer)
-        $merci_diagnosis, // s: merci_diagnosis (string)
-        $error_type,  // s: error_type (string)
-        $faf_grade,  // i: faf_grade (integer)
-        $oct_score,  // d: oct_score (decimal)
-        $vf_score,   // i: vf_score (integer)
-        $actual_diagnosis, // s: actual_diagnosis (string)
-        $dosage,     // d: dosage (decimal)
-        $duration_days, // i: duration_days (integer)
-        $cumulative_dosage, // d: cumulative_dosage (decimal)
-        $date_of_continuation // s: date_of_continuation (string)
+    $stmt->bind_param("iiissiiiiiiddsds",
+        $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score, $merci_diagnosis, $error_type,
+        $faf_grade, $oct_score, $vf_score, $actual_diagnosis, $dosage,
+        $duration_days, $cumulative_dosage, $date_of_continuation
     );
-    
-    // Execute the statement
     if (!$stmt->execute()) {
         die("Failed to insert/update test_eye: " . $stmt->error);
-    } else {
-        echo "Inserted into test_eyes successfully.\n";
     }
-
     $stmt->close();
 }
 
