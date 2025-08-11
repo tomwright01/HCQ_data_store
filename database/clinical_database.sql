@@ -1,6 +1,4 @@
--- ==========================
--- FULL CLINICAL DATABASE SCHEMA (clean/recreate)
--- ==========================
+-- Create Database
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
@@ -39,6 +37,7 @@ CREATE TABLE audit_log (
 -- ==========================
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
+    patient_id VARCHAR(25) NOT NULL,  -- Add this column
     location ENUM('KH', 'CHUSJ', 'IWK', 'IVEY') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -49,13 +48,12 @@ CREATE TABLE tests (
 );
 
 -- ==========================
--- TEST_EYES TABLE (Updated)
+-- TEST_EYES TABLE
 -- ==========================
 CREATE TABLE test_eyes (
-    result_id INT AUTO_INCREMENT PRIMARY KEY,  -- Unique result entry
-    test_id VARCHAR(25) NOT NULL,              -- Reference to the test
-    patient_id VARCHAR(25) NOT NULL,  
-    eye ENUM('OD', 'OS') NOT NULL,             -- 'OD' for right eye, 'OS' for left eye
+    result_id INT AUTO_INCREMENT PRIMARY KEY,  
+    test_id VARCHAR(25) NOT NULL,              
+    eye ENUM('OD', 'OS') NOT NULL,             
     age TINYINT UNSIGNED NULL,
     report_diagnosis ENUM('normal', 'abnormal', 'exclude', 'no input') NOT NULL DEFAULT 'no input',
     exclusion ENUM('none', 'retinal detachment', 'generalized retinal dysfunction', 'unilateral testing') NOT NULL DEFAULT 'none',
@@ -72,7 +70,6 @@ CREATE TABLE test_eyes (
     duration_days SMALLINT UNSIGNED NULL,
     cumulative_dosage DECIMAL(10,2) NULL,
     date_of_continuation VARCHAR(255) NULL,
-    treatment_notes TEXT NULL,
     faf_reference VARCHAR(255) NULL,
     oct_reference VARCHAR(255) NULL,
     vf_reference VARCHAR(255) NULL,
@@ -132,5 +129,4 @@ BEGIN
 END//
 
 DELIMITER ;
-
 
