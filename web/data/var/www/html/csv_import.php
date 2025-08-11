@@ -40,16 +40,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 $lineNumber++;
                 $results['total_rows']++;
 
-                // Skip header row
-                if ($lineNumber === 1) continue;
+                // Debugging: Print the contents of the data array (columns of the current row)
+                echo "<pre>";
+                echo "Line $lineNumber: ";
+                print_r($data);  // This will print the columns for each line
+                echo "</pre>";
 
-                // Validate columns
-                if (count($data) < 18) {
-                    $results['errors'][] = "Line $lineNumber: Skipped - Insufficient columns";
+                // Ensure exactly 19 columns
+                if (count($data) != 19) {
+                    $results['errors'][] = "Line $lineNumber: Skipped - Incorrect number of columns (expected 19)";
                     continue;
                 }
 
-                // Normalize data
+                // Normalize data and process
                 $data = array_map('trim', $data);
                 $data = array_map(function ($value) {
                     return in_array(strtolower($value), ['null', 'no value', 'missing', '']) ? null : $value;
@@ -222,7 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 <h3>CSV Format Requirements:</h3>
                 <ul>
                     <li>First row should be headers (will be skipped)</li>
-                    <li>Minimum 18 columns required</li>
+                    <li>Minimum 19 columns required</li>
                     <li>Date formats: MM/DD/YYYY</li>
                 </ul>
             </div>
@@ -232,4 +235,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
+
 
