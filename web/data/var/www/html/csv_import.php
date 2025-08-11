@@ -131,21 +131,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
                     $actualDiagnosis  = 'other';            // ← default value
                     if (!empty($data[14])) {
-                      $d = ucfirst(strtolower(trim($data[14])));
+                      $d = ucfirst(strtolower(trim($data[14]))); 
                       $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
                     }
 
-                        // [14] Dosage
+                    // [14] Dosage
                     $dosage = is_numeric($data[15])
                         ? round(floatval($data[15]), 2)
                         : null;
 
-                        // [15] Duration Days
+                    // [15] Duration Days
                     $durationDays = is_numeric($data[16])
                         ? (int)$data[16]
                         : null;
 
-                        // [16] Cumulative Dosage
+                    // [16] Cumulative Dosage
                     $cumulativeDosage = is_numeric($data[17])
                         ? round(floatval($data[17]), 2)
                         : null;
@@ -155,7 +155,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     if ($date_of_continuation === '') {
                         $date_of_continuation = null;  // Store NULL if empty
                     }
-
 
                     // ================= DATABASE OPERATIONS =================
                     // Default location
@@ -170,8 +169,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     insertTest($conn, $testId, $patientId, $location, $testDateFormatted);
                     $results['tests_processed']++;
 
-                    // Insert test eye data if eye is specified
-                    if ($eye) {
+                    // Insert test eye data for both eyes (OD and OS)
+                    $eyes = ['OD', 'OS'];
+                    foreach ($eyes as $eye) {
                         insertTestEye(
                             $conn,
                             $testId,
@@ -191,7 +191,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             'mg', // dosage_unit
                             $durationDays,
                             $cumulativeDosage,
-                            $dateOfContinuation,
+                            $date_of_continuation,
                             null  // treatment_notes
                         );
                         $results['eyes_processed']++;
@@ -288,3 +288,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
+
