@@ -55,6 +55,7 @@ CREATE TABLE tests (
 CREATE TABLE test_eyes (
     result_id INT AUTO_INCREMENT PRIMARY KEY,  -- Unique result entry
     test_id VARCHAR(25) NOT NULL,              -- Reference to the test
+    patient_id VARCHAR(25) NOT NULL,  
     eye ENUM('OD', 'OS') NOT NULL,             -- 'OD' for right eye, 'OS' for left eye
     age TINYINT UNSIGNED NULL,
     report_diagnosis ENUM('normal', 'abnormal', 'exclude', 'no input') NOT NULL DEFAULT 'no input',
