@@ -1,5 +1,6 @@
+-- ==========================
 -- FULL CLINICAL DATABASE SCHEMA (clean/recreate)
-
+-- ==========================
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
@@ -49,22 +50,23 @@ CREATE TABLE tests (
 );
 
 -- ==========================
--- TEST_EYES TABLE
+-- TEST_EYES TABLE (Updated)
 -- ==========================
 CREATE TABLE test_eyes (
-    result_id INT AUTO_INCREMENT PRIMARY KEY,
-    test_id VARCHAR(25) NOT NULL,  -- Ensure test_id is VARCHAR to match tests table
-    eye ENUM('OD', 'OS') NOT NULL,
+    result_id INT AUTO_INCREMENT PRIMARY KEY,  -- Unique result entry
+    test_id VARCHAR(25) NOT NULL,              -- Reference to the test
+    eye ENUM('OD', 'OS') NOT NULL,             -- 'OD' for right eye, 'OS' for left eye
     age TINYINT UNSIGNED NULL,
     report_diagnosis ENUM('normal', 'abnormal', 'exclude', 'no input') NOT NULL DEFAULT 'no input',
     exclusion ENUM('none', 'retinal detachment', 'generalized retinal dysfunction', 'unilateral testing') NOT NULL DEFAULT 'none',
-    merci_score INT NULL,    -- Use INT or DECIMAL(10,2) if you want more precision
+    merci_score VARCHAR(10) NULL,
     merci_diagnosis ENUM('normal', 'abnormal', 'no value') NOT NULL DEFAULT 'no value',
     error_type ENUM('TN', 'FP', 'TP', 'FN', 'none') DEFAULT NULL,
     faf_grade TINYINT UNSIGNED NULL,
-    oct_score DECIMAL(10,2) NULL,    -- DECIMAL type for more precision
-    vf_score INT NULL,                -- Use INT or DECIMAL(10,2) depending on needs
+    oct_score DECIMAL(10,2) NULL,
+    vf_score DECIMAL(10,2) NULL,
     actual_diagnosis ENUM('RA', 'SLE', 'Sjogren', 'other') NOT NULL DEFAULT 'other',
+    medication_name VARCHAR(100) NULL,
     dosage DECIMAL(10,2) NULL,
     dosage_unit VARCHAR(10) DEFAULT 'mg',
     duration_days SMALLINT UNSIGNED NULL,
