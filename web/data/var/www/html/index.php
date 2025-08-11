@@ -15,44 +15,7 @@ $patients = getPatientsWithTests($conn);
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
     <style>
-        .patient-card {
-            transition: all 0.3s ease;
-            margin-bottom: 20px;
-        }
-        .patient-card:hover {
-            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-        .test-card {
-            border-left: 4px solid #0d6efd;
-            margin-bottom: 15px;
-        }
-        .eye-badge {
-            font-size: 0.8rem;
-            margin-right: 5px;
-        }
-        .os-badge { background-color: #6f42c1; }
-        .od-badge { background-color: #20c997; }
-        .search-box {
-            position: relative;
-            margin-bottom: 20px;
-        }
-        .search-box i {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            color: #6c757d;
-        }
-        .search-input {
-            padding-left: 35px;
-        }
-        .diagnosis-badge {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-        }
-        .normal { background-color: #198754; }
-        .abnormal { background-color: #dc3545; }
-        .exclude { background-color: #6c757d; }
-        .no-input { background-color: #ffc107; color: #000; }
+        /* Custom styles here */
     </style>
 </head>
 <body>
@@ -211,29 +174,7 @@ $patients = getPatientsWithTests($conn);
                                                                     <?= $eye['report_diagnosis'] ?>
                                                                 </span>
                                                             </div>
-                                                            
-                                                            <div class="row">
-                                                                <div class="col-md-6">
-                                                                    <p><strong>Age at Test:</strong> <?= $eye['age'] ?? 'N/A' ?></p>
-                                                                    <p><strong>MERCI Score:</strong> <?= $eye['merci_score'] ?? 'N/A' ?></p>
-                                                                    <p><strong>OCT Score:</strong> <?= $eye['oct_score'] ?? 'N/A' ?></p>
-                                                                </div>
-                                                                <div class="col-md-6">
-                                                                    <p><strong>VF Score:</strong> <?= $eye['vf_score'] ?? 'N/A' ?></p>
-                                                                    <p><strong>FAF Grade:</strong> <?= $eye['faf_grade'] ?? 'N/A' ?></p>
-                                                                    <p><strong>Diagnosis:</strong> <?= $eye['actual_diagnosis'] ?></p>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <?php if ($eye['medication_name'] || $eye['dosage']): ?>
-                                                                <div class="alert alert-info mt-2 p-2">
-                                                                    <strong>Medication:</strong> 
-                                                                    <?= $eye['medication_name'] ? htmlspecialchars($eye['medication_name']) : 'N/A' ?>
-                                                                    <?php if ($eye['dosage']): ?>
-                                                                        (<?= $eye['dosage'] ?> <?= $eye['dosage_unit'] ?>)
-                                                                    <?php endif; ?>
-                                                                </div>
-                                                            <?php endif; ?>
+                                                             <!-- Other content goes here -->
                                                         </div>
                                                     </div>
                                                 <?php endforeach; ?>
@@ -250,42 +191,5 @@ $patients = getPatientsWithTests($conn);
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        // Search and filter functionality
-        document.addEventListener('DOMContentLoaded', function() {
-            const searchInput = document.getElementById('searchInput');
-            const locationFilter = document.getElementById('locationFilter');
-            const diagnosisFilter = document.getElementById('diagnosisFilter');
-            const patientItems = document.querySelectorAll('.patient-item');
-            
-            function filterPatients() {
-                const searchTerm = searchInput.value.toLowerCase();
-                const locationValue = locationFilter.value;
-                const diagnosisValue = diagnosisFilter.value.toLowerCase();
-                
-                patientItems.forEach(item => {
-                    const patientText = item.textContent.toLowerCase();
-                    const patientLocation = item.getAttribute('data-location');
-                    const patientDiagnoses = item.querySelectorAll('.diagnosis-badge');
-                    
-                    let matchesSearch = searchTerm === '' || patientText.includes(searchTerm);
-                    let matchesLocation = locationValue === '' || patientLocation === locationValue;
-                    let matchesDiagnosis = diagnosisValue === '' || 
-                        Array.from(patientDiagnoses).some(badge => 
-                            badge.textContent.toLowerCase().includes(diagnosisValue));
-                    
-                    if (matchesSearch && matchesLocation && matchesDiagnosis) {
-                        item.style.display = 'block';
-                    } else {
-                        item.style.display = 'none';
-                    }
-                });
-            }
-            
-            searchInput.addEventListener('input', filterPatients);
-            locationFilter.addEventListener('change', filterPatients);
-            diagnosisFilter.addEventListener('change', filterPatients);
-        });
-    </script>
 </body>
 </html>
