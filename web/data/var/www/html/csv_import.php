@@ -109,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     // Insert test eye data for both eyes
                     foreach ($eyes as $eye) {
                         // Debugging: Output the values before calling insertTestEye
-                        echo "<pre>";
+/*                         echo "<pre>";
                         echo "Preparing to insert test eye data for test_id: $testId, eye: $eye\n";
                         print_r([
                             'test_id' => $testId,
@@ -130,7 +130,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             'date_of_continuation' => $dateOfContinuation
                         ]);
                         echo "</pre>";
-
+ */
                         // Insert into test_eyes table
                         insertTestEye(
                             $conn,
