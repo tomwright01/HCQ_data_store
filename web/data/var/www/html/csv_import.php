@@ -3,11 +3,22 @@ require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
+    // Debugging: Check if file was uploaded
+    if ($_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
+        die("<div class='error'>Error uploading file: " . $_FILES['csv_file']['error'] . "</div>");
+    }
+
     // Set headers for CSV upload
     header('Content-Type: text/html; charset=utf-8');
     
     $file = $_FILES['csv_file']['tmp_name'];
     $filename = $_FILES['csv_file']['name'];
+
+    // Debugging: Output file details
+    echo "File details:<br>";
+    echo "File name: $filename<br>";
+    echo "File size: " . $_FILES['csv_file']['size'] . " bytes<br>";
+    echo "Temporary file: $file<br>";
 
     if (!file_exists($file)) {
         die("<div class='error'>Error: File not found.</div>");
@@ -208,6 +219,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
             // Display results
             echo "<div class='results'>";
+
+            // Display summary
             echo "<h2>CSV Import Results</h2>";
             echo "<p><strong>File:</strong> " . htmlspecialchars($filename) . "</p>";
             echo "<p><strong>Total rows processed:</strong> " . $results['total_rows'] . "</p>";
@@ -288,4 +301,3 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
-
