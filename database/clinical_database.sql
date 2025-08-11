@@ -1,6 +1,5 @@
--- ==========================
 -- FULL CLINICAL DATABASE SCHEMA (clean/recreate)
--- ==========================
+
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
@@ -34,10 +33,9 @@ CREATE TABLE audit_log (
     INDEX idx_changed_at (changed_at)
 );
 
--- PATIENTS TABLE
-
-
+-- ==========================
 -- TESTS TABLE
+-- ==========================
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
     patient_id VARCHAR(25) NOT NULL,
@@ -50,20 +48,22 @@ CREATE TABLE tests (
     INDEX idx_date (date_of_test)
 );
 
+-- ==========================
 -- TEST_EYES TABLE
+-- ==========================
 CREATE TABLE test_eyes (
     result_id INT AUTO_INCREMENT PRIMARY KEY,
-    test_id INT NOT NULL,
+    test_id VARCHAR(25) NOT NULL,  -- Ensure test_id is VARCHAR to match tests table
     eye ENUM('OD', 'OS') NOT NULL,
     age TINYINT UNSIGNED NULL,
     report_diagnosis ENUM('normal', 'abnormal', 'exclude', 'no input') NOT NULL DEFAULT 'no input',
     exclusion ENUM('none', 'retinal detachment', 'generalized retinal dysfunction', 'unilateral testing') NOT NULL DEFAULT 'none',
-    merci_score INT NULL,
+    merci_score INT NULL,    -- Use INT or DECIMAL(10,2) if you want more precision
     merci_diagnosis ENUM('normal', 'abnormal', 'no value') NOT NULL DEFAULT 'no value',
     error_type ENUM('TN', 'FP', 'TP', 'FN', 'none') DEFAULT NULL,
     faf_grade TINYINT UNSIGNED NULL,
-    oct_score DECIMAL(10,2) NULL,
-    vf_score INT NULL,
+    oct_score DECIMAL(10,2) NULL,    -- DECIMAL type for more precision
+    vf_score INT NULL,                -- Use INT or DECIMAL(10,2) depending on needs
     actual_diagnosis ENUM('RA', 'SLE', 'Sjogren', 'other') NOT NULL DEFAULT 'other',
     dosage DECIMAL(10,2) NULL,
     dosage_unit VARCHAR(10) DEFAULT 'mg',
@@ -80,6 +80,7 @@ CREATE TABLE test_eyes (
     FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE,
     INDEX idx_test_eye (test_id, eye)
 );
+
 -- ==========================
 -- TRIGGERS FOR AUDIT LOGGING
 -- ==========================
