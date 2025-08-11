@@ -8,9 +8,11 @@ require_once 'includes/functions.php';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     header('Content-Type: text/html; charset=utf-8');
     
+    // Get the uploaded file details
     $file = $_FILES['csv_file']['tmp_name'];
     $filename = $_FILES['csv_file']['name'];
 
+    // Check if file is successfully uploaded
     if ($_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
         die("<div class='error'>Error uploading file: " . $_FILES['csv_file']['error'] . "</div>");
     }
@@ -19,6 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
         die("<div class='error'>Error: File not found.</div>");
     }
 
+    // Initialize results array
     $results = [
         'total_rows' => 0,
         'patients_processed' => 0,
@@ -33,14 +36,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
         if (($handle = fopen($file, 'r')) !== false) {
             $lineNumber = 0;
-            
-            while (($data = fgetcsv($handle, 0, ',', '"', '\\')) !== false) { // Added escape handling here
+
+            while (($data = fgetcsv($handle, 0, ',', '"')) !== false) {  // Added escape handling here
                 $lineNumber++;
                 $results['total_rows']++;
-                
+
                 if ($lineNumber === 1) continue; // Skip header row
 
-                if (count($data) < 19) { // 19 columns as per the updated CSV structure
+                if (count($data) < 19) {
                     $results['errors'][] = "Line $lineNumber: Skipped - Insufficient columns (expected 19, found " . count($data) . ")";
                     continue;
                 }
@@ -53,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
                 try {
                     // ================= PATIENT DATA =================
-                    $subjectId = $data[0] ?? null;  // Patient ID
+                    $subjectId = $data[0] ?? null;
                     if (empty($subjectId)) {
                         throw new Exception("Missing subject ID");
                     }
@@ -71,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     }
                     $testDateFormatted = $testDate->format('Y-m-d');
 
+                    // Validate age
                     $age = isset($data[3]) && is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 120 ? (int)$data[3] : null;
 
                     // ================= TEST DATA =================
@@ -93,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $errorType = strtoupper($data[10] ?? 'none');
                     $fafGrade = isset($data[11]) && is_numeric($data[11]) ? (int)$data[11] : null;
                     $octScore = isset($data[12]) && is_numeric($data[12]) ? round((float)$data[12], 2) : null;
-                    $vfScore = isset($data[13]) && is_numeric($data[13]) ? round((float)$data[13], 2) : null;
+                    $vfScore = isset($data[13]) && is_numeric($data[13])) ? round((float)$data[13], 2) : null;
                     $actualDiagnosis = strtolower($data[14] ?? 'other');
                     $dosage = isset($data[15]) && is_numeric($data[15]) ? round(floatval($data[15]), 2) : null;
                     $durationDays = isset($data[16]) && is_numeric($data[16]) ? (int)$data[16] : null;
@@ -118,6 +122,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         insertTestEye(
                             $conn,
                             $testId,
+                            $patientId,
                             $eye,
                             $age,
                             $reportDiagnosis,
@@ -134,8 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             'mg', // dosage_unit
                             $durationDays,
                             $cumulativeDosage,
-                            $date_of_continuation,
-                            null  // treatment_notes
+                            $date_of_continuation
                         );
                         $results['eyes_processed']++;
                     }
