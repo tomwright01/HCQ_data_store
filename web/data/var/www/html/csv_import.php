@@ -1,4 +1,7 @@
 <?php
+ini_set('display_errors', 1);
+error_reporting(E_ALL);
+
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
@@ -9,6 +12,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     // Get the uploaded file details
     $file = $_FILES['csv_file']['tmp_name'];
     $filename = $_FILES['csv_file']['name'];
+
+    // Debugging: Output file details
+    echo "File uploaded: $filename<br>";
+    echo "File path: $file<br>";
 
     // Check if file is successfully uploaded
     if ($_FILES['csv_file']['error'] !== UPLOAD_ERR_OK) {
@@ -30,9 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     ];
 
     try {
+        // Check database connection
+        if ($conn->connect_error) {
+            die("Connection failed: " . $conn->connect_error);
+        }
+
+        // Begin transaction
         $conn->begin_transaction();
 
+        // Open the CSV file
         if (($handle = fopen($file, 'r')) !== false) {
+            echo "File opened successfully<br>";
             $lineNumber = 0;
             
             while (($data = fgetcsv($handle)) !== false) {
@@ -86,78 +101,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                         $testId = 'TEST_' . $subjectId . '_' . $testDate->format('Ymd') . '_' . bin2hex(random_bytes(2));
                     } else {
                         $testId = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $testId);
-                    }
-
-                    $eye = strtoupper($data[5] ?? '');
-                    if (!in_array($eye, ['OD', 'OS'])) {
-                        $results['warnings'][] = "Line $lineNumber: Invalid eye value '$eye' - must be OD or OS";
-                        $eye = null;
-                    }
-
-                    // ================= DIAGNOSIS DATA =================
-                    $reportDiagnosis = strtolower($data[6] ?? 'no input');
-                    if (!in_array($reportDiagnosis, ['normal', 'abnormal', 'exclude', 'no input'])) {
-                        $reportDiagnosis = 'no input';
-                    }
-
-                    $exclusion = strtolower($data[7] ?? 'none');
-                    if (!in_array($exclusion, ['none', 'retinal detachment', 'generalized retinal dysfunction', 'unilateral testing'])) {
-                        $exclusion = 'none';
-                    }
-
-                    // MERCI score handling
-                    $merciScore = null;
-                    if (isset($data[8])) {
-                        if (strtolower($data[8]) === 'unable') {
-                            $merciScore = 'unable';
-                        } elseif (is_numeric($data[8]) && $data[8] >= 0 && $data[8] <= 100) {
-                            $merciScore = (int)$data[8];
-                        }
-                    }
-
-                    $merciDiagnosis = strtolower($data[9] ?? 'no value');
-                    if (!in_array($merciDiagnosis, ['normal', 'abnormal', 'no value'])) {
-                        $merciDiagnosis = 'no value';
-                    }
-
-                    $errorType = strtoupper($data[10] ?? 'none');
-                    if (!in_array($errorType, ['TN', 'FP', 'TP', 'FN', 'NONE'])) {
-                        $errorType = 'none';
-                    }
-                    $errorType = $errorType === 'NONE' ? 'none' : $errorType;
-
-                    // ================= TEST SCORES =================
-                    $fafGrade = (isset($data[11]) && is_numeric($data[11]) && $data[11] >= 1 && $data[11] <= 4) ? (int)$data[11] : null;
-                    $octScore = (isset($data[12]) && is_numeric($data[12])) ? round((float)$data[12], 2) : null;
-                    $vfScore = (isset($data[13]) && is_numeric($data[13])) ? round((float)$data[13], 2) : null;
-
-                    // ================= DIAGNOSIS & MEDICATION =================
-                    $allowedDiagnosis = ['RA','SLE','Sjogren','other'];
-                    $actualDiagnosis  = 'other';            // ← default value
-                    if (!empty($data[14])) {
-                      $d = ucfirst(strtolower(trim($data[14]))); 
-                      $actualDiagnosis = in_array($d, $allowedDiagnosis) ? $d : 'other';
-                    }
-
-                    // [14] Dosage
-                    $dosage = is_numeric($data[15])
-                        ? round(floatval($data[15]), 2)
-                        : null;
-
-                    // [15] Duration Days
-                    $durationDays = is_numeric($data[16])
-                        ? (int)$data[16]
-                        : null;
-
-                    // [16] Cumulative Dosage
-                    $cumulativeDosage = is_numeric($data[17])
-                        ? round(floatval($data[17]), 2)
-                        : null;
-
-                    // Date of continuation
-                    $date_of_continuation = trim($data[18] ?? '');  // Get value from column 18
-                    if ($date_of_continuation === '') {
-                        $date_of_continuation = null;  // Store NULL if empty
                     }
 
                     // ================= DATABASE OPERATIONS =================
