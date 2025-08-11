@@ -85,6 +85,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     }
                     $testDateFormatted = $testDate->format('Y-m-d');
 
+                    // Extract age (from CSV or calculate it)
+                    $age = isset($data[3]) && is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 120 ? (int)$data[3] : null;
+                    if ($age === null && isset($data[1])) { // Calculate age if not provided
+                        $dob = DateTime::createFromFormat('m/d/Y', $data[1]);
+                        if ($dob) {
+                            $today = new DateTime();
+                            $age = $today->diff($dob)->y; // Calculate age from date_of_birth
+                        }
+                    }
+
                     // Insert test data into the tests table
                     insertTest($conn, $testId, $patientId, 'KH', $testDateFormatted);
                     $results['tests_processed']++;
