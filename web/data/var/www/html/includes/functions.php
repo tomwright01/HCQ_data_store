@@ -1,4 +1,6 @@
 <?php
+require_once 'config.php';
+
 
 /**
  * Insert a new test record into the tests table
