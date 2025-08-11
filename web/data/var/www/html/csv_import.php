@@ -1,8 +1,8 @@
-<?php
+<?php 
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
-// Simple helper to check if test already exists
+// Helper: check if test already exists
 function testExists($conn, $testId) {
     $stmt = $conn->prepare("SELECT COUNT(*) FROM tests WHERE test_id = ?");
     $stmt->bind_param("s", $testId);
@@ -11,6 +11,14 @@ function testExists($conn, $testId) {
     $stmt->fetch();
     $stmt->close();
     return $count > 0;
+}
+
+// Helper: generate a unique test ID
+function generateUniqueTestId($conn, $subjectId, $testDate) {
+    do {
+        $newTestId = 'TEST_' . $subjectId . '_' . $testDate->format('Ymd') . '_' . bin2hex(random_bytes(2));
+    } while (testExists($conn, $newTestId));
+    return $newTestId;
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
@@ -72,10 +80,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
                     // Test info
                     $testId = $data[4] ?? null;
-                    if (!$testId) {
-                        $testId = 'TEST_' . $subjectId . '_' . $testDate->format('Ymd') . '_' . bin2hex(random_bytes(2));
-                    } else {
-                        $testId = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $testId);
+                    $testId = $testId ? preg_replace('/[^a-zA-Z0-9_\-]/', '_', $testId) : null;
+
+                    // Generate a new testId if missing OR already exists
+                    if (!$testId || testExists($conn, $testId)) {
+                        $testId = generateUniqueTestId($conn, $subjectId, $testDate);
                     }
 
                     $eye = strtoupper(trim($data[5] ?? ''));
