@@ -12,23 +12,26 @@ function generatePatientId($subject_id) {
  * Get existing or create a patient record
  */
 function getOrCreatePatient($conn, $patient_id, $subject_id, $location, $dob) {
+    // Check if the patient already exists in the database using the CSV's patient_id
     $stmt = $conn->prepare("SELECT patient_id FROM patients WHERE patient_id = ?");
     $stmt->bind_param("s", $patient_id);
     $stmt->execute();
     $res = $stmt->get_result();
+    
     if ($res && $res->num_rows > 0) {
         $stmt->close();
-        return $patient_id;
+        return $patient_id; // Patient exists, return the patient_id
     }
     $stmt->close();
 
+    // If the patient does not exist, create a new one
     $stmt = $conn->prepare("INSERT INTO patients (patient_id, subject_id, location, date_of_birth) VALUES (?, ?, ?, ?)");
     $stmt->bind_param("ssss", $patient_id, $subject_id, $location, $dob);
     if (!$stmt->execute()) {
         die("Failed to insert patient: " . $stmt->error);
     }
     $stmt->close();
-    return $patient_id;
+    return $patient_id; // Return the newly created patient_id
 }
 
 /**
@@ -54,14 +57,14 @@ function insertTestEye(
     $conn, $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score,
     $merci_diagnosis, $error_type, $faf_grade, $oct_score, $vf_score,
     $actual_diagnosis, $medication_name, $dosage, $dosage_unit,
-    $duration_days, $cumulative_dosage, $date_of_continuation, $treatment_notes
+    $duration_days, $cumulative_dosage, $date_of_continuation
 ) {
     $stmt = $conn->prepare("
         INSERT INTO test_eyes 
         (test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
         faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
-        duration_days, cumulative_dosage, date_of_continuation, treatment_notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        duration_days, cumulative_dosage, date_of_continuation)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             age = VALUES(age),
             report_diagnosis = VALUES(report_diagnosis),
@@ -79,13 +82,12 @@ function insertTestEye(
             duration_days = VALUES(duration_days),
             cumulative_dosage = VALUES(cumulative_dosage),
             date_of_continuation = VALUES(date_of_continuation),
-            treatment_notes = VALUES(treatment_notes),
             updated_at = CURRENT_TIMESTAMP
     ");
-    $stmt->bind_param("ssissssssdddsdsssss",
+    $stmt->bind_param("ssissssssdddsdss",
         $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score, $merci_diagnosis, $error_type,
         $faf_grade, $oct_score, $vf_score, $actual_diagnosis, $medication_name, $dosage, $dosage_unit,
-        $duration_days, $cumulative_dosage, $date_of_continuation, $treatment_notes
+        $duration_days, $cumulative_dosage, $date_of_continuation
     );
     if (!$stmt->execute()) {
         die("Failed to insert/update test_eye: " . $stmt->error);
@@ -124,3 +126,5 @@ function getTestEyes($conn, $test_id) {
     $stmt->close();
     return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 }
+?>
+
