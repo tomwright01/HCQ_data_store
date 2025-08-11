@@ -120,6 +120,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
                     // Insert test eye data for both eyes
                     foreach ($eyes as $eye) {
+                        // Debugging: Output the values that are being passed to insertTestEye
+                        echo "<pre>";
+                        echo "Inserting Test Eye Data for $eye: ";
+                        print_r([
+                            'test_id' => $testId,
+                            'eye' => $eye,
+                            'age' => $age,
+                            'report_diagnosis' => $reportDiagnosis,
+                            'exclusion' => $exclusion,
+                            'merci_score' => $merciScore,
+                            'merci_diagnosis' => $merciDiagnosis,
+                            'error_type' => $errorType,
+                            'faf_grade' => $fafGrade,
+                            'oct_score' => $octScore,
+                            'vf_score' => $vfScore,
+                            'actual_diagnosis' => $actualDiagnosis,
+                            'dosage' => $dosage,
+                            'duration_days' => $durationDays,
+                            'cumulative_dosage' => $cumulativeDosage,
+                            'date_of_continuation' => $dateOfContinuation
+                        ]);
+                        echo "</pre>";
+
+                        // Insert into test_eyes table
                         insertTestEye(
                             $conn,
                             $testId,
@@ -235,5 +259,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
+
 
 
