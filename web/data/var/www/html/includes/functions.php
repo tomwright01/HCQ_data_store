@@ -82,7 +82,7 @@ function insertTestEye(
             date_of_continuation = VALUES(date_of_continuation),
             updated_at = CURRENT_TIMESTAMP
     ");
-    $stmt->bind_param("isississiiiddsds",
+    $stmt->bind_param("isississiiisisis",
         $test_id, $eye, $age, $report_diagnosis, $exclusion, $merci_score, $merci_diagnosis, $error_type,
         $faf_grade, $oct_score, $vf_score, $actual_diagnosis, $dosage,
         $duration_days, $cumulative_dosage, $date_of_continuation
