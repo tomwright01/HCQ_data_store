@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
             $lineNumber = 0;
 
             // Read the CSV data
-            while (($data = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {  // Added escape parameter
+            while (($data = fgetcsv($handle, 0, ',', '"', '\\')) !== false) {
                 $lineNumber++;
                 $results['total_rows']++;
 
@@ -108,9 +108,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
                     // Insert test eye data for both eyes
                     foreach ($eyes as $eye) {
-                        // Debugging: Output the values that are being passed to insertTestEye
+                        // Debugging: Output the values before calling insertTestEye
                         echo "<pre>";
-                        echo "Inserting Test Eye Data for $eye: ";
+                        echo "Preparing to insert test eye data for test_id: $testId, eye: $eye\n";
                         print_r([
                             'test_id' => $testId,
                             'eye' => $eye,
