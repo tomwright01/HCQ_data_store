@@ -1,4 +1,4 @@
-?php
+<?php
 require_once 'config.php';
 
 /**
@@ -169,7 +169,3 @@ function getTestEyes($conn, $test_id) {
     return $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
 }
 ?>
-
-
-
-
