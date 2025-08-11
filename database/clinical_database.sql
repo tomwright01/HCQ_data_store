@@ -39,7 +39,6 @@ CREATE TABLE audit_log (
 -- ==========================
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
-    patient_id VARCHAR(25) NOT NULL,
     location ENUM('KH', 'CHUSJ', 'IWK', 'IVEY') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
