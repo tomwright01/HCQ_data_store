@@ -2,6 +2,52 @@
 require_once 'config.php';  // Ensure the database connection is available
 
 /**
+ * Get all patients with their test count
+ * @param mysqli $conn Database connection
+ * @return array Array of patients with their test count
+ */
+function getPatientsWithTests($conn) {
+    $stmt = $conn->prepare("SELECT patient_id, subject_id, location, date_of_birth FROM patients");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $patients = $result->fetch_all(MYSQLI_ASSOC);
+
+    foreach ($patients as &$patient) {
+        $patient['test_count'] = count(getTestsByPatient($conn, $patient['patient_id']));
+    }
+
+    return $patients;
+}
+
+/**
+ * Get all tests for a specific patient
+ * @param mysqli $conn Database connection
+ * @param string $patientId Patient ID
+ * @return array Array of tests associated with the patient
+ */
+function getTestsByPatient($conn, $patientId) {
+    $stmt = $conn->prepare("SELECT test_id, date_of_test FROM tests WHERE patient_id = ?");
+    $stmt->bind_param("s", $patientId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    return $result->fetch_all(MYSQLI_ASSOC);
+}
+
+/**
+ * Get all eye test results for a specific test ID
+ * @param mysqli $conn Database connection
+ * @param string $testId Test ID
+ * @return array Array of eye test results for the given test ID
+ */
+function getTestEyes($conn, $testId) {
+    $stmt = $conn->prepare("SELECT * FROM test_eyes WHERE test_id = ?");
+    $stmt->bind_param("s", $testId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    return $result->fetch_all(MYSQLI_ASSOC);
+}
+
+/**
  * Insert a new test record into the tests table
  * @param mysqli $conn Database connection
  * @param string $testId Test ID
