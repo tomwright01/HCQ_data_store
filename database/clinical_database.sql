@@ -1,4 +1,6 @@
--- Create Database
+-- ==========================
+-- FULL CLINICAL DATABASE SCHEMA (clean/recreate)
+-- ==========================
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
 
@@ -37,24 +39,23 @@ CREATE TABLE audit_log (
 -- ==========================
 CREATE TABLE tests (
     test_id VARCHAR(25) PRIMARY KEY,
-    patient_id VARCHAR(25) NOT NULL,  -- Add this column
+    patient_id VARCHAR(25) NOT NULL,
     location ENUM('KH', 'CHUSJ', 'IWK', 'IVEY') DEFAULT 'KH',
     date_of_test DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,  -- Adding foreign key
+    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,
     INDEX idx_patient (patient_id),
     INDEX idx_date (date_of_test)
 );
 
 -- ==========================
--- TEST_EYES TABLE
+-- TEST_EYES TABLE (Updated)
 -- ==========================
 CREATE TABLE test_eyes (
-    result_id INT AUTO_INCREMENT PRIMARY KEY,  
-    test_id VARCHAR(25) NOT NULL,              
-    patient_id VARCHAR(25) NOT NULL,  -- Add this column
-    eye ENUM('OD', 'OS') NOT NULL,             
+    result_id INT AUTO_INCREMENT PRIMARY KEY,  -- Unique result entry
+    test_id VARCHAR(25) NOT NULL,              -- Reference to the test
+    eye ENUM('OD', 'OS') NOT NULL,             -- 'OD' for right eye, 'OS' for left eye
     age TINYINT UNSIGNED NULL,
     report_diagnosis ENUM('normal', 'abnormal', 'exclude', 'no input') NOT NULL DEFAULT 'no input',
     exclusion ENUM('none', 'retinal detachment', 'generalized retinal dysfunction', 'unilateral testing') NOT NULL DEFAULT 'none',
@@ -71,6 +72,7 @@ CREATE TABLE test_eyes (
     duration_days SMALLINT UNSIGNED NULL,
     cumulative_dosage DECIMAL(10,2) NULL,
     date_of_continuation VARCHAR(255) NULL,
+    treatment_notes TEXT NULL,
     faf_reference VARCHAR(255) NULL,
     oct_reference VARCHAR(255) NULL,
     vf_reference VARCHAR(255) NULL,
@@ -78,7 +80,6 @@ CREATE TABLE test_eyes (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE,
-    FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON DELETE CASCADE,  -- Adding foreign key
     INDEX idx_test_eye (test_id, eye)
 );
 
@@ -131,4 +132,3 @@ BEGIN
 END//
 
 DELIMITER ;
-
