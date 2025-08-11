@@ -76,17 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     }
                     $testDateFormatted = $testDate->format('Y-m-d');
 
-                    // Extract age (from CSV or calculate it)
-                    $age = isset($data[3]) && is_numeric($data[3]) && $data[3] >= 0 && $data[3] <= 120 ? (int)$data[3] : null;
-                    if ($age === null && isset($data[1])) { // Calculate age if not provided
-                        $dob = DateTime::createFromFormat('m/d/Y', $data[1]);
-                        if ($dob) {
-                            $today = new DateTime();
-                            $age = $today->diff($dob)->y; // Calculate age from date_of_birth
-                        }
-                    }
-
-                    // Insert test data into the tests table
+                    // Insert test data into the tests table (ensure test_id exists)
                     insertTest($conn, $testId, $patientId, 'KH', $testDateFormatted);
                     $results['tests_processed']++;
 
@@ -108,29 +98,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
 
                     // Insert test eye data for both eyes
                     foreach ($eyes as $eye) {
-                        // Debugging: Output the values before calling insertTestEye
-                        echo "<pre>";
-                        echo "Preparing to insert test eye data for test_id: $testId, eye: $eye\n";
-                        print_r([
-                            'test_id' => $testId,
-                            'eye' => $eye,
-                            'age' => $age,
-                            'report_diagnosis' => $reportDiagnosis,
-                            'exclusion' => $exclusion,
-                            'merci_score' => $merciScore,
-                            'merci_diagnosis' => $merciDiagnosis,
-                            'error_type' => $errorType,
-                            'faf_grade' => $fafGrade,
-                            'oct_score' => $octScore,
-                            'vf_score' => $vfScore,
-                            'actual_diagnosis' => $actualDiagnosis,
-                            'dosage' => $dosage,
-                            'duration_days' => $durationDays,
-                            'cumulative_dosage' => $cumulativeDosage,
-                            'date_of_continuation' => $dateOfContinuation
-                        ]);
-                        echo "</pre>";
-
                         // Insert into test_eyes table
                         insertTestEye(
                             $conn,
@@ -245,6 +212,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
     <?php
 }
 ?>
+
 
 
 
