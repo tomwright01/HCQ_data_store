@@ -40,18 +40,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                 $lineNumber++;
                 $results['total_rows']++;
 
-                // Debugging: Print the contents of the data array (columns of the current row)
-                echo "<pre>";
-                echo "Line $lineNumber: ";
-                print_r($data);  // This will print the columns for each line
-                echo "</pre>";
-
-                // Ensure exactly 19 columns
-                if (count($data) != 19) {
-                    $results['errors'][] = "Line $lineNumber: Skipped - Incorrect number of columns (expected 19)";
-                    continue;
-                }
-
                 // Normalize data and process
                 $data = array_map('trim', $data);
                 $data = array_map(function ($value) {
@@ -158,9 +146,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                             $octScore,
                             $vfScore,
                             $actualDiagnosis,
-                            null, // medication_name
                             $dosage,
-                            'mg', // dosage_unit
                             $durationDays,
                             $cumulativeDosage,
                             $dateOfContinuation
