@@ -11,7 +11,7 @@ $totalEyes = 0;
 
 if ($res = $conn->query("SELECT COUNT(*) AS c FROM patients")) { $row = $res->fetch_assoc(); $totalPatients = (int)($row['c'] ?? 0); }
 if ($res = $conn->query("SELECT COUNT(*) AS c FROM tests"))    { $row = $res->fetch_assoc(); $totalTests    = (int)($row['c'] ?? 0); }
-if ($res = $conn->query("SELECT COUNT(*) AS c FROM test_eyes")){ $row = $res->fetch_assoc(); $totalEyes     = (int)($row['c'] ?? 0); }
+if ($res = $conn->query("SELECT COUNT(*) AS c FROM test_eyes")){ $row = $res->fetch_assoc(); $totalEyes     = (int)$row['c']; }
 
 // ----------------------------
 // Server-side analytics (initial, all data)
@@ -129,7 +129,6 @@ $maxDate = $allDates ? end($allDates) : null;
 <!-- Chart.js + plugins -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.5/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-<script src="="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
 
 <style>
@@ -314,7 +313,7 @@ canvas { max-height: 380px; }
                     <label class="form-label">Search</label>
                     <div class="search-box">
                         <i class="bi bi-search"></i>
-                        <input type="text" id="searchInput" class="form-control search-input" placeholder="Subject ID, Test ID, diagnosis...">
+                        <input type="text" id="searchInput" class="form-control search-input" placeholder="Subject ID, Patient ID, Test ID, diagnosis...">
                     </div>
                 </div>
 
@@ -781,7 +780,8 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     // Inputs
     const searchInput    = $('#searchInput');
     const locSelect      = $('#locationFilter');
-    const diagSelect     = $('#diagnosisFilter');
+    theDiagSelect      = $('#diagnosisFilter');
+    const diagSelect      = $('#diagnosisFilter');
     const eyeOD          = $('#eyeOD');
     const eyeOS          = $('#eyeOS');
     const dateStartInput = $('#dateStart');
@@ -833,7 +833,8 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     }
 
     function rowMatches(r, f){
-        const t = `${r.subject_id||''} ${r.test_id||''} ${r.report_diagnosis||''}`.toLowerCase();
+        // 🔎 include patient_id in text search
+        const t = `${r.subject_id||''} ${r.patient_id||''} ${r.test_id||''} ${r.report_diagnosis||''}`.toLowerCase();
         if (f.search && !t.includes(f.search)) return false;
 
         if (f.location && r.location !== f.location) return false;
@@ -878,9 +879,9 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     function lineGradientFor(chart){
         const {ctx, chartArea} = chart;
         if (!chartArea) return C.brandLight;
-        const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
         const top = document.body.classList.contains('dark') ? 'rgba(110,168,254,0.35)' : 'rgba(26,115,232,0.35)';
         const bot = document.body.classList.contains('dark') ? 'rgba(110,168,254,0.05)' : 'rgba(26,115,232,0.05)';
+        const g = chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
         g.addColorStop(0, top); g.addColorStop(1, bot);
         return g;
     }
@@ -921,11 +922,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
             responsive:true, maintainAspectRatio:false, cutout:'62%',
             plugins:{
                 legend:{ position:'bottom' },
-                datalabels:{
-                    color:'#111', formatter:(v,ctx)=>{
-                        const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
-                        const p = total? (v/total*100):0; return p>=6?`${p.toFixed(0)}%`:''; }
-                }
+                datalabels:{ color:'#111', formatter:(v,ctx)=>{ const total=ctx.dataset.data.reduce((a,b)=>a+b,0)||1; const p=v/total*100; return p>=6?`${p.toFixed(0)}%`:''; } }
             }
         }
     });
@@ -971,9 +968,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     window._recolorCharts = () => {
         [testsChart, diagChart, locChart, avgChart].forEach(ch => {
             if (!ch) return;
-            if (ch.config.type === 'line') {
-                ch.data.datasets[0].backgroundColor = (ctx)=>lineGradientFor(ch);
-            }
+            if (ch.config.type === 'line') ch.data.datasets[0].backgroundColor = (ctx)=>lineGradientFor(ch);
             if (ch.options.scales?.x?.grid) ch.options.scales.x.grid.color = gridColor();
             if (ch.options.scales?.y?.grid) ch.options.scales.y.grid.color = gridColor();
             ch.update('none');
@@ -1151,7 +1146,10 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
                 let anyEyeVisible = false;
 
                 testRows.forEach(row => {
+                    // 🔎 include patient_id from closest patient card
+                    const patientEl = row.closest('.patient-item');
                     const r = {
+                        patient_id: patientEl?.getAttribute('data-patient-id') || '',
                         subject_id: row.getAttribute('data-subject') || '',
                         test_id: row.getAttribute('data-testid') || '',
                         report_diagnosis: row.getAttribute('data-diagnosis') || '',
@@ -1208,7 +1206,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         items.forEach(it => container.appendChild(it));
     }
 
-    sortBy.addEventListener('change', ()=>{ sortPatients(); });
+    sortBy.addEventListener('change', sortPatients);
     sortDirBtn.addEventListener('click', ()=>{
         const cur = sortDirBtn.getAttribute('data-dir');
         const next = cur === 'desc' ? 'asc' : 'desc';
@@ -1304,6 +1302,8 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     applyFilters();
 
     // ===== Printable Summary =====
+    const printDiagTbl = document.getElementById('printDiagTbl');
+    const printLocTbl  = document.getElementById('printLocTbl');
     function listActiveFilters(){
         const f = getFilterState();
         const items = [];
@@ -1321,48 +1321,39 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         const rows = filterRows();
         const agg = aggregateForCharts(rows);
 
-        // time stamp
-        printTime.textContent = new Date().toLocaleString();
+        document.getElementById('printTime').textContent = new Date().toLocaleString();
 
-        // filters list
-        printFilters.innerHTML = '';
+        const ul = document.getElementById('printFilters');
+        ul.innerHTML = '';
         const liItems = listActiveFilters();
-        if (liItems.length === 0) {
-            const li = document.createElement('li'); li.textContent = 'None';
-            printFilters.appendChild(li);
-        } else {
-            liItems.forEach(t => { const li = document.createElement('li'); li.textContent = t; printFilters.appendChild(li); });
-        }
+        if (liItems.length === 0) ul.innerHTML = '<li>None</li>';
+        else liItems.forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
 
-        // chart images
-        $('#printImg-tests').src = cloneCanvasToImg(document.getElementById('testsOverTime'));
-        $('#printImg-diag').src  = cloneCanvasToImg(document.getElementById('diagnosisPie'));
-        $('#printImg-loc').src   = cloneCanvasToImg(document.getElementById('locationBar'));
-        $('#printImg-avg').src   = cloneCanvasToImg(document.getElementById('avgScoresEye'));
+        document.getElementById('printImg-tests').src = cloneCanvasToImg(document.getElementById('testsOverTime'));
+        document.getElementById('printImg-diag').src  = cloneCanvasToImg(document.getElementById('diagnosisPie'));
+        document.getElementById('printImg-loc').src   = cloneCanvasToImg(document.getElementById('locationBar'));
+        document.getElementById('printImg-avg').src   = cloneCanvasToImg(document.getElementById('avgScoresEye'));
 
-        // tables
         printDiagTbl.innerHTML = '';
         [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>{
             const tr = document.createElement('tr');
-            const td1 = document.createElement('td'); td1.textContent = lab;
-            const td2 = document.createElement('td'); td2.textContent = agg.diagCounts[key]||0;
-            tr.append(td1,td2); printDiagTbl.appendChild(tr);
+            tr.innerHTML = `<td>${lab}</td><td>${agg.diagCounts[key]||0}</td>`;
+            printDiagTbl.appendChild(tr);
         });
 
         printLocTbl.innerHTML = '';
         agg.locLabels.forEach((lab,i)=>{
             const tr = document.createElement('tr');
-            const td1 = document.createElement('td'); td1.textContent = lab;
-            const td2 = document.createElement('td'); td2.textContent = agg.locVals[i];
-            tr.append(td1,td2); printLocTbl.appendChild(tr);
+            tr.innerHTML = `<td>${lab}</td><td>${agg.locVals[i]}</td>`;
+            printLocTbl.appendChild(tr);
         });
     }
 
-    printBtn.addEventListener('click', ()=>{
+    document.getElementById('printSummaryBtn').addEventListener('click', ()=>{
         preparePrint();
-        printArea.style.display = 'block';
+        document.getElementById('printArea').style.display = 'block';
         setTimeout(()=>window.print(), 100);
-        setTimeout(()=>{ printArea.style.display='none'; }, 400);
+        setTimeout(()=>{ document.getElementById('printArea').style.display='none'; }, 400);
     });
 
     // ===== Per-Patient Analytics Modal =====
@@ -1379,8 +1370,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     }
 
     function patientAggregate(patientRows){
-        const base = aggregateForCharts(patientRows);
-        return base;
+        return aggregateForCharts(patientRows);
     }
 
     function patientCsvFor(chartId){
@@ -1407,8 +1397,8 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     window.patientCsvFor = patientCsvFor;
 
     function openPatientAnalytics(pid, subject){
-        $('#pmSubject').textContent = subject;
-        $('#pmId').textContent = pid;
+        document.getElementById('pmSubject').textContent = subject;
+        document.getElementById('pmId').textContent = pid;
         modalEl.setAttribute('data-patient-id', pid);
 
         const rows = filterRowsForPatient(pid);
@@ -1420,7 +1410,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         pmCharts.tests = new Chart(pmTestsCtx, {
             type:'line',
             data:{ labels: agg.monthLabels, datasets:[{ label:'Tests', data: agg.monthCounts, borderColor: C.brand,
-                backgroundColor:(ctx)=>lineGradientFor(ctx.chart), tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
+                backgroundColor:(ctx)=> (function(){ const ch=ctx.chart; const {top,bottom}=ch.chartArea||{top:0,bottom:0}; const g=ch.ctx.createLinearGradient(0,top,0,bottom); g.addColorStop(0,'rgba(26,115,232,.35)'); g.addColorStop(1,'rgba(26,115,232,.05)'); return g; })(), tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
             options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ grid:{color:gridColor()}}, y:{ beginAtZero:true, grid:{color:gridColor()}} } }
         });
 
@@ -1467,7 +1457,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
                 link.download = `${id}.png`;
                 link.click();
             } else {
-                const data = csvFor(id); // delegates to patientCsvFor()
+                const data = csvFor(id);
                 downloadCSV(`${id}.csv`, data);
             }
         });
