@@ -1,5 +1,5 @@
 <?php
-require_once 'config.php'
+require_once 'config.php';
 // expects $conn = new mysqli(...)
 
 function generatePatientId(string $subjectId): string {
