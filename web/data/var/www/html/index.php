@@ -60,7 +60,6 @@ if ($res) {
 }
 
 // Tests over last 12 months
-// Build zero-filled months first
 $monthLabels = [];
 $countsByMonth = [];
 $now = new DateTimeImmutable('first day of this month');
@@ -106,37 +105,48 @@ function safe_get($arr, $key, $default = null) {
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
-    <!-- Chart.js -->
+    <!-- Chart.js + plugins -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.5/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
 
     <style>
-        body { background: #f7f8fb; }
-        .navbar-blur {
-            backdrop-filter: saturate(180%) blur(8px);
-            background-color: rgba(255,255,255,0.85);
-            border-bottom: 1px solid rgba(0,0,0,0.06);
+        :root{
+            --brand:#1a73e8;           /* primary blue */
+            --brand-2:#6ea8fe;         /* lighter blue */
+            --ok:#198754;              /* green */
+            --warn:#ffc107;            /* amber */
+            --danger:#dc3545;          /* red */
+            --muted:#6c757d;           /* gray */
+            --bg:#f7f8fb;              /* page bg */
+            --card-border:rgba(0,0,0,.05);
+            --grid:rgba(0,0,0,.06);
         }
-        .patient-card { transition: all 0.3s ease; margin-bottom: 20px; border: 1px solid rgba(0,0,0,.05); }
+        body { background: var(--bg); }
+        .navbar-blur { backdrop-filter: saturate(180%) blur(8px); background-color: rgba(255,255,255,0.85); border-bottom: 1px solid rgba(0,0,0,0.06); }
+        .patient-card { transition: all 0.3s ease; margin-bottom: 20px; border: 1px solid var(--card-border); }
         .patient-card:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.09); transform: translateY(-1px); }
-        .test-card { border-left: 4px solid #0d6efd; margin-bottom: 15px; }
+        .test-card { border-left: 4px solid var(--brand); margin-bottom: 15px; }
         .eye-badge { font-size: 0.8rem; margin-right: 5px; }
         .os-badge { background-color: #6f42c1; }
         .od-badge { background-color: #20c997; }
         .search-box { position: relative; margin-bottom: 20px; }
-        .search-box i { position: absolute; top: 10px; left: 10px; color: #6c757d; }
+        .search-box i { position: absolute; top: 10px; left: 10px; color: var(--muted); }
         .search-input { padding-left: 35px; }
         .diagnosis-badge { font-size: 0.75rem; text-transform: uppercase; }
-        .normal { background-color: #198754; }
-        .abnormal { background-color: #dc3545; }
-        .exclude { background-color: #6c757d; }
-        .no-input { background-color: #ffc107; color: #000; }
+        .normal { background-color: var(--ok); }
+        .abnormal { background-color: var(--danger); }
+        .exclude { background-color: var(--muted); }
+        .no-input { background-color: var(--warn); color: #000; }
         .section-title { display:flex; align-items:center; gap:.5rem; }
-        .section-title i { opacity:.8; }
-        .card-gradient { background: linear-gradient(135deg, #6ea8fe 0%, #1a73e8 100%); }
+        .card-gradient { background: linear-gradient(135deg, var(--brand-2) 0%, var(--brand) 100%); }
         .card-gradient .card-title, .card-gradient .display-6 { color: #fff; }
         .sticky-actions { position: sticky; top: 80px; z-index: 10; }
         .pill { border-radius: 999px; }
-        .chart-card { border: 1px solid rgba(0,0,0,.05); }
+        .chart-card { border: 1px solid var(--card-border); }
+        .chart-toolbar { display:flex; gap:.5rem; justify-content:flex-end; margin-bottom:.5rem; }
+        .chart-toolbar .btn { --bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .85rem; }
+        canvas { max-height: 380px; }
     </style>
 </head>
 <body>
@@ -234,6 +244,10 @@ function safe_get($arr, $key, $default = null) {
         <div class="col-12 col-lg-6">
             <div class="card chart-card h-100">
                 <div class="card-body">
+                    <div class="chart-toolbar">
+                        <button class="btn btn-outline-secondary btn-sm" data-download="testsOverTime"><i class="bi bi-download"></i> PNG</button>
+                        <button class="btn btn-outline-secondary btn-sm" data-resetzoom="testsOverTime"><i class="bi bi-zoom-out"></i> Reset Zoom</button>
+                    </div>
                     <h5 class="card-title mb-3"><i class="bi bi-calendar3"></i> Tests (Last 12 Months)</h5>
                     <canvas id="testsOverTime"></canvas>
                 </div>
@@ -242,6 +256,9 @@ function safe_get($arr, $key, $default = null) {
         <div class="col-12 col-lg-6">
             <div class="card chart-card h-100">
                 <div class="card-body">
+                    <div class="chart-toolbar">
+                        <button class="btn btn-outline-secondary btn-sm" data-download="diagnosisPie"><i class="bi bi-download"></i> PNG</button>
+                    </div>
                     <h5 class="card-title mb-3"><i class="bi bi-clipboard2-check"></i> Diagnosis Distribution</h5>
                     <canvas id="diagnosisPie"></canvas>
                 </div>
@@ -250,6 +267,9 @@ function safe_get($arr, $key, $default = null) {
         <div class="col-12 col-lg-6">
             <div class="card chart-card h-100">
                 <div class="card-body">
+                    <div class="chart-toolbar">
+                        <button class="btn btn-outline-secondary btn-sm" data-download="locationBar"><i class="bi bi-download"></i> PNG</button>
+                    </div>
                     <h5 class="card-title mb-3"><i class="bi bi-geo-alt"></i> Patients by Location</h5>
                     <canvas id="locationBar"></canvas>
                 </div>
@@ -258,6 +278,9 @@ function safe_get($arr, $key, $default = null) {
         <div class="col-12 col-lg-6">
             <div class="card chart-card h-100">
                 <div class="card-body">
+                    <div class="chart-toolbar">
+                        <button class="btn btn-outline-secondary btn-sm" data-download="avgScoresEye"><i class="bi bi-download"></i> PNG</button>
+                    </div>
                     <h5 class="card-title mb-3"><i class="bi bi-eye-fill"></i> Avg OCT & VF by Eye</h5>
                     <canvas id="avgScoresEye"></canvas>
                 </div>
@@ -362,10 +385,10 @@ function safe_get($arr, $key, $default = null) {
                                                     $eyeSide = strtoupper($eye['eye']);
                                                     $eyeClass = $eyeSide === 'OS' ? 'os-badge' : 'od-badge';
                                                     $diag = $eye['report_diagnosis'];
-                                                    $diagClass = ($diag === 'no input') ? 'no-input' : $diag; // map 'no input' -> 'no-input'
-                                                    $medName = safe_get($eye, 'medication_name'); // may not exist
+                                                    $diagClass = ($diag === 'no input') ? 'no-input' : $diag;
+                                                    $medName = safe_get($eye, 'medication_name');
                                                     $dosage = safe_get($eye, 'dosage');
-                                                    $dosageUnit = safe_get($eye, 'dosage_unit', 'mg'); // default if exists
+                                                    $dosageUnit = safe_get($eye, 'dosage_unit', 'mg');
                                                 ?>
                                                 <div class="card test-card mb-3">
                                                     <div class="card-body">
@@ -399,7 +422,6 @@ function safe_get($arr, $key, $default = null) {
                                                         <?php endif; ?>
 
                                                         <?php
-                                                        // Optional references if present (safe_get handles absence)
                                                         $refs = [
                                                             'FAF Ref' => safe_get($eye, 'faf_reference'),
                                                             'OCT Ref' => safe_get($eye, 'oct_reference'),
@@ -438,10 +460,11 @@ function safe_get($arr, $key, $default = null) {
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-(function() {
-    // --------------------------
-    // Charts
-    // --------------------------
+// ===============
+// Chart setup
+// ===============
+(() => {
+    // Data from PHP
     const monthLabels = <?= json_encode($monthLabels) ?>;
     const testsOverTime = <?= json_encode($testsLast12Values) ?>;
 
@@ -451,106 +474,243 @@ function safe_get($arr, $key, $default = null) {
     const locLabels = <?= json_encode(array_keys($byLocation)) ?>;
     const locValues = <?= json_encode(array_values($byLocation)) ?>;
 
-    const avgOD = {
-        oct: <?= json_encode($avgByEye['OD']['oct']) ?>,
-        vf:  <?= json_encode($avgByEye['OD']['vf']) ?>
+    const avgOD = { oct: <?= json_encode($avgByEye['OD']['oct']) ?>, vf: <?= json_encode($avgByEye['OD']['vf']) ?> };
+    const avgOS = { oct: <?= json_encode($avgByEye['OS']['oct']) ?>, vf: <?= json_encode($avgByEye['OS']['vf']) ?> };
+
+    // Global defaults for a nicer look
+    Chart.register(ChartDataLabels);
+    Chart.defaults.font.family = "'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji'";
+    Chart.defaults.font.size = 12;
+    Chart.defaults.plugins.legend.labels.boxWidth = 12;
+    Chart.defaults.plugins.tooltip.cornerRadius = 8;
+    Chart.defaults.animation.duration = 900;
+    Chart.defaults.animation.easing = 'easeOutQuart';
+
+    // Shadow plugin for a subtle depth
+    const shadowPlugin = {
+        id: 'shadow',
+        beforeDatasetsDraw(chart, args, pluginOptions) {
+            const {ctx} = chart;
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.15)';
+            ctx.shadowBlur = 12;
+            ctx.shadowOffsetY = 6;
+        },
+        afterDatasetsDraw(chart, args, pluginOptions) {
+            chart.ctx.restore();
+        }
     };
-    const avgOS = {
-        oct: <?= json_encode($avgByEye['OS']['oct']) ?>,
-        vf:  <?= json_encode($avgByEye['OS']['vf']) ?>
+    Chart.register(shadowPlugin);
+
+    // Helpers
+    const fmt = new Intl.NumberFormat();
+    const sum = arr => arr.reduce((a,b)=>a+b,0);
+    const safePct = (num, den) => (den > 0 ? (num/den*100) : 0);
+
+    // Colors
+    const C = {
+        brand: '#1a73e8',
+        brandLight: '#6ea8fe',
+        green: '#198754',
+        red: '#dc3545',
+        amber: '#ffc107',
+        gray: '#6c757d',
+        teal: '#20c997',
+        purple: '#6f42c1'
     };
 
-    // Chart helpers: unified options
-    const gridColor = 'rgba(0,0,0,0.06)';
+    // -------- Line: Tests over time --------
+    const testsCtx = document.getElementById('testsOverTime').getContext('2d');
+    const lineGradient = (ctx) => {
+        const chart = ctx.chart;
+        const {chartArea} = chart;
+        if (!chartArea) return C.brandLight; // initial
+        const g = chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        g.addColorStop(0, 'rgba(26,115,232,0.35)');
+        g.addColorStop(1, 'rgba(26,115,232,0.05)');
+        return g;
+    };
 
-    // Tests over time (line)
-    new Chart(document.getElementById('testsOverTime'), {
+    const testsChart = new Chart(testsCtx, {
         type: 'line',
         data: {
             labels: monthLabels,
             datasets: [{
                 label: 'Tests',
                 data: testsOverTime,
-                tension: 0.25,
+                borderColor: C.brand,
+                backgroundColor: lineGradient,
+                tension: 0.35,
                 fill: true,
-                borderWidth: 2,
-                pointRadius: 3
+                borderWidth: 3,
+                pointRadius: 3,
+                pointHoverRadius: 5
             }]
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             scales: {
-                y: { beginAtZero: true, grid: { color: gridColor } },
-                x: { grid: { color: gridColor } }
+                y: { beginAtZero: true, grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--grid') } },
+                x: { grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--grid') } }
             },
             plugins: {
                 legend: { display: false },
-                tooltip: { mode: 'index', intersect: false }
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ` ${fmt.format(ctx.parsed.y)} tests`
+                    }
+                },
+                zoom: {
+                    zoom: {
+                        wheel: { enabled: true },
+                        pinch: { enabled: true },
+                        drag: { enabled: false },
+                        mode: 'x'
+                    },
+                    pan: { enabled: true, mode: 'x' }
+                }
             }
         }
     });
 
-    // Diagnosis distribution (doughnut)
-    new Chart(document.getElementById('diagnosisPie'), {
+    // -------- Doughnut: Diagnosis distribution --------
+    const diagCtx = document.getElementById('diagnosisPie').getContext('2d');
+    const totalDiag = sum(diagValues);
+    const diagChart = new Chart(diagCtx, {
         type: 'doughnut',
         data: {
-            labels: diagLabels.map(l => (l === 'no input' ? 'No Input' : l[0].toUpperCase()+l.slice(1))),
+            labels: diagLabels.map(l => (l === 'no input' ? 'No Input' : (l[0].toUpperCase()+l.slice(1)))),
             datasets: [{
-                data: diagValues
+                data: diagValues,
+                backgroundColor: [C.green, C.red, C.gray, C.amber],
+                borderWidth: 2,
+                borderColor: '#fff'
             }]
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
+            cutout: '62%',
             plugins: {
-                legend: { position: 'bottom' }
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => {
+                            const v = ctx.parsed;
+                            const p = safePct(v, totalDiag).toFixed(1);
+                            return ` ${ctx.label}: ${fmt.format(v)} (${p}%)`;
+                        }
+                    }
+                },
+                datalabels: {
+                    color: '#111',
+                    formatter: (value, ctx) => {
+                        const p = safePct(value, totalDiag);
+                        return p >= 6 ? `${p.toFixed(0)}%` : '';
+                    }
+                }
             }
         }
     });
 
-    // Patients by location (bar)
-    new Chart(document.getElementById('locationBar'), {
+    // -------- Bar: Patients by location --------
+    const locCtx = document.getElementById('locationBar').getContext('2d');
+    const locChart = new Chart(locCtx, {
         type: 'bar',
         data: {
             labels: locLabels,
             datasets: [{
                 label: 'Patients',
-                data: locValues
+                data: locValues,
+                backgroundColor: C.teal,
+                borderColor: C.teal,
+                borderWidth: 1,
+                borderRadius: 8,
+                maxBarThickness: 44
             }]
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             scales: {
-                y: { beginAtZero: true, grid: { color: gridColor } },
-                x: { grid: { color: gridColor } }
+                y: { beginAtZero: true, grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--grid') } },
+                x: { grid: { display:false } }
             },
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => ` ${fmt.format(ctx.parsed.y)} patients` } },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'end',
+                    offset: 4,
+                    color: '#333',
+                    formatter: (v) => (v >= 3 ? fmt.format(v) : '')
+                }
             }
         }
     });
 
-    // Avg OCT & VF by eye (grouped bar)
-    new Chart(document.getElementById('avgScoresEye'), {
+    // -------- Grouped Bar: Avg OCT & VF by eye --------
+    const avgCtx = document.getElementById('avgScoresEye').getContext('2d');
+    const avgChart = new Chart(avgCtx, {
         type: 'bar',
         data: {
             labels: ['OD', 'OS'],
             datasets: [
-                { label: 'Avg OCT', data: [avgOD.oct ?? null, avgOS.oct ?? null] },
-                { label: 'Avg VF',  data: [avgOD.vf ?? null,  avgOS.vf ?? null] }
+                { label: 'Avg OCT', data: [avgOD.oct ?? null, avgOS.oct ?? null], backgroundColor: C.purple, borderColor: C.purple, borderWidth:1, borderRadius: 8, maxBarThickness: 36 },
+                { label: 'Avg VF',  data: [avgOD.vf  ?? null, avgOS.vf  ?? null], backgroundColor: C.brand,  borderColor: C.brand,  borderWidth:1, borderRadius: 8, maxBarThickness: 36 }
             ]
         },
         options: {
             responsive: true,
+            maintainAspectRatio: false,
             scales: {
-                y: { beginAtZero: true, grid: { color: gridColor } },
-                x: { grid: { color: gridColor } }
+                y: { beginAtZero: true, grid: { color: getComputedStyle(document.documentElement).getPropertyValue('--grid') } },
+                x: { grid: { display:false } }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y === null ? 'N/A' : fmt.format(ctx.parsed.y)}` }
+                },
+                datalabels: {
+                    anchor: 'end',
+                    align: 'end',
+                    offset: 4,
+                    color: '#333',
+                    formatter: (v) => (v === null ? '' : fmt.format(v))
+                }
             }
         }
     });
 
-    // --------------------------
-    // Search & Filters
-    // --------------------------
+    // Downloads
+    function wireDownloads() {
+        document.querySelectorAll('[data-download]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-download');
+                const canvas = document.getElementById(id);
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.download = `${id}.png`;
+                link.click();
+            });
+        });
+    }
+    wireDownloads();
+
+    // Reset zoom for line chart
+    document.querySelectorAll('[data-resetzoom="testsOverTime"]').forEach(btn => {
+        btn.addEventListener('click', () => testsChart.resetZoom());
+    });
+})();
+</script>
+
+<script>
+// ===============
+// Search & Filters
+// ===============
+document.addEventListener('DOMContentLoaded', function() {
     const searchInput = document.getElementById('searchInput');
     const locationFilter = document.getElementById('locationFilter');
     const diagnosisFilter = document.getElementById('diagnosisFilter');
@@ -579,7 +739,6 @@ function safe_get($arr, $key, $default = null) {
         });
     }
 
-    // Debounce search for smoother UX
     let searchTimer;
     searchInput.addEventListener('input', () => {
         clearTimeout(searchTimer);
@@ -588,10 +747,8 @@ function safe_get($arr, $key, $default = null) {
     locationFilter.addEventListener('change', filterPatients);
     diagnosisFilter.addEventListener('change', filterPatients);
 
-    // Initial filter (no-op)
     filterPatients();
-})();
+});
 </script>
 </body>
 </html>
-
