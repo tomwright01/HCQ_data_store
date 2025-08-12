@@ -1,10 +1,13 @@
--- ============================================================
--- FULL CLINICAL DATABASE (compatible with old importer)
--- - test_id is VARCHAR (string IDs like TEST_401_...)
--- - test_eyes includes dosage / duration / cumulative fields
--- - merci_score accepts 'unable' (stored as text)
--- - date_of_continuation stored as VARCHAR (no date parsing required)
--- ============================================================
+-- ===================================================================
+-- FULL CLINICAL DATABASE (PatientData, old importer compatible)
+-- - DB name & casing: PatientData
+-- - tests.test_id is VARCHAR (e.g., TEST_401_20180212_6b2d)
+-- - test_eyes includes dosage / dosage_unit / duration_days / cumulative_dosage
+-- - merci_score stored as VARCHAR to allow 'unable'
+-- - date_of_continuation stored as VARCHAR
+-- - UNIQUE(test_id, eye) ensures at most one OD + one OS per test
+-- - No table DROPs (only DROP TRIGGER IF EXISTS for idempotent re-runs)
+-- ===================================================================
 
 CREATE DATABASE IF NOT EXISTS PatientData;
 USE PatientData;
@@ -12,9 +15,9 @@ USE PatientData;
 SET NAMES utf8mb4;
 SET sql_mode = 'STRICT_ALL_TABLES';
 
--- ============================================================
+-- =========================
 -- PATIENTS
--- ============================================================
+-- =========================
 CREATE TABLE IF NOT EXISTS patients (
     patient_id      VARCHAR(25) PRIMARY KEY,
     subject_id      VARCHAR(50) NOT NULL,
@@ -26,9 +29,9 @@ CREATE TABLE IF NOT EXISTS patients (
     INDEX idx_location (location)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
+-- =========================
 -- AUDIT LOG
--- ============================================================
+-- =========================
 CREATE TABLE IF NOT EXISTS audit_log (
     id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     table_name    VARCHAR(50) NOT NULL,
@@ -42,9 +45,9 @@ CREATE TABLE IF NOT EXISTS audit_log (
     INDEX idx_changed_at (changed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
--- TESTS  (one row per visit/session; STRING test_id)
--- ============================================================
+-- =========================
+-- TESTS (one row per session; STRING test_id)
+-- =========================
 CREATE TABLE IF NOT EXISTS tests (
     test_id        VARCHAR(64) PRIMARY KEY,
     patient_id     VARCHAR(25) NOT NULL,
@@ -59,39 +62,38 @@ CREATE TABLE IF NOT EXISTS tests (
     INDEX idx_date (date_of_test)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
--- TEST_EYES (exactly one row per eye per test)
--- Matches old importer column set and types
--- ============================================================
+-- =========================
+-- TEST_EYES (one row per eye per test; matches old importer)
+-- =========================
 CREATE TABLE IF NOT EXISTS test_eyes (
+    result_id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     test_id              VARCHAR(64) NOT NULL,
     eye                  ENUM('OD','OS') NOT NULL,
     age                  TINYINT UNSIGNED NULL,
 
     report_diagnosis     ENUM('normal','abnormal','exclude','no input') NOT NULL DEFAULT 'no input',
-    exclusion            VARCHAR(100) NOT NULL DEFAULT 'none',
+    exclusion            ENUM('none','retinal detachment','generalized retinal dysfunction','unilateral testing') NOT NULL DEFAULT 'none',
 
-    -- importer may send number or 'unable' -> store as text
+    -- allow 'unable' as text
     merci_score          VARCHAR(10) NULL,
     merci_diagnosis      ENUM('normal','abnormal','no value') NOT NULL DEFAULT 'no value',
 
-    error_type           ENUM('TN','FP','TP','FN','none') NOT NULL DEFAULT 'none',
+    error_type           ENUM('TN','FP','TP','FN','none') DEFAULT NULL,
 
     faf_grade            TINYINT UNSIGNED NULL,
     oct_score            DECIMAL(10,2) NULL,
     vf_score             DECIMAL(10,2) NULL,
 
-    -- importer may send RA/SLE/Sjogren (uppercase/mixed)
-    actual_diagnosis     ENUM('ra','sle','sjogren','other','RA','SLE','Sjogren') NOT NULL DEFAULT 'other',
+    -- accept uppercase/mixed from old imports
+    actual_diagnosis     ENUM('RA','SLE','Sjogren','other','ra','sle','sjogren') NOT NULL DEFAULT 'other',
 
-    -- medication / therapy fields expected by old importer
     medication_name      VARCHAR(100) NULL,
     dosage               DECIMAL(10,2) NULL,
-    dosage_unit          VARCHAR(10) NOT NULL DEFAULT 'mg',
+    dosage_unit          VARCHAR(10) DEFAULT 'mg',
     duration_days        SMALLINT UNSIGNED NULL,
     cumulative_dosage    DECIMAL(10,2) NULL,
 
-    -- importer often passes raw string here
+    -- keep as string (old importer passes raw text)
     date_of_continuation VARCHAR(255) NULL,
 
     treatment_notes      TEXT NULL,
@@ -103,22 +105,22 @@ CREATE TABLE IF NOT EXISTS test_eyes (
     created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    PRIMARY KEY (test_id, eye),
+    -- key fix to allow two eyes while preventing duplicates per eye
+    UNIQUE KEY uq_test_eye (test_id, eye),
 
+    KEY idx_test (test_id),
     CONSTRAINT fk_eyes_test
         FOREIGN KEY (test_id) REFERENCES tests(test_id)
-        ON DELETE CASCADE,
-
-    INDEX idx_test (test_id)
+        ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- ============================================================
--- TRIGGERS (audit)
--- Note: MySQL doesn't support IF NOT EXISTS for triggers; run once.
--- ============================================================
+-- =========================
+-- TRIGGERS (drop-if-exists then create for idempotency)
+-- =========================
 DELIMITER //
 
--- tests
+-- tests triggers
+DROP TRIGGER IF EXISTS trg_tests_after_insert//
 CREATE TRIGGER trg_tests_after_insert
 AFTER INSERT ON tests
 FOR EACH ROW
@@ -138,6 +140,7 @@ BEGIN
     );
 END//
 
+DROP TRIGGER IF EXISTS trg_tests_after_update//
 CREATE TRIGGER trg_tests_after_update
 AFTER UPDATE ON tests
 FOR EACH ROW
@@ -163,6 +166,7 @@ BEGIN
     );
 END//
 
+DROP TRIGGER IF EXISTS trg_tests_after_delete//
 CREATE TRIGGER trg_tests_after_delete
 AFTER DELETE ON tests
 FOR EACH ROW
@@ -182,7 +186,8 @@ BEGIN
     );
 END//
 
--- test_eyes
+-- test_eyes triggers
+DROP TRIGGER IF EXISTS trg_eyes_after_insert//
 CREATE TRIGGER trg_eyes_after_insert
 AFTER INSERT ON test_eyes
 FOR EACH ROW
@@ -203,6 +208,7 @@ BEGIN
     );
 END//
 
+DROP TRIGGER IF EXISTS trg_eyes_after_update//
 CREATE TRIGGER trg_eyes_after_update
 AFTER UPDATE ON test_eyes
 FOR EACH ROW
@@ -221,7 +227,7 @@ BEGIN
         ),
         CONCAT(
             '{"test_id":"', NEW.test_id,
-            '","eye":"', NEW.eye,
+            ',"eye":"', NEW.eye,
             '","report_diagnosis":"', NEW.report_diagnosis,
             '","merci_score":', IFNULL(CONCAT('"', NEW.merci_score, '"'), 'null'),
             ',"vf_score":', IFNULL(NEW.vf_score, 'null'), '}'
@@ -230,6 +236,7 @@ BEGIN
     );
 END//
 
+DROP TRIGGER IF EXISTS trg_eyes_after_delete//
 CREATE TRIGGER trg_eyes_after_delete
 AFTER DELETE ON test_eyes
 FOR EACH ROW
@@ -252,6 +259,6 @@ END//
 
 DELIMITER ;
 
--- ============================================================
--- END
--- ============================================================
+-- ===================================================================
+-- DONE. Now your PHP targeting DB "PatientData" will find test_eyes.
+-- ===================================================================
