@@ -617,11 +617,19 @@ canvas { max-height: 380px; }
                                                             $mediaLinks = [];
                                                             foreach ($media as $label => $filename) {
                                                                 if (!$filename) continue;
-                                                                $url = getDynamicImagePath($filename);
-                                                                if ($url) {
-                                                                    $mediaLinks[] = '<a class="btn btn-outline-secondary" target="_blank" href="' . htmlspecialchars($url) . '">'
-                                                                                  . '<i class="bi bi-eye"></i> View ' . htmlspecialchars($label) . ' (' . htmlspecialchars($eyeSide) . ')</a>';
-                                                                }
+                                                            
+                                                                // only show the button if the file actually exists somewhere under /data/...
+                                                                $exists = getDynamicImagePath($filename);
+                                                                if (!$exists) continue;
+                                                            
+                                                                $viewer = 'view_' . strtolower($label) . '.php';
+                                                                $q = http_build_query([
+                                                                    'ref'        => $filename,
+                                                                    'patient_id' => $patient['patient_id'],
+                                                                    'eye'        => $eyeSide
+                                                                ]);
+                                                                $mediaLinks[] = '<a class="btn btn-outline-secondary" target="_blank" href="' . htmlspecialchars($viewer.'?'.$q) . '">'
+                                                                              . '<i class="bi bi-eye"></i> View ' . htmlspecialchars($label) . ' (' . htmlspecialchars($eyeSide) . ')</a>';
                                                             }
                                                             if (!empty($mediaLinks)) {
                                                                 echo '<div class="media-links mt-2">' . implode('', $mediaLinks) . '</div>';
