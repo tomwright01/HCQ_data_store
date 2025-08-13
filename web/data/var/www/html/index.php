@@ -78,7 +78,7 @@ function safe_get($arr, $key, $default = null) {
 }
 
 // ----------------------------
-// Raw rows for client-side filtering & charts (one per-eye)
+// Raw rows for client-side filtering (one per-eye)
 // ----------------------------
 $eyeRows = [];
 $sqlAll = "
@@ -120,7 +120,7 @@ $maxDate = $allDates ? end($allDates) : null;
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Patient Data Dashboard</title>
+<title>Hydroxychloroquine Data Repository</title>
 
 <!-- Bootstrap & Icons -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -129,7 +129,6 @@ $maxDate = $allDates ? end($allDates) : null;
 <!-- Chart.js + plugins -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.5/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
-<script src="="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
 
 <style>
@@ -169,14 +168,6 @@ body.dark .navbar-blur { background-color: rgba(21,26,44,0.85); }
 .eye-badge { font-size: 0.8rem; margin-right: 5px; }
 .os-badge { background-color: #6f42c1; }
 .od-badge { background-color: #20c997; }
-.search-box { position: relative; margin-bottom: 20px; }
-.search-box i { position: absolute; top: 10px; left: 10px; color: var(--muted); }
-.search-input { padding-left: 35px; }
-.diagnosis-badge { font-size: 0.75rem; text-transform: uppercase; }
-.normal { background-color: var(--ok); }
-.abnormal { background-color: var(--danger); }
-.exclude { background-color: var(--muted); }
-.no-input { background-color: var(--warn); color: #000; }
 .section-title { display:flex; align-items:center; gap:.5rem; }
 .card-gradient { background: linear-gradient(135deg, var(--brand-2) 0%, var(--brand) 100%); color:#fff; }
 .sticky-actions { position: sticky; top: 80px; z-index: 10; }
@@ -186,16 +177,14 @@ body.dark .navbar-blur { background-color: rgba(21,26,44,0.85); }
 .chart-toolbar .btn { --bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .85rem; }
 canvas { max-height: 380px; }
 
-.filter-fab {
-    position: fixed; right: 18px; bottom: 18px; z-index: 1000;
-    display: none;
-}
+.results-badge { font-weight:600; }
+.filter-fab { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: none; }
 .filter-fab .btn { box-shadow: var(--shadow); }
 
 /* Print */
 @media print {
   body { background: #fff !important; }
-  nav, .sticky-actions, .card:has(#filtersArea), .filter-fab, .btn, .navbar { display: none !important; }
+  nav, .sticky-actions, .filter-fab, .btn, .navbar { display: none !important; }
   #printArea { display: block !important; }
   #analytics, #patients { page-break-before: always; }
   .card { box-shadow: none !important; }
@@ -209,7 +198,7 @@ canvas { max-height: 380px; }
 <nav class="navbar navbar-expand-lg navbar-light navbar-blur sticky-top py-2">
   <div class="container-fluid">
     <a class="navbar-brand fw-semibold" href="#">
-      <i class="bi bi-people-fill me-2"></i>Patient Data Dashboard
+      <i class="bi bi-capsule-pill me-2"></i>Hydroxychloroquine Data Repository
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain">
       <span class="navbar-toggler-icon"></span>
@@ -298,120 +287,11 @@ canvas { max-height: 380px; }
         </div>
     </div>
 
-    <!-- Analytics -->
+    <!-- Analytics (STATIC — not affected by patient filters) -->
     <div class="row mb-3" id="analytics">
         <div class="col">
             <h2 class="section-title"><i class="bi bi-graph-up-arrow"></i> Analytics</h2>
-            <p class="text-muted">Interactive charts summarizing the dataset. Use the filters to explore.</p>
-        </div>
-    </div>
-
-    <!-- Global Filters -->
-    <div class="card mb-4" id="filtersArea">
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-3">
-                    <label class="form-label">Search</label>
-                    <div class="search-box">
-                        <i class="bi bi-search"></i>
-                        <input type="text" id="searchInput" class="form-control search-input" placeholder="Subject ID, Test ID, diagnosis...">
-                    </div>
-                </div>
-
-                <div class="col-6 col-lg-2">
-                    <label class="form-label">Location</label>
-                    <select id="locationFilter" class="form-select">
-                        <option value="">All</option>
-                        <option value="KH">KH</option>
-                        <option value="CHUSJ">CHUSJ</option>
-                        <option value="IWK">IWK</option>
-                        <option value="IVEY">IVEY</option>
-                    </select>
-                </div>
-
-                <div class="col-6 col-lg-2">
-                    <label class="form-label">Diagnosis</label>
-                    <select id="diagnosisFilter" class="form-select">
-                        <option value="">All</option>
-                        <option value="normal">Normal</option>
-                        <option value="abnormal">Abnormal</option>
-                        <option value="exclude">Exclude</option>
-                        <option value="no input">No Input</option>
-                    </select>
-                </div>
-
-                <div class="col-6 col-lg-2">
-                    <label class="form-label">Eye</label>
-                    <div class="d-flex gap-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" value="OD" id="eyeOD" checked>
-                            <label class="form-check-label" for="eyeOD">OD</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" value="OS" id="eyeOS" checked>
-                            <label class="form-check-label" for="eyeOS">OS</label>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-3">
-                    <label class="form-label">Date range</label>
-                    <div class="d-flex gap-2">
-                        <input type="date" id="dateStart" class="form-control" value="<?= htmlspecialchars($minDate ?? '') ?>">
-                        <input type="date" id="dateEnd" class="form-control" value="<?= htmlspecialchars($maxDate ?? '') ?>">
-                    </div>
-                    <!-- Quick presets -->
-                    <div class="mt-2 d-flex flex-wrap gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="30">Last 30d</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="90">Last 90d</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="365">Last 365d</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="all">All time</button>
-                    </div>
-                </div>
-
-                <div class="col-6 col-lg-2">
-                    <label class="form-label">MERCI score</label>
-                    <div class="d-flex gap-2">
-                        <input type="number" step="0.01" id="merciMin" class="form-control" placeholder="min">
-                        <input type="number" step="0.01" id="merciMax" class="form-control" placeholder="max">
-                    </div>
-                </div>
-
-                <div class="col-6 col-lg-2">
-                    <label class="form-label">Age at test</label>
-                    <div class="d-flex gap-2">
-                        <input type="number" id="ageMin" class="form-control" placeholder="min">
-                        <input type="number" id="ageMax" class="form-control" placeholder="max">
-                    </div>
-                </div>
-
-                <!-- Sorting -->
-                <div class="col-12 col-lg-3">
-                    <label class="form-label">Sort patients</label>
-                    <div class="d-flex gap-2">
-                        <select id="sortBy" class="form-select">
-                            <option value="subject">Subject</option>
-                            <option value="location">Location</option>
-                            <option value="tests">Tests</option>
-                            <option value="last_test">Last Test</option>
-                            <option value="age">Age</option>
-                        </select>
-                        <button id="sortDir" class="btn btn-outline-secondary" data-dir="desc" title="Toggle asc/desc">
-                            <i class="bi bi-sort-down"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="col-12 col-lg-3 d-flex justify-content-end gap-2">
-                    <button id="exportFilteredCsv" class="btn btn-outline-success">
-                        <i class="bi bi-filetype-csv"></i> Export filtered rows
-                    </button>
-                    <button id="clearFilters" class="btn btn-outline-secondary">
-                        <i class="bi bi-eraser"></i> Clear
-                    </button>
-                    <a href="#patients" class="btn btn-outline-primary"><i class="bi bi-people"></i> Patients</a>
-                </div>
-            </div>
+            <p class="text-muted">Charts summarize the full dataset. Patient filters below won’t change these.</p>
         </div>
     </div>
 
@@ -475,6 +355,123 @@ canvas { max-height: 380px; }
                     <h5 class="card-title mb-3"><i class="bi bi-eye-fill"></i> Avg OCT & VF by Eye</h5>
                     <canvas id="avgScoresEye"></canvas>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================== -->
+    <!-- Patient Filters (ONLY) -->
+    <!-- ===================== -->
+    <div class="card mb-4" id="patientFilters">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-lg-3">
+                    <label class="form-label">Patient ID</label>
+                    <input type="text" id="patientIdInput" class="form-control" placeholder="e.g. P_abc123">
+                </div>
+                <div class="col-12 col-lg-3">
+                    <label class="form-label">Test ID</label>
+                    <input type="text" id="testIdInput" class="form-control" placeholder="e.g. T_2024...">
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <label class="form-label">Location</label>
+                    <select id="locationFilter" class="form-select">
+                        <option value="">All</option>
+                        <option value="KH">KH</option>
+                        <option value="CHUSJ">CHUSJ</option>
+                        <option value="IWK">IWK</option>
+                        <option value="IVEY">IVEY</option>
+                    </select>
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <label class="form-label">Diagnosis</label>
+                    <select id="diagnosisFilter" class="form-select">
+                        <option value="">All</option>
+                        <option value="normal">Normal</option>
+                        <option value="abnormal">Abnormal</option>
+                        <option value="exclude">Exclude</option>
+                        <option value="no input">No Input</option>
+                    </select>
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <label class="form-label">Eye</label>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="OD" id="eyeOD" checked>
+                            <label class="form-check-label" for="eyeOD">OD</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="OS" id="eyeOS" checked>
+                            <label class="form-check-label" for="eyeOS">OS</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-4">
+                    <label class="form-label">Date range</label>
+                    <div class="d-flex gap-2">
+                        <input type="date" id="dateStart" class="form-control" value="<?= htmlspecialchars($minDate ?? '') ?>">
+                        <input type="date" id="dateEnd" class="form-control" value="<?= htmlspecialchars($maxDate ?? '') ?>">
+                    </div>
+                    <div class="mt-2 d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="30">Last 30d</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="90">Last 90d</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="365">Last 365d</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="all">All time</button>
+                    </div>
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <label class="form-label">MERCI score</label>
+                    <div class="d-flex gap-2">
+                        <input type="number" step="0.01" id="merciMin" class="form-control" placeholder="min">
+                        <input type="number" step="0.01" id="merciMax" class="form-control" placeholder="max">
+                    </div>
+                </div>
+
+                <div class="col-6 col-lg-2">
+                    <label class="form-label">Age at test</label>
+                    <div class="d-flex gap-2">
+                        <input type="number" id="ageMin" class="form-control" placeholder="min">
+                        <input type="number" id="ageMax" class="form-control" placeholder="max">
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-3">
+                    <label class="form-label">Sort patients</label>
+                    <div class="d-flex gap-2">
+                        <select id="sortBy" class="form-select">
+                            <option value="subject">Subject</option>
+                            <option value="location">Location</option>
+                            <option value="tests">Tests</option>
+                            <option value="last_test">Last Test</option>
+                            <option value="age">Age</option>
+                        </select>
+                        <button id="sortDir" class="btn btn-outline-secondary" data-dir="desc" title="Toggle asc/desc">
+                            <i class="bi bi-sort-down"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="col-12 col-lg-3 d-flex justify-content-end gap-2">
+                    <button id="exportFilteredCsv" class="btn btn-outline-success">
+                        <i class="bi bi-filetype-csv"></i> Export filtered rows
+                    </button>
+                    <button id="clearFilters" class="btn btn-outline-secondary">
+                        <i class="bi bi-eraser"></i> Clear
+                    </button>
+                    <a href="#patients" class="btn btn-outline-primary"><i class="bi bi-people"></i> Patients</a>
+                </div>
+            </div>
+
+            <!-- Results summary -->
+            <div class="mt-3">
+                <span class="badge bg-light text-dark results-badge">
+                    Results: <span id="resPatients">0</span> patients • <span id="resTests">0</span> tests • <span id="resEyes">0</span> eye records
+                </span>
             </div>
         </div>
     </div>
@@ -558,7 +555,7 @@ canvas { max-height: 380px; }
                                         </button>
                                     </h2>
                                     <div id="collapse-<?= htmlspecialchars($test['test_id']) ?>" class="accordion-collapse collapse"
-                                         aria-labelledby="heading-<?= htmlspecialchars($test['test_id']) ?>"
+                                         aria-labelledby="heading-<?= htmlspecialchars($test['test_id']) ?>)"
                                          data-bs-parent="#testsAccordion-<?= htmlspecialchars($patient['patient_id']) ?>">
                                         <div class="accordion-body">
                                             <?php foreach ($testEyes as $eye): ?>
@@ -642,7 +639,7 @@ canvas { max-height: 380px; }
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        <p class="text-muted">Charts respect current global filters.</p>
+        <p class="text-muted">These per-patient charts respect the patient filters above.</p>
         <div class="row g-4">
             <div class="col-12 col-lg-6">
                 <div class="card chart-card h-100">
@@ -697,11 +694,8 @@ canvas { max-height: 380px; }
 
 <!-- Printable Summary -->
 <section id="printArea" class="container-fluid py-4">
-  <h2 class="mb-1">Patient Data Summary</h2>
+  <h2 class="mb-1">Dataset Summary</h2>
   <p class="text-muted">Generated at <span id="printTime"></span></p>
-  <hr>
-  <h5>Active Filters</h5>
-  <ul id="printFilters"></ul>
   <hr>
   <div class="row g-4">
     <div class="col-12 col-lg-6">
@@ -719,26 +713,6 @@ canvas { max-height: 380px; }
     <div class="col-12 col-lg-6">
       <h6>Avg OCT & VF by Eye</h6>
       <img id="printImg-avg" alt="Avg Scores by Eye" class="img-fluid border rounded">
-    </div>
-  </div>
-  <hr>
-  <h5>Summary Tables</h5>
-  <div class="row g-4">
-    <div class="col-12 col-lg-6">
-      <div class="table-responsive">
-        <table class="table table-sm table-bordered">
-          <thead><tr><th>Diagnosis</th><th>Count</th></tr></thead>
-          <tbody id="printDiagTbl"></tbody>
-        </table>
-      </div>
-    </div>
-    <div class="col-12 col-lg-6">
-      <div class="table-responsive">
-        <table class="table table-sm table-bordered">
-          <thead><tr><th>Location</th><th>Patients</th></tr></thead>
-          <tbody id="printLocTbl"></tbody>
-        </table>
-      </div>
     </div>
   </div>
 </section>
@@ -761,16 +735,16 @@ canvas { max-height: 380px; }
 </script>
 
 <script>
-// ===== Data for client filters/charts =====
+// ===== Data for charts (static, full dataset) =====
 const EYE_ROWS = <?= json_encode($eyeRows) ?>;
 const DATA_MIN = <?= $minDate ? '"'.htmlspecialchars($minDate).'"' : 'null' ?>;
 const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 const MONTH_LABELS_BASE = <?= json_encode($monthLabels) ?>;
 const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
-(function chartsAndFilters(){
+(function initUI(){
     // Utilities
-    const $ = sel => document.querySelector(sel);
+    const $  = sel => document.querySelector(sel);
     const $$ = sel => Array.from(document.querySelectorAll(sel));
     const fmt = new Intl.NumberFormat();
     const toNum = v => v === null || v === '' || isNaN(v) ? null : Number(v);
@@ -778,8 +752,9 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     const fmtISO = d => d ? d.toISOString().slice(0,10) : '';
     const cloneCanvasToImg = (canvas) => canvas.toDataURL('image/png', 1.0);
 
-    // Inputs
-    const searchInput    = $('#searchInput');
+    // Inputs (PATIENT FILTERS ONLY)
+    const patientIdInput = $('#patientIdInput');
+    const testIdInput    = $('#testIdInput');
     const locSelect      = $('#locationFilter');
     const diagSelect     = $('#diagnosisFilter');
     const eyeOD          = $('#eyeOD');
@@ -792,20 +767,14 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     const ageMaxInput    = $('#ageMax');
     const clearBtn       = $('#clearFilters');
     const exportBtn      = $('#exportFilteredCsv');
-    const filterFab      = $('#filterFab');
-    const filtersPill    = $('#filtersPill');
-    const filtersCount   = $('#filtersCount');
     const presetBtns     = $$('[data-preset]');
     const sortBy         = $('#sortBy');
     const sortDirBtn     = $('#sortDir');
 
-    // Print elems
-    const printBtn   = $('#printSummaryBtn');
-    const printArea  = $('#printArea');
-    const printTime  = $('#printTime');
-    const printFilters = $('#printFilters');
-    const printDiagTbl = $('#printDiagTbl');
-    const printLocTbl  = $('#printLocTbl');
+    // Results counters
+    const resPatients = $('#resPatients');
+    const resTests    = $('#resTests');
+    const resEyes     = $('#resEyes');
 
     const defaultState = {
         dateStart: DATA_MIN ? parseDate(DATA_MIN) : null,
@@ -819,43 +788,21 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         if (eyeOS.checked) eyes.add('OS');
 
         return {
-            search: (searchInput.value || '').trim().toLowerCase(),
-            location: (locSelect.value || '').trim(),
+            patientId: (patientIdInput.value || '').trim().toLowerCase(),
+            testId:    (testIdInput.value || '').trim().toLowerCase(),
+            location:  (locSelect.value || '').trim(),
             diagnosis: (diagSelect.value || '').trim(),
             eyes,
             dateStart: parseDate(dateStartInput.value),
-            dateEnd: parseDate(dateEndInput.value),
-            merciMin: toNum(merciMinInput.value),
-            merciMax: toNum(merciMaxInput.value),
-            ageMin: toNum(ageMinInput.value),
-            ageMax: toNum(ageMaxInput.value),
+            dateEnd:   parseDate(dateEndInput.value),
+            merciMin:  toNum(merciMinInput.value),
+            merciMax:  toNum(merciMaxInput.value),
+            ageMin:    toNum(ageMinInput.value),
+            ageMax:    toNum(ageMaxInput.value),
         };
     }
 
-    function rowMatches(r, f){
-        const t = `${r.subject_id||''} ${r.test_id||''} ${r.report_diagnosis||''}`.toLowerCase();
-        if (f.search && !t.includes(f.search)) return false;
-
-        if (f.location && r.location !== f.location) return false;
-        if (f.diagnosis && r.report_diagnosis !== f.diagnosis) return false;
-        if (f.eyes.size && !f.eyes.has(r.eye)) return false;
-
-        const d = parseDate(r.date_of_test);
-        if (f.dateStart && d < f.dateStart) return false;
-        if (f.dateEnd && d > f.dateEnd) return false;
-
-        const m = toNum(r.merci_score);
-        if (f.merciMin !== null) { if (m === null || m < f.merciMin) return false; }
-        if (f.merciMax !== null) { if (m === null || m > f.merciMax) return false; }
-
-        const a = toNum(r.age);
-        if (f.ageMin !== null) { if (a === null || a < f.ageMin) return false; }
-        if (f.ageMax !== null) { if (a === null || a > f.ageMax) return false; }
-
-        return true;
-    }
-
-    // ===== CHARTS =====
+    // Chart palette
     Chart.register(ChartDataLabels);
     const C = {
         brand: '#1a73e8', brandLight:'#6ea8fe',
@@ -885,12 +832,8 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         return g;
     }
 
-    const testsCtx = document.getElementById('testsOverTime').getContext('2d');
-    const diagCtx  = document.getElementById('diagnosisPie').getContext('2d');
-    const locCtx   = document.getElementById('locationBar').getContext('2d');
-    const avgCtx   = document.getElementById('avgScoresEye').getContext('2d');
-
-    const testsChart = new Chart(testsCtx, {
+    // === Charts (STATIC) ===
+    const testsChart = new Chart(document.getElementById('testsOverTime').getContext('2d'), {
         type: 'line',
         data: { labels: MONTH_LABELS_BASE.slice(), datasets: [{
             label: 'Tests',
@@ -904,13 +847,13 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
             scales:{ x:{ grid:{ color:gridColor() } }, y:{ beginAtZero:true, grid:{ color:gridColor() } } },
             plugins:{
                 legend:{ display:false },
-                tooltip:{ callbacks:{ label:ctx=>` ${fmt.format(ctx.parsed.y)} tests`} },
+                tooltip:{ callbacks:{ label:ctx=>` ${ctx.parsed.y} tests`} },
                 zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} }
             }
         }
     });
 
-    const diagChart = new Chart(diagCtx, {
+    const diagChart = new Chart(document.getElementById('diagnosisPie').getContext('2d'), {
         type:'doughnut',
         data:{
             labels:['Normal','Abnormal','Exclude','No Input'],
@@ -922,15 +865,13 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
             plugins:{
                 legend:{ position:'bottom' },
                 datalabels:{
-                    color:'#111', formatter:(v,ctx)=>{
-                        const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
-                        const p = total? (v/total*100):0; return p>=6?`${p.toFixed(0)}%`:''; }
+                    color:'#111', formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); const p=t?(v/t*100):0; return p>=6?`${p.toFixed(0)}%`:''; }
                 }
             }
         }
     });
 
-    const locChart = new Chart(locCtx, {
+    const locChart = new Chart(document.getElementById('locationBar').getContext('2d'), {
         type:'bar',
         data:{
             labels: <?= json_encode(array_keys($byLocation)) ?>,
@@ -939,7 +880,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         },
         options:{
             responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}},
+            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}} ,
             plugins:{
                 legend:{ display:false },
                 datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=> (v>=3?fmt.format(v):'') }
@@ -947,7 +888,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         }
     });
 
-    const avgChart = new Chart(avgCtx, {
+    const avgChart = new Chart(document.getElementById('avgScoresEye').getContext('2d'), {
         type:'bar',
         data:{
             labels:['OD','OS'],
@@ -960,10 +901,9 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         },
         options:{
             responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}},
+            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}} ,
             plugins:{
-                datalabels:{ anchor:'end', align:'end', offset:4, color:'#333',
-                    formatter:v => (v===null||isNaN(v))?'':fmt.format(v) }
+                datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v => (v===null||isNaN(v))?'':fmt.format(v) }
             }
         }
     });
@@ -971,186 +911,125 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     window._recolorCharts = () => {
         [testsChart, diagChart, locChart, avgChart].forEach(ch => {
             if (!ch) return;
-            if (ch.config.type === 'line') {
-                ch.data.datasets[0].backgroundColor = (ctx)=>lineGradientFor(ch);
-            }
+            if (ch.config.type === 'line') ch.data.datasets[0].backgroundColor = (ctx)=>lineGradientFor(ch);
             if (ch.options.scales?.x?.grid) ch.options.scales.x.grid.color = gridColor();
             if (ch.options.scales?.y?.grid) ch.options.scales.y.grid.color = gridColor();
             ch.update('none');
         });
     };
 
-    // ===== Aggregation for filtered rows =====
-    function aggregateForCharts(rows){
-        const map = new Map(); // ym -> Set(test_id)
-        rows.forEach(r => {
-            const ym = (r.date_of_test||'').slice(0,7);
-            if (!ym) return;
-            if (!map.has(ym)) map.set(ym, new Set());
-            map.get(ym).add(r.test_id);
-        });
-
-        const endDate = getFilterState().dateEnd || new Date();
-        const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-        const labels = [];
-        const values = [];
-        for (let i=11;i>=0;i--){
-            const d = new Date(endMonth); d.setMonth(d.getMonth()-i);
-            const ym = d.toISOString().slice(0,7);
-            const label = d.toLocaleString(undefined,{month:'short', year:'numeric'});
-            labels.push(label);
-            values.push(map.has(ym) ? map.get(ym).size : 0);
-        }
-
-        const diagCounts = {'normal':0,'abnormal':0,'exclude':0,'no input':0};
-        rows.forEach(r => { if (diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
-
-        const locMap = {'KH':new Set(),'CHUSJ':new Set(),'IWK':new Set(),'IVEY':new Set()};
-        rows.forEach(r => { if (locMap[r.location]) locMap[r.location].add(r.patient_id); });
-        const locLabels = Object.keys(locMap);
-        const locVals = locLabels.map(k => locMap[k].size);
-
-        const eyeStats = { OD:{oct:[],vf:[]}, OS:{oct:[],vf:[]} };
-        rows.forEach(r => {
-            if (!eyeStats[r.eye]) return;
-            if (r.oct_score !== null) eyeStats[r.eye].oct.push(Number(r.oct_score));
-            if (r.vf_score  !== null) eyeStats[r.eye].vf.push(Number(r.vf_score));
-        });
-        const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
-        const avgOD = {oct: avg(eyeStats.OD.oct), vf: avg(eyeStats.OD.vf)};
-        const avgOS = {oct: avg(eyeStats.OS.oct), vf: avg(eyeStats.OS.vf)};
-
-        return { monthLabels:labels, monthCounts:values, diagCounts, locLabels, locVals, avgOD, avgOS };
-    }
-
-    function filterRows(){
-        const f = getFilterState();
-        return EYE_ROWS.filter(r => rowMatches(r,f));
-    }
-
-    // ===== Update charts according to current filters =====
-    function updateCharts(){
-        const rows = filterRows();
-        const agg = aggregateForCharts(rows);
-
-        testsChart.data.labels = agg.monthLabels;
-        testsChart.data.datasets[0].data = agg.monthCounts;
-        testsChart.update('none');
-
-        const diagOrder = ['normal','abnormal','exclude','no input'];
-        const diagVals = diagOrder.map(k => agg.diagCounts[k] || 0);
-        diagChart.data.labels = ['Normal','Abnormal','Exclude','No Input'];
-        diagChart.data.datasets[0].data = diagVals;
-        diagChart.update('none');
-
-        locChart.data.labels = agg.locLabels;
-        locChart.data.datasets[0].data = agg.locVals;
-        locChart.update('none');
-
-        avgChart.data.datasets[0].data = [agg.avgOD.oct, agg.avgOS.oct];
-        avgChart.data.datasets[1].data = [agg.avgOD.vf,  agg.avgOS.vf];
-        avgChart.update('none');
-    }
-
-    // ===== CSV export =====
+    // PNG/CSV/Zoom handlers (analytics)
     function downloadCSV(filename, rows){
         const csv = rows.map(r=>r.map(v=>{
             v = (v===null||v===undefined) ? '' : String(v);
-            if (v.includes('"') || v.includes(',') || v.includes('\n')) {
-                v = '"' + v.replace(/"/g,'""') + '"';
-            }
+            if (v.includes('"') || v.includes(',') || v.includes('\n')) v = '"' + v.replace(/"/g,'""') + '"';
             return v;
         }).join(',')).join('\n');
-        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
         const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
         setTimeout(()=>URL.revokeObjectURL(url), 500);
     }
-
-    function csvFor(chartId){
-        const rows = filterRows();
+    function csvForAnalytics(chartId){
         if (chartId === 'testsOverTime') {
-            const a = aggregateForCharts(rows);
             const data = [['Month','Tests']];
-            a.monthLabels.forEach((lab, i)=> data.push([lab, a.monthCounts[i]]));
+            MONTH_LABELS_BASE.forEach((lab,i)=> data.push([lab, TESTS_LAST12_BASE[i]]));
             return data;
         }
         if (chartId === 'diagnosisPie') {
-            const a = aggregateForCharts(rows);
-            const data = [['Diagnosis','Count']];
-            [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>{
-                data.push([lab, a.diagCounts[key]||0]);
-            });
-            return data;
+            return [['Diagnosis','Count'], ['Normal',<?= $diagnoses['normal'] ?>], ['Abnormal',<?= $diagnoses['abnormal'] ?>], ['Exclude',<?= $diagnoses['exclude'] ?>], ['No Input',<?= $diagnoses['no input'] ?>]];
         }
         if (chartId === 'locationBar') {
-            const a = aggregateForCharts(rows);
-            const data = [['Location','Patients']];
-            a.locLabels.forEach((lab, i)=> data.push([lab, a.locVals[i]]));
-            return data;
+            const labs = <?= json_encode(array_keys($byLocation)) ?>;
+            const vals = <?= json_encode(array_values($byLocation)) ?>;
+            const rows = [['Location','Patients']]; labs.forEach((l,i)=>rows.push([l, vals[i]])); return rows;
         }
         if (chartId === 'avgScoresEye') {
-            const a = aggregateForCharts(rows);
-            return [['Eye','Avg OCT','Avg VF'], ['OD', a.avgOD.oct, a.avgOD.vf], ['OS', a.avgOS.oct, a.avgOS.vf]];
-        }
-        if (chartId.startsWith('pm')) {
-            return patientCsvFor(chartId);
+            return [['Eye','Avg OCT','Avg VF'], ['OD', <?= json_encode($avgByEye['OD']['oct']) ?>, <?= json_encode($avgByEye['OD']['vf']) ?>], ['OS', <?= json_encode($avgByEye['OS']['oct']) ?>, <?= json_encode($avgByEye['OS']['vf']) ?>]];
         }
         return [['Info'],['Unsupported']];
     }
+    document.querySelectorAll('[data-download]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+            const id = btn.getAttribute('data-download');
+            const canvas = document.getElementById(id);
+            if (!canvas) return;
+            const link = document.createElement('a');
+            link.href = canvas.toDataURL('image/png', 1.0);
+            link.download = `${id}.png`;
+            link.click();
+        });
+    });
+    document.querySelectorAll('[data-csv]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+            const id = btn.getAttribute('data-csv');
+            downloadCSV(`${id}.csv`, csvForAnalytics(id));
+        });
+    });
+    document.querySelectorAll('[data-resetzoom="testsOverTime"]').forEach(btn=>{
+        btn.addEventListener('click', ()=> testsChart.resetZoom());
+    });
 
-    function exportFilteredRowsCSV(){
-        const rows = filterRows();
-        const header = ['subject_id','patient_id','test_id','date_of_test','eye','age','report_diagnosis','merci_score','oct_score','vf_score','location'];
-        const data = rows.map(r => [
-            r.subject_id, r.patient_id, r.test_id, r.date_of_test, r.eye,
-            r.age ?? '', r.report_diagnosis, r.merci_score ?? '', r.oct_score ?? '', r.vf_score ?? '', r.location
-        ]);
-        downloadCSV('filtered_eye_rows.csv', [header, ...data]);
+    // ===== PATIENT FILTERING (does NOT affect analytics) =====
+    const patientContainer = $('#patientContainer');
+
+    function rowMatches(r, f){
+        // Eye-level row filtering used to show/hide eye rows and tests
+        if (f.location && r.location !== f.location) return false;
+        if (f.diagnosis && r.report_diagnosis !== f.diagnosis) return false;
+        if (f.eyes.size && !f.eyes.has(r.eye)) return false;
+
+        const d = parseDate(r.date_of_test);
+        if (f.dateStart && d < f.dateStart) return false;
+        if (f.dateEnd && d > f.dateEnd) return false;
+
+        const m = toNum(r.merci_score);
+        if (f.merciMin !== null) { if (m === null || m < f.merciMin) return false; }
+        if (f.merciMax !== null) { if (m === null || m > f.merciMax) return false; }
+
+        const a = toNum(r.age);
+        if (f.ageMin !== null) { if (a === null || a < f.ageMin) return false; }
+        if (f.ageMax !== null) { if (a === null || a > f.ageMax) return false; }
+
+        return true;
     }
 
-    // wire toolbar buttons
-    function wireDownloads(){
-        $$('[data-download]').forEach(btn=>{
-            btn.addEventListener('click', ()=>{
-                const id = btn.getAttribute('data-download');
-                const canvas = document.getElementById(id);
-                if (!canvas) return;
-                const link = document.createElement('a');
-                link.href = canvas.toDataURL('image/png', 1.0);
-                link.download = `${id}.png`;
-                link.click();
-            });
-        });
-        $$('[data-csv]').forEach(btn=>{
-            btn.addEventListener('click', ()=>{
-                const id = btn.getAttribute('data-csv');
-                const data = csvFor(id);
-                downloadCSV(`${id}.csv`, data);
-            });
-        });
-        $$('[data-resetzoom="testsOverTime"]').forEach(btn=>{
-            btn.addEventListener('click', ()=> testsChart.resetZoom());
-        });
-        exportBtn.addEventListener('click', exportFilteredRowsCSV);
-    }
-    wireDownloads();
-
-    // ===== Filter the DOM list (patients/tests/eyes) =====
-    function filterDOM(){
+    function filterPatientsDOM(){
         const f = getFilterState();
-        const patientCards = $$('.patient-item');
+        let visiblePatients = 0, visibleTests = 0, visibleEyes = 0;
 
+        const patientCards = $$('.patient-item');
         patientCards.forEach(patient => {
+            const pidAttr = (patient.getAttribute('data-patient-id') || '').toLowerCase();
+            const locAttr = (patient.getAttribute('data-location') || '').toLowerCase();
+
+            // First: coarse patient-level checks (patientId)
+            if (f.patientId && !pidAttr.includes(f.patientId)) {
+                patient.style.display = 'none';
+                return;
+            }
+            if (f.location && locAttr !== f.location.toLowerCase()) {
+                patient.style.display = 'none';
+                return;
+            }
+
             const tests = patient.querySelectorAll('.test-wrapper');
             let anyTestVisible = false;
 
             tests.forEach(tw => {
+                const testId = (tw.getAttribute('data-testid') || '').toLowerCase();
                 const testDate = tw.getAttribute('data-test-date') || '';
-                const testRows = tw.querySelectorAll('.eye-row');
-                let anyEyeVisible = false;
 
-                testRows.forEach(row => {
+                // Test ID filter (if provided, require match at test level)
+                if (f.testId && !testId.includes(f.testId)) {
+                    tw.style.display = 'none';
+                    return;
+                }
+
+                const eyeRows = tw.querySelectorAll('.eye-row');
+                let eyesShown = 0;
+
+                eyeRows.forEach(row => {
+                    // Build a row object
                     const r = {
                         subject_id: row.getAttribute('data-subject') || '',
                         test_id: row.getAttribute('data-testid') || '',
@@ -1161,27 +1040,35 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
                         merci_score: row.getAttribute('data-merci'),
                         age: row.getAttribute('data-age')
                     };
-                    const visible = rowMatches(r, f);
-                    row.style.display = visible ? 'block':'none';
-                    if (visible) anyEyeVisible = true;
+                    const ok = rowMatches(r, f);
+                    row.style.display = ok ? 'block' : 'none';
+                    if (ok) eyesShown++;
                 });
 
-                const count = tw.querySelectorAll('.eye-row[style*="display: block"]').length;
                 const countEl = tw.querySelector('.eye-count');
-                if (countEl) countEl.textContent = count;
+                if (countEl) countEl.textContent = eyesShown;
 
-                tw.style.display = anyEyeVisible ? 'block':'none';
-                if (anyEyeVisible) anyTestVisible = true;
+                tw.style.display = eyesShown > 0 ? 'block' : 'none';
+                if (eyesShown > 0) {
+                    anyTestVisible = true;
+                    visibleTests++;
+                    visibleEyes += eyesShown;
+                }
             });
 
-            patient.style.display = anyTestVisible ? 'block':'none';
+            patient.style.display = anyTestVisible ? 'block' : 'none';
+            if (anyTestVisible) visiblePatients++;
         });
+
+        resPatients.textContent = fmt.format(visiblePatients);
+        resTests.textContent    = fmt.format(visibleTests);
+        resEyes.textContent     = fmt.format(visibleEyes);
     }
 
-    // ===== Sorting =====
+    // Sorting (on visible patients)
     function sortPatients(){
-        const container = $('#patientContainer');
-        const items = Array.from(container.querySelectorAll('.patient-item'));
+        const container = patientContainer;
+        const items = Array.from(container.querySelectorAll('.patient-item')).filter(it => it.style.display !== 'none');
         const key = sortBy.value;
         const dir = sortDirBtn.getAttribute('data-dir') === 'desc' ? -1 : 1;
 
@@ -1205,23 +1092,20 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
             return 0;
         });
 
+        // append sorted visible to end in order (hidden elements keep position)
         items.forEach(it => container.appendChild(it));
     }
 
-    sortBy.addEventListener('change', ()=>{ sortPatients(); });
-    sortDirBtn.addEventListener('click', ()=>{
-        const cur = sortDirBtn.getAttribute('data-dir');
-        const next = cur === 'desc' ? 'asc' : 'desc';
-        sortDirBtn.setAttribute('data-dir', next);
-        sortDirBtn.innerHTML = next === 'desc' ? '<i class="bi bi-sort-down"></i>' : '<i class="bi bi-sort-up"></i>';
-        sortPatients();
-    });
+    // Active filters pill (optional floating clear button)
+    const filterFab   = $('#filterFab');
+    const filtersPill = $('#filtersPill');
+    const filtersCount= $('#filtersCount');
 
-    // ===== Filters active pill =====
     function countActiveFilters(){
         const f = getFilterState();
         let n = 0;
-        if (f.search) n++;
+        if (f.patientId) n++;
+        if (f.testId) n++;
         if (f.location) n++;
         if (f.diagnosis) n++;
         if (!(f.eyes.has('OD') && f.eyes.has('OS'))) n++;
@@ -1234,49 +1118,67 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         if (f.ageMin !== null || f.ageMax !== null) n++;
         return n;
     }
-
     function updateFiltersPill(){
         const n = countActiveFilters();
-        if (n > 0) {
-            filtersCount.textContent = n;
-            filterFab.style.display = 'block';
-        } else {
-            filterFab.style.display = 'none';
-        }
+        if (n > 0) { filtersCount.textContent = n; filterFab.style.display = 'block'; }
+        else { filterFab.style.display = 'none'; }
     }
+    filtersPill.addEventListener('click', ()=>{ clearFilters(); window.scrollTo({top: 0, behavior: 'smooth'}); });
 
-    filtersPill.addEventListener('click', ()=>{
-        clearFilters();
-        window.scrollTo({top: 0, behavior: 'smooth'});
-    });
-
-    // ===== Apply filters =====
-    function applyFilters(){
-        filterDOM();
-        updateCharts();
-        updateFiltersPill();
+    function applyPatientFilters(){
+        filterPatientsDOM();
         sortPatients();
+        updateFiltersPill();
     }
 
-    // Debounced search
-    let searchTimer;
-    searchInput.addEventListener('input', ()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(applyFilters, 150); });
-    [locSelect, diagSelect, eyeOD, eyeOS, dateStartInput, dateEndInput, merciMinInput, merciMaxInput, ageMinInput, ageMaxInput]
-        .forEach(el => el.addEventListener('change', applyFilters));
+    // CSV for filtered rows (eye rows currently visible)
+    function exportFilteredRowsCSV(){
+        const visibleRows = Array.from(document.querySelectorAll('.eye-row'))
+            .filter(el => el.style.display !== 'none')
+            .map(el => ({
+                subject_id: el.getAttribute('data-subject') || '',
+                patient_id: el.closest('.patient-item')?.getAttribute('data-patient-id') || '',
+                test_id: el.getAttribute('data-testid') || '',
+                date_of_test: el.getAttribute('data-test-date') || '',
+                eye: el.getAttribute('data-eye') || '',
+                age: el.getAttribute('data-age') || '',
+                report_diagnosis: el.getAttribute('data-diagnosis') || '',
+                merci_score: el.getAttribute('data-merci') || '',
+                location: el.getAttribute('data-location') || ''
+            }));
 
-    // Quick date presets
+        const header = ['subject_id','patient_id','test_id','date_of_test','eye','age','report_diagnosis','merci_score','location'];
+        const rows = [header, ...visibleRows.map(r => header.map(h => r[h]))];
+
+        // download
+        const csv = rows.map(r=>r.map(v=>{
+            v = (v===null||v===undefined) ? '' : String(v);
+            if (v.includes('"') || v.includes(',') || v.includes('\n')) v = '"' + v.replace(/"/g,'""') + '"';
+            return v;
+        }).join(',')).join('\n');
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'filtered_eye_rows.csv'; a.click();
+        setTimeout(()=>URL.revokeObjectURL(url), 500);
+    }
+
+    // Wire events
+    let debounceTimer;
+    [patientIdInput, testIdInput].forEach(inp=>{
+        inp.addEventListener('input', ()=>{ clearTimeout(debounceTimer); debounceTimer=setTimeout(applyPatientFilters, 150); });
+    });
+    [locSelect, diagSelect, eyeOD, eyeOS, dateStartInput, dateEndInput, merciMinInput, merciMaxInput, ageMinInput, ageMaxInput]
+        .forEach(el => el.addEventListener('change', applyPatientFilters));
+
+    exportBtn.addEventListener('click', exportFilteredRowsCSV);
+
     function setPreset(days){
         const max = DATA_MAX ? new Date(DATA_MAX+'T00:00:00') : new Date();
         let start = null, end = max;
-        if (days === 'all') {
-            start = DATA_MIN ? new Date(DATA_MIN+'T00:00:00') : null;
-        } else {
-            const ms = Number(days) * 24*3600*1000;
-            start = new Date(end.getTime() - ms);
-        }
+        if (days === 'all') start = DATA_MIN ? new Date(DATA_MIN+'T00:00:00') : null;
+        else start = new Date(end.getTime() - Number(days)*24*3600*1000);
         dateStartInput.value = fmtISO(start);
         dateEndInput.value   = fmtISO(end);
-        applyFilters();
+        applyPatientFilters();
     }
     presetBtns.forEach(btn=>{
         const v = btn.getAttribute('data-preset');
@@ -1285,7 +1187,8 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     });
 
     function clearFilters(){
-        searchInput.value = '';
+        patientIdInput.value = '';
+        testIdInput.value = '';
         locSelect.value = '';
         diagSelect.value = '';
         eyeOD.checked = true; eyeOS.checked = true;
@@ -1294,150 +1197,115 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         merciMinInput.value = ''; merciMaxInput.value = '';
         ageMinInput.value = ''; ageMaxInput.value = '';
         sortBy.value = 'subject'; sortDirBtn.setAttribute('data-dir','desc'); sortDirBtn.innerHTML = '<i class="bi bi-sort-down"></i>';
-        applyFilters();
+        applyPatientFilters();
     }
-    clearBtn.addEventListener('click', clearFilters);
+    $('#clearFilters').addEventListener('click', clearFilters);
+
+    // Sorting controls
+    sortBy.addEventListener('change', sortPatients);
+    sortDirBtn.addEventListener('click', ()=>{
+        const cur = sortDirBtn.getAttribute('data-dir');
+        const next = cur === 'desc' ? 'asc' : 'desc';
+        sortDirBtn.setAttribute('data-dir', next);
+        sortDirBtn.innerHTML = next === 'desc' ? '<i class="bi bi-sort-down"></i>' : '<i class="bi bi-sort-up"></i>';
+        sortPatients();
+    });
 
     // Initial
     dateStartInput.value = fmtISO(defaultState.dateStart);
     dateEndInput.value   = fmtISO(defaultState.dateEnd);
-    applyFilters();
+    applyPatientFilters();
 
-    // ===== Printable Summary =====
-    function listActiveFilters(){
-        const f = getFilterState();
-        const items = [];
-        if (f.search) items.push(`Search: "${f.search}"`);
-        if (f.location) items.push(`Location: ${f.location}`);
-        if (f.diagnosis) items.push(`Diagnosis: ${f.diagnosis}`);
-        if (!(f.eyes.has('OD') && f.eyes.has('OS'))) items.push(`Eye: ${Array.from(f.eyes).join('/')}`);
-        if (f.dateStart || f.dateEnd) items.push(`Dates: ${f.dateStart?fmtISO(f.dateStart):'…'} to ${f.dateEnd?fmtISO(f.dateEnd):'…'}`);
-        if (f.merciMin !== null || f.merciMax !== null) items.push(`MERCI: ${f.merciMin??'…'} to ${f.merciMax??'…'}`);
-        if (f.ageMin !== null || f.ageMax !== null) items.push(`Age: ${f.ageMin??'…'} to ${f.ageMax??'…'}`);
-        return items;
-    }
-
-    function preparePrint(){
-        const rows = filterRows();
-        const agg = aggregateForCharts(rows);
-
-        // time stamp
-        printTime.textContent = new Date().toLocaleString();
-
-        // filters list
-        printFilters.innerHTML = '';
-        const liItems = listActiveFilters();
-        if (liItems.length === 0) {
-            const li = document.createElement('li'); li.textContent = 'None';
-            printFilters.appendChild(li);
-        } else {
-            liItems.forEach(t => { const li = document.createElement('li'); li.textContent = t; printFilters.appendChild(li); });
-        }
-
-        // chart images
-        $('#printImg-tests').src = cloneCanvasToImg(document.getElementById('testsOverTime'));
-        $('#printImg-diag').src  = cloneCanvasToImg(document.getElementById('diagnosisPie'));
-        $('#printImg-loc').src   = cloneCanvasToImg(document.getElementById('locationBar'));
-        $('#printImg-avg').src   = cloneCanvasToImg(document.getElementById('avgScoresEye'));
-
-        // tables
-        printDiagTbl.innerHTML = '';
-        [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>{
-            const tr = document.createElement('tr');
-            const td1 = document.createElement('td'); td1.textContent = lab;
-            const td2 = document.createElement('td'); td2.textContent = agg.diagCounts[key]||0;
-            tr.append(td1,td2); printDiagTbl.appendChild(tr);
-        });
-
-        printLocTbl.innerHTML = '';
-        agg.locLabels.forEach((lab,i)=>{
-            const tr = document.createElement('tr');
-            const td1 = document.createElement('td'); td1.textContent = lab;
-            const td2 = document.createElement('td'); td2.textContent = agg.locVals[i];
-            tr.append(td1,td2); printLocTbl.appendChild(tr);
-        });
-    }
-
+    // ===== Print (analytics images only) =====
+    const printBtn  = document.getElementById('printSummaryBtn');
+    const printArea = document.getElementById('printArea');
+    const printTime = document.getElementById('printTime');
     printBtn.addEventListener('click', ()=>{
-        preparePrint();
+        printTime.textContent = new Date().toLocaleString();
+        document.getElementById('printImg-tests').src = testsChart.canvas.toDataURL('image/png', 1.0);
+        document.getElementById('printImg-diag').src  = diagChart.canvas.toDataURL('image/png', 1.0);
+        document.getElementById('printImg-loc').src   = locChart.canvas.toDataURL('image/png', 1.0);
+        document.getElementById('printImg-avg').src   = avgChart.canvas.toDataURL('image/png', 1.0);
         printArea.style.display = 'block';
         setTimeout(()=>window.print(), 100);
         setTimeout(()=>{ printArea.style.display='none'; }, 400);
     });
 
-    // ===== Per-Patient Analytics Modal =====
+    // ===== Per-Patient Analytics Modal (respects patient filters) =====
     const modalEl = document.getElementById('patientModal');
     const patientModal = new bootstrap.Modal(modalEl);
     let pmCharts = { tests:null, diag:null, avg:null };
-    function destroyPmCharts(){
-        Object.values(pmCharts).forEach(ch => { if (ch) ch.destroy(); });
-        pmCharts = { tests:null, diag:null, avg:null };
-    }
 
-    function filterRowsForPatient(patientId){
-        return filterRows().filter(r => r.patient_id === patientId);
-    }
-
-    function patientAggregate(patientRows){
-        const base = aggregateForCharts(patientRows);
-        return base;
-    }
-
-    function patientCsvFor(chartId){
-        const pid = modalEl.getAttribute('data-patient-id');
-        const rows = filterRowsForPatient(pid);
-        const a = patientAggregate(rows);
-        if (chartId === 'pmTests') {
-            const data = [['Month','Tests']];
-            a.monthLabels.forEach((lab, i)=> data.push([lab, a.monthCounts[i]]));
-            return data;
-        }
-        if (chartId === 'pmDiag') {
-            const data = [['Diagnosis','Count']];
-            [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>{
-                data.push([lab, a.diagCounts[key]||0]);
-            });
-            return data;
-        }
-        if (chartId === 'pmAvg') {
-            return [['Eye','Avg OCT','Avg VF'], ['OD', a.avgOD.oct, a.avgOD.vf], ['OS', a.avgOS.oct, a.avgOS.vf]];
-        }
-        return [['Info'],['Unsupported']];
-    }
-    window.patientCsvFor = patientCsvFor;
+    function destroyPmCharts(){ Object.values(pmCharts).forEach(ch => ch?.destroy()); pmCharts = {tests:null, diag:null, avg:null}; }
+    function parseMonth(ts){ return (ts||'').slice(0,7); }
 
     function openPatientAnalytics(pid, subject){
-        $('#pmSubject').textContent = subject;
-        $('#pmId').textContent = pid;
+        document.getElementById('pmSubject').textContent = subject;
+        document.getElementById('pmId').textContent = pid;
         modalEl.setAttribute('data-patient-id', pid);
 
-        const rows = filterRowsForPatient(pid);
-        const agg = patientAggregate(rows);
+        // Build from visible (filtered) rows for this patient
+        const rows = Array.from(document.querySelectorAll(`.patient-item[data-patient-id="${pid}"] .eye-row`))
+            .filter(el => el.style.display !== 'none')
+            .map(el => ({
+                test_id: el.getAttribute('data-testid'),
+                date_of_test: el.getAttribute('data-test-date'),
+                report_diagnosis: el.getAttribute('data-diagnosis'),
+                eye: el.getAttribute('data-eye'),
+                oct_score: Number(el.getAttribute('data-oct')) || null,
+                vf_score: Number(el.getAttribute('data-vf')) || null
+            }));
+
+        // month agg
+        const end = new Date();
+        const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
+        const labels = []; const counts = [];
+        const perYM = new Map(); // ym -> set(test_id)
+        rows.forEach(r => {
+            const ym = parseMonth(r.date_of_test);
+            if (!perYM.has(ym)) perYM.set(ym, new Set());
+            perYM.get(ym).add(r.test_id);
+        });
+        for (let i=11;i>=0;i--){
+            const d = new Date(endMonth); d.setMonth(d.getMonth()-i);
+            const ym = d.toISOString().slice(0,7);
+            labels.push(d.toLocaleString(undefined,{month:'short', year:'numeric'}));
+            counts.push(perYM.has(ym) ? perYM.get(ym).size : 0);
+        }
+
+        const diagCounts = {'normal':0,'abnormal':0,'exclude':0,'no input':0};
+        rows.forEach(r => { if (diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
+
+        const eyeScores = { OD:{oct:[],vf:[]}, OS:{oct:[],vf:[]} };
+        rows.forEach(r => {
+            if (r.eye==='OD'){ if(!isNaN(r.oct_score)&&r.oct_score!==null) eyeScores.OD.oct.push(r.oct_score); if(!isNaN(r.vf_score)&&r.vf_score!==null) eyeScores.OD.vf.push(r.vf_score);}
+            if (r.eye==='OS'){ if(!isNaN(r.oct_score)&&r.oct_score!==null) eyeScores.OS.oct.push(r.oct_score); if(!isNaN(r.vf_score)&&r.vf_score!==null) eyeScores.OS.vf.push(r.vf_score);}
+        });
+        const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+        const avgOD = {oct: avg(eyeScores.OD.oct), vf: avg(eyeScores.OD.vf)};
+        const avgOS = {oct: avg(eyeScores.OS.oct), vf: avg(eyeScores.OS.vf)};
 
         destroyPmCharts();
 
-        const pmTestsCtx = document.getElementById('pmTests').getContext('2d');
-        pmCharts.tests = new Chart(pmTestsCtx, {
+        pmCharts.tests = new Chart(document.getElementById('pmTests').getContext('2d'), {
             type:'line',
-            data:{ labels: agg.monthLabels, datasets:[{ label:'Tests', data: agg.monthCounts, borderColor: C.brand,
-                backgroundColor:(ctx)=>lineGradientFor(ctx.chart), tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
+            data:{ labels, datasets:[{ label:'Tests', data: counts, borderColor: C.brand,
+                backgroundColor:(ctx)=>{ const ch=ctx.chart; const g=ch.ctx.createLinearGradient(0,0,0,ch.height); g.addColorStop(0,'rgba(26,115,232,.35)'); g.addColorStop(1,'rgba(26,115,232,.05)'); return g; },
+                tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
             options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ grid:{color:gridColor()}}, y:{ beginAtZero:true, grid:{color:gridColor()}} } }
         });
 
-        const pmDiagCtx = document.getElementById('pmDiag').getContext('2d');
-        const diagVals = ['normal','abnormal','exclude','no input'].map(k=>agg.diagCounts[k]||0);
-        pmCharts.diag = new Chart(pmDiagCtx,{
+        pmCharts.diag = new Chart(document.getElementById('pmDiag').getContext('2d'), {
             type:'doughnut',
-            data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:diagVals, backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff' }]},
+            data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:[diagCounts['normal'],diagCounts['abnormal'],diagCounts['exclude'],diagCounts['no input']], backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff' }] },
             options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom'}, datalabels:{ color:'#111', formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); const p=t?(v/t*100):0; return p>=6?`${p.toFixed(0)}%`:''; } } } }
         });
 
-        const pmAvgCtx = document.getElementById('pmAvg').getContext('2d');
-        pmCharts.avg = new Chart(pmAvgCtx,{
+        pmCharts.avg = new Chart(document.getElementById('pmAvg').getContext('2d'), {
             type:'bar',
             data:{ labels:['OD','OS'], datasets:[
-                { label:'Avg OCT', data:[agg.avgOD.oct, agg.avgOS.oct], backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
-                { label:'Avg VF',  data:[agg.avgOD.vf,  agg.avgOS.vf],  backgroundColor:C.brand,  borderColor:C.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
+                { label:'Avg OCT', data:[avgOD.oct, avgOS.oct], backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
+                { label:'Avg VF',  data:[avgOD.vf,  avgOS.vf],  backgroundColor:C.brand,  borderColor:C.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
             ]},
             options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:gridColor()}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=>(v===null||isNaN(v))?'':fmt.format(v) } } }
         });
@@ -1448,30 +1316,10 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     document.addEventListener('click', (e)=>{
         const btn = e.target.closest('.btn-patient-analytics');
         if (!btn) return;
-        const pid = btn.getAttribute('data-patient');
-        const subject = btn.getAttribute('data-subject');
-        openPatientAnalytics(pid, subject);
+        openPatientAnalytics(btn.getAttribute('data-patient'), btn.getAttribute('data-subject'));
     });
+    document.getElementById('patientModal').addEventListener('hidden.bs.modal', ()=>{ destroyPmCharts(); });
 
-    modalEl.addEventListener('hidden.bs.modal', destroyPmCharts);
-
-    // wire CSV/PNG inside modal (reuse global handlers)
-    document.querySelectorAll('#patientModal [data-csv], #patientModal [data-download]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-            const id = btn.getAttribute('data-csv') || btn.getAttribute('data-download');
-            if (btn.hasAttribute('data-download')) {
-                const canvas = document.getElementById(id);
-                if (!canvas) return;
-                const link = document.createElement('a');
-                link.href = canvas.toDataURL('image/png', 1.0);
-                link.download = `${id}.png`;
-                link.click();
-            } else {
-                const data = csvFor(id); // delegates to patientCsvFor()
-                downloadCSV(`${id}.csv`, data);
-            }
-        });
-    });
 })();
 </script>
 </body>
