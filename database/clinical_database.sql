@@ -91,7 +91,6 @@ DELIMITER //
 CREATE TRIGGER tests_after_insert
 AFTER INSERT ON tests
 FOR EACH ROW
-SQL SECURITY INVOKER
 BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, new_values, changed_by
@@ -100,12 +99,12 @@ BEGIN
         CONCAT('{"test_id":"', NEW.test_id, '","patient_id":"', NEW.patient_id, '"}'),
         CURRENT_USER()
     );
-END//
+END;
+//
 
 CREATE TRIGGER tests_after_update
 AFTER UPDATE ON tests
 FOR EACH ROW
-SQL SECURITY INVOKER
 BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, old_values, new_values, changed_by
@@ -115,12 +114,12 @@ BEGIN
         CONCAT('{"test_id":"', NEW.test_id, '","patient_id":"', NEW.patient_id, '"}'),
         CURRENT_USER()
     );
-END//
+END;
+//
 
 CREATE TRIGGER tests_after_delete
 AFTER DELETE ON tests
 FOR EACH ROW
-SQL SECURITY INVOKER
 BEGIN
     INSERT INTO audit_log (
         table_name, record_id, action, old_values, changed_by
@@ -129,6 +128,7 @@ BEGIN
         CONCAT('{"test_id":"', OLD.test_id, '","patient_id":"', OLD.patient_id, '"}'),
         CURRENT_USER()
     );
-END//
+END;
+//
 
 DELIMITER ;
