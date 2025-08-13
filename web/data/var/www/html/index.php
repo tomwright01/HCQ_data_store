@@ -1,4 +1,8 @@
-<?php
+<<?php
+session_start();
+if (!isset($_SESSION['csrf'])) { $_SESSION['csrf'] = bin2hex(random_bytes(32)); }
+$CSRF = $_SESSION['csrf'];
+
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
@@ -79,6 +83,7 @@ $eyeRows = [];
 $sqlAll = "
 SELECT
   te.result_id, te.test_id, te.eye, te.age, te.report_diagnosis, te.merci_score, te.oct_score, te.vf_score,
+  te.faf_grade, te.actual_diagnosis, te.dosage, te.duration_days, te.cumulative_dosage, te.date_of_continuation,
   t.date_of_test, t.patient_id,
   p.subject_id, p.location
 FROM test_eyes te
@@ -96,6 +101,12 @@ if ($res = $conn->query($sqlAll)) {
             'merci_score'      => $row['merci_score'],
             'oct_score'        => is_null($row['oct_score']) ? null : (float)$row['oct_score'],
             'vf_score'         => is_null($row['vf_score']) ? null : (float)$row['vf_score'],
+            'faf_grade'        => is_null($row['faf_grade']) ? null : (int)$row['faf_grade'],
+            'actual_diagnosis' => $row['actual_diagnosis'],
+            'dosage'           => is_null($row['dosage']) ? null : (float)$row['dosage'],
+            'duration_days'    => is_null($row['duration_days']) ? null : (int)$row['duration_days'],
+            'cumulative_dosage'=> is_null($row['cumulative_dosage']) ? null : (float)$row['cumulative_dosage'],
+            'date_of_continuation' => $row['date_of_continuation'],
             'date_of_test'     => $row['date_of_test'],
             'patient_id'       => $row['patient_id'],
             'subject_id'       => $row['subject_id'],
@@ -116,6 +127,7 @@ $maxDate = $allDates ? end($allDates) : null;
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Hydroxychloroquine Data Repository</title>
+<meta name="csrf-token" content="<?= htmlspecialchars($CSRF) ?>">
 
 <!-- Bootstrap & Icons -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -128,30 +140,14 @@ $maxDate = $allDates ? end($allDates) : null;
 
 <style>
 :root{
-    --brand:#1a73e8;
-    --brand-2:#6ea8fe;
-    --ok:#198754;
-    --warn:#ffc107;
-    --danger:#dc3545;
-    --muted:#6c757d;
-    --bg:#f7f8fb;
-    --card:#ffffff;
-    --text:#111827;
-    --grid:rgba(0,0,0,.06);
-    --border:rgba(0,0,0,.08);
-    --shadow: 0 8px 24px rgba(0,0,0,0.09);
+    --brand:#1a73e8; --brand-2:#6ea8fe; --ok:#198754; --warn:#ffc107; --danger:#dc3545;
+    --muted:#6c757d; --bg:#f7f8fb; --card:#ffffff; --text:#111827; --grid:rgba(0,0,0,.06);
+    --border:rgba(0,0,0,.08); --shadow: 0 8px 24px rgba(0,0,0,0.09);
     --chart-grad: radial-gradient(1200px 400px at 10% 0%, rgba(26,115,232,.06), transparent 60%);
 }
-body.dark{
-    --bg:#0f1220;
-    --card:#151a2c;
-    --text:#e5e7eb;
-    --grid:rgba(255,255,255,.12);
-    --border:rgba(255,255,255,.14);
-    --muted:#9aa4b2;
-    --shadow: 0 12px 28px rgba(0,0,0,0.45);
-    --chart-grad: radial-gradient(1200px 400px at 10% 0%, rgba(110,168,254,.12), transparent 60%);
-}
+body.dark{ --bg:#0f1220; --card:#151a2c; --text:#e5e7eb; --grid:rgba(255,255,255,.12); --border:rgba(255,255,255,.14);
+    --muted:#9aa4b2; --shadow: 0 12px 28px rgba(0,0,0,0.45);
+    --chart-grad: radial-gradient(1200px 400px at 10% 0%, rgba(110,168,254,.12), transparent 60%); }
 body { background: var(--bg); color: var(--text); }
 .navbar-blur { backdrop-filter: saturate(180%) blur(8px); background-color: rgba(255,255,255,0.85); border-bottom: 1px solid var(--border); }
 body.dark .navbar-blur { background-color: rgba(21,26,44,0.85); }
@@ -175,6 +171,14 @@ canvas { max-height: 380px; }
 .results-badge { font-weight:600; }
 .filter-fab { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: none; }
 .filter-fab .btn { box-shadow: var(--shadow); }
+
+/* Edit mode helpers */
+.view-field .edit-input { display:none; }
+.editing .view-field .view-val { display:none; }
+.editing .view-field .edit-input { display:block; }
+.inline-actions { display:none; }
+.editing .inline-actions { display:block; }
+.editing .view-actions { display:none; }
 
 /* Print */
 @media print {
@@ -513,7 +517,7 @@ canvas { max-height: 380px; }
                     <div class="card-header d-flex justify-content-between align-items-center">
                         <h5 class="mb-0">
                             <i class="bi bi-person-circle"></i>
-                            <?= htmlspecialchars($patient['subject_id']) ?>
+                            <span class="patient-subject"><?= htmlspecialchars($patient['subject_id']) ?></span>
                         </h5>
                         <div class="d-flex align-items-center gap-2">
                             <button class="btn btn-sm btn-outline-secondary btn-patient-analytics"
@@ -521,18 +525,51 @@ canvas { max-height: 380px; }
                                     data-subject="<?= htmlspecialchars($patient['subject_id']) ?>">
                                 <i class="bi bi-graph-up"></i> Analytics
                             </button>
+
+                            <!-- Edit toggles for this patient -->
+                            <div class="view-actions">
+                                <button class="btn btn-sm btn-outline-primary btn-edit-patient" title="Edit this patient card">
+                                    <i class="bi bi-pencil-square"></i> Edit
+                                </button>
+                            </div>
+                            <div class="inline-actions">
+                                <button class="btn btn-sm btn-success btn-save-patient"><i class="bi bi-check2"></i> Save</button>
+                                <button class="btn btn-sm btn-outline-secondary btn-cancel-edit"><i class="bi bi-x"></i> Cancel</button>
+                            </div>
+
                             <span class="badge bg-secondary"><?= htmlspecialchars($patient['location']) ?></span>
                         </div>
                     </div>
                     <div class="card-body">
+
+                        <!-- Patient-level editable fields -->
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <p><strong>Patient ID:</strong> <?= htmlspecialchars($patient['patient_id']) ?></p>
-                                <p><strong>Age:</strong> <?= (int)$ageYears ?> years</p>
+                                <p class="mb-1"><strong>Patient ID:</strong> <?= htmlspecialchars($patient['patient_id']) ?></p>
+                                <div class="view-field mb-2">
+                                    <label class="form-label mb-0"><strong>Subject:</strong></label>
+                                    <div class="view-val"><?= htmlspecialchars($patient['subject_id']) ?></div>
+                                    <input class="form-control form-control-sm edit-input edit-patient-field" data-field="subject_id"
+                                           value="<?= htmlspecialchars($patient['subject_id']) ?>">
+                                </div>
+                                <div class="view-field mb-2">
+                                    <label class="form-label mb-0"><strong>Location:</strong></label>
+                                    <div class="view-val"><?= htmlspecialchars($patient['location']) ?></div>
+                                    <select class="form-select form-select-sm edit-input edit-patient-field" data-field="location">
+                                        <?php foreach (['KH','CHUSJ','IWK','IVEY'] as $loc): ?>
+                                            <option value="<?= $loc ?>" <?= $loc === $patient['location'] ? 'selected':'' ?>><?= $loc ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
                             </div>
                             <div class="col-md-6">
-                                <p><strong>DOB:</strong> <?= $dob->format('M j, Y') ?></p>
-                                <p><strong>Tests:</strong> <?= count($tests) ?></p>
+                                <div class="view-field mb-2">
+                                    <label class="form-label mb-0"><strong>DOB:</strong></label>
+                                    <div class="view-val"><?= $dob->format('M j, Y') ?></div>
+                                    <input type="date" class="form-control form-control-sm edit-input edit-patient-field" data-field="date_of_birth"
+                                           value="<?= htmlspecialchars($dob->format('Y-m-d')) ?>">
+                                </div>
+                                <p class="mb-0"><strong>Tests:</strong> <?= count($tests) ?></p>
                             </div>
                         </div>
 
@@ -552,15 +589,28 @@ canvas { max-height: 380px; }
                                                 aria-expanded="false"
                                                 aria-controls="collapse-<?= htmlspecialchars($test['test_id']) ?>">
                                             <i class="bi bi-clipboard2-pulse me-2"></i>
-                                            <strong><?= $testDate->format('M j, Y') ?></strong>
-                                            <span class="ms-2 badge bg-primary"><?= htmlspecialchars($test['test_id']) ?></span>
-                                            <span class="ms-2 badge bg-dark"><span class="eye-count"><?= count($testEyes) ?></span> eye records</span>
+                                            <strong class="me-2">Test:</strong>
+                                            <span class="badge bg-primary me-2"><?= htmlspecialchars($test['test_id']) ?></span>
+
+                                            <!-- Test date (editable) -->
+                                            <span class="view-val me-2"><i class="bi bi-calendar-event"></i> <?= $testDate->format('M j, Y') ?></span>
+                                            <input type="date" class="form-control form-control-sm edit-input d-inline-block w-auto me-2 edit-test-date"
+                                                   value="<?= htmlspecialchars($testDate->format('Y-m-d')) ?>">
+
+                                            <span class="ms-auto badge bg-dark">
+                                                <span class="eye-count"><?= count($testEyes) ?></span> eye records
+                                            </span>
                                         </button>
                                     </h2>
                                     <div id="collapse-<?= htmlspecialchars($test['test_id']) ?>" class="accordion-collapse collapse"
                                          aria-labelledby="heading-<?= htmlspecialchars($test['test_id']) ?>"
                                          data-bs-parent="#testsAccordion-<?= htmlspecialchars($patient['patient_id']) ?>">
                                         <div class="accordion-body">
+                                            <!-- Test save buttons -->
+                                            <div class="text-end mb-2">
+                                                <button class="btn btn-sm btn-outline-primary btn-save-test">Save test date</button>
+                                            </div>
+
                                             <?php foreach ($testEyes as $eye): ?>
                                                 <?php
                                                     $eyeSide   = strtoupper($eye['eye']);
@@ -570,10 +620,12 @@ canvas { max-height: 380px; }
                                                     $medName   = safe_get($eye, 'medication_name');
                                                     $dosage    = safe_get($eye, 'dosage');
                                                     $dosageUnit= safe_get($eye, 'dosage_unit', 'mg');
-                                                    $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
+                                                    $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : (is_string($eye['merci_score']) ? $eye['merci_score'] : null);
                                                     $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
+                                                    $resultId  = safe_get($eye,'result_id');
                                                 ?>
                                                 <div class="card test-card mb-3 eye-row"
+                                                     data-result-id="<?= htmlspecialchars($resultId) ?>"
                                                      data-eye="<?= htmlspecialchars($eyeSide) ?>"
                                                      data-diagnosis="<?= htmlspecialchars($diag) ?>"
                                                      data-merci="<?= is_null($merciVal)? '' : htmlspecialchars($merciVal) ?>"
@@ -587,21 +639,86 @@ canvas { max-height: 380px; }
                                                      data-vf="<?= htmlspecialchars($eye['vf_score'] ?? '') ?>">
                                                     <div class="card-body">
                                                         <div class="d-flex justify-content-between align-items-start mb-2">
-                                                            <span class="badge <?= $eyeClass ?> eye-badge"><?= htmlspecialchars($eyeSide) ?></span>
-                                                            <span class="badge diagnosis-badge <?= htmlspecialchars($diagClass) ?>">
-                                                                <?= htmlspecialchars($diag) ?>
-                                                            </span>
+                                                            <div>
+                                                                <span class="badge <?= $eyeClass ?> eye-badge"><?= htmlspecialchars($eyeSide) ?></span>
+                                                                <span class="badge diagnosis-badge <?= htmlspecialchars($diagClass) ?>">
+                                                                    <span class="view-val"><?= htmlspecialchars($diag) ?></span>
+                                                                </span>
+                                                            </div>
+                                                            <div class="view-actions">
+                                                                <button class="btn btn-sm btn-outline-secondary btn-edit-eye"><i class="bi bi-pencil"></i> Edit</button>
+                                                            </div>
+                                                            <div class="inline-actions">
+                                                                <button class="btn btn-sm btn-success btn-save-eye"><i class="bi bi-check2"></i> Save</button>
+                                                                <button class="btn btn-sm btn-outline-secondary btn-cancel-eye"><i class="bi bi-x"></i> Cancel</button>
+                                                            </div>
                                                         </div>
-                                                        <div class="row">
+
+                                                        <!-- View mode -->
+                                                        <div class="row view-mode">
                                                             <div class="col-md-6">
-                                                                <p><strong>Age at Test:</strong> <?= htmlspecialchars($eye['age'] ?? 'N/A') ?></p>
-                                                                <p><strong>MERCI Score:</strong> <?= htmlspecialchars($eye['merci_score'] ?? 'N/A') ?></p>
-                                                                <p><strong>OCT Score:</strong> <?= htmlspecialchars($eye['oct_score'] ?? 'N/A') ?></p>
+                                                                <p><strong>Age at Test:</strong> <span class="v-age"><?= htmlspecialchars($eye['age'] ?? 'N/A') ?></span></p>
+                                                                <p><strong>MERCI Score:</strong> <span class="v-merci"><?= htmlspecialchars($eye['merci_score'] ?? 'N/A') ?></span></p>
+                                                                <p><strong>OCT Score:</strong> <span class="v-oct"><?= htmlspecialchars($eye['oct_score'] ?? 'N/A') ?></span></p>
                                                             </div>
                                                             <div class="col-md-6">
-                                                                <p><strong>VF Score:</strong> <?= htmlspecialchars($eye['vf_score'] ?? 'N/A') ?></p>
-                                                                <p><strong>FAF Grade:</strong> <?= htmlspecialchars($eye['faf_grade'] ?? 'N/A') ?></p>
-                                                                <p><strong>Diagnosis:</strong> <?= htmlspecialchars($eye['actual_diagnosis']) ?></p>
+                                                                <p><strong>VF Score:</strong> <span class="v-vf"><?= htmlspecialchars($eye['vf_score'] ?? 'N/A') ?></span></p>
+                                                                <p><strong>FAF Grade:</strong> <span class="v-faf"><?= htmlspecialchars($eye['faf_grade'] ?? 'N/A') ?></span></p>
+                                                                <p><strong>Diagnosis:</strong> <span class="v-actual"><?= htmlspecialchars($eye['actual_diagnosis'] ?? 'N/A') ?></span></p>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Edit mode -->
+                                                        <div class="row g-2 edit-mode">
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">Age at Test</label>
+                                                                <input type="number" class="form-control form-control-sm e-age" value="<?= htmlspecialchars($eye['age'] ?? '') ?>">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">MERCI Score (or "unable")</label>
+                                                                <input type="text" class="form-control form-control-sm e-merci" value="<?= htmlspecialchars($eye['merci_score'] ?? '') ?>">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">OCT Score</label>
+                                                                <input type="number" step="0.01" class="form-control form-control-sm e-oct" value="<?= htmlspecialchars($eye['oct_score'] ?? '') ?>">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">VF Score</label>
+                                                                <input type="number" step="0.01" class="form-control form-control-sm e-vf" value="<?= htmlspecialchars($eye['vf_score'] ?? '') ?>">
+                                                            </div>
+
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">FAF Grade</label>
+                                                                <input type="number" class="form-control form-control-sm e-faf" value="<?= htmlspecialchars($eye['faf_grade'] ?? '') ?>">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">Report Diagnosis</label>
+                                                                <select class="form-select form-select-sm e-report">
+                                                                    <?php foreach (['normal','abnormal','exclude','no input'] as $opt): ?>
+                                                                        <option value="<?= $opt ?>" <?= ($opt === strtolower((string)$eye['report_diagnosis']))?'selected':''; ?>><?= ucfirst($opt) ?></option>
+                                                                    <?php endforeach; ?>
+                                                                </select>
+                                                            </div>
+                                                            <div class="col-md-6">
+                                                                <label class="form-label form-label-sm">Actual Diagnosis</label>
+                                                                <input type="text" class="form-control form-control-sm e-actual" value="<?= htmlspecialchars($eye['actual_diagnosis'] ?? '') ?>">
+                                                            </div>
+
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">Dosage</label>
+                                                                <input type="number" step="0.01" class="form-control form-control-sm e-dosage" value="<?= htmlspecialchars($eye['dosage'] ?? '') ?>">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">Duration (days)</label>
+                                                                <input type="number" class="form-control form-control-sm e-duration" value="<?= htmlspecialchars($eye['duration_days'] ?? '') ?>">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">Cumulative Dosage</label>
+                                                                <input type="number" step="0.01" class="form-control form-control-sm e-cumulative" value="<?= htmlspecialchars($eye['cumulative_dosage'] ?? '') ?>">
+                                                            </div>
+                                                            <div class="col-md-3">
+                                                                <label class="form-label form-label-sm">Date of Continuation</label>
+                                                                <input type="text" class="form-control form-control-sm e-cont" value="<?= htmlspecialchars($eye['date_of_continuation'] ?? '') ?>">
                                                             </div>
                                                         </div>
 
@@ -753,10 +870,21 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     const $  = sel => document.querySelector(sel);
     const $$ = sel => Array.from(document.querySelectorAll(sel));
     const fmt = new Intl.NumberFormat();
-    const toNum = v => v === null || v === '' || isNaN(v) ? null : Number(v);
+    const toNum = v => (v===null || v==='' || isNaN(v)) ? null : Number(v);
     const parseDate = s => s ? new Date(s + 'T00:00:00') : null;
     const fmtISO = d => d ? d.toISOString().slice(0,10) : '';
     const cloneCanvasToImg = (canvas) => canvas.toDataURL('image/png', 1.0);
+    const CSRF = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+    // Quick toast
+    function flash(msg, type='info'){
+        const el = document.createElement('div');
+        el.className = `alert alert-${type} position-fixed top-0 start-50 translate-middle-x mt-3 shadow`;
+        el.style.zIndex = 3000;
+        el.textContent = msg;
+        document.body.appendChild(el);
+        setTimeout(()=>{ el.remove(); }, 2200);
+    }
 
     // Inputs (PATIENT FILTERS ONLY)
     const patientIdInput = $('#patientIdInput');
@@ -801,7 +929,6 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         const eyes = new Set();
         if (eyeOD.checked) eyes.add('OD');
         if (eyeOS.checked) eyes.add('OS');
-
         return {
             patientId: (patientIdInput.value || '').trim().toLowerCase(),
             testId:    (testIdInput.value || '').trim().toLowerCase(),
@@ -819,20 +946,8 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
     // ===== Charts (STATIC analytics) =====
     Chart.register(ChartDataLabels);
-    const C = {
-        brand: '#1a73e8', brandLight:'#6ea8fe',
-        green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d',
-        teal:'#20c997', purple:'#6f42c1'
-    };
-    const shadowPlugin = {
-        id: 'shadow',
-        beforeDatasetsDraw(chart) {
-            const {ctx} = chart; ctx.save();
-            ctx.shadowColor = document.body.classList.contains('dark') ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.15)';
-            ctx.shadowBlur = 12; ctx.shadowOffsetY = 6;
-        },
-        afterDatasetsDraw(chart) { chart.ctx.restore(); }
-    };
+    const C = { brand:'#1a73e8', brandLight:'#6ea8fe', green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d', teal:'#20c997', purple:'#6f42c1' };
+    const shadowPlugin = { id: 'shadow', beforeDatasetsDraw(ch){ const {ctx}=ch; ctx.save(); ctx.shadowColor = document.body.classList.contains('dark') ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.15)'; ctx.shadowBlur=12; ctx.shadowOffsetY=6; }, afterDatasetsDraw(ch){ ch.ctx.restore(); } };
     Chart.register(shadowPlugin);
 
     function gridColor(){ return getComputedStyle(document.body).getPropertyValue('--grid'); }
@@ -848,87 +963,35 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
     const testsChart = new Chart(document.getElementById('testsOverTime').getContext('2d'), {
         type: 'line',
-        data: { labels: MONTH_LABELS_BASE.slice(), datasets: [{
-            label: 'Tests',
-            data: TESTS_LAST12_BASE.slice(),
-            borderColor: C.brand,
-            backgroundColor: (ctx)=>lineGradientFor(ctx.chart),
-            tension: 0.35, fill: true, borderWidth: 3, pointRadius: 3, pointHoverRadius: 5
-        }]},
-        options: {
-            responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ color:gridColor() } }, y:{ beginAtZero:true, grid:{ color:gridColor() } } },
-            plugins:{
-                legend:{ display:false },
-                tooltip:{ callbacks:{ label:ctx=>` ${ctx.parsed.y} tests`} },
-                zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} }
-            }
-        }
+        data: { labels: MONTH_LABELS_BASE.slice(), datasets: [{ label:'Tests', data: TESTS_LAST12_BASE.slice(), borderColor: C.brand, backgroundColor:(ctx)=>lineGradientFor(ctx.chart), tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
+        options: { responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{ color:gridColor() } }, y:{ beginAtZero:true, grid:{ color:gridColor() } } }, plugins:{ legend:{ display:false }, tooltip:{ callbacks:{ label:ctx=>` ${ctx.parsed.y} tests`} }, zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} } } }
     });
 
     const diagChart = new Chart(document.getElementById('diagnosisPie').getContext('2d'), {
         type:'doughnut',
-        data:{
-            labels:['Normal','Abnormal','Exclude','No Input'],
-            datasets:[{ data:[<?= $diagnoses['normal'] ?>, <?= $diagnoses['abnormal'] ?>, <?= $diagnoses['exclude'] ?>, <?= $diagnoses['no input'] ?>],
-                backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}]
-        },
-        options:{
-            responsive:true, maintainAspectRatio:false, cutout:'62%',
-            plugins:{
-                legend:{ position:'bottom' },
-                datalabels:{
-                    color:'#111',
-                    formatter:(v,ctx)=>{ const total=ctx.dataset.data.reduce((a,b)=>a+b,0); const p=total?(v/total*100):0; return p>=6?`${p.toFixed(0)}%`:''; }
-                }
-            }
-        }
+        data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:[<?= $diagnoses['normal'] ?>, <?= $diagnoses['abnormal'] ?>, <?= $diagnoses['exclude'] ?>, <?= $diagnoses['no input'] ?>], backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}] },
+        options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{ position:'bottom' }, datalabels:{ color:'#111', formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); const p=t?(v/t*100):0; return p>=6?`${p.toFixed(0)}%`:''; } } } }
     });
 
     const locationBar = new Chart(document.getElementById('locationBar').getContext('2d'), {
         type:'bar',
-        data:{
-            labels: <?= json_encode(array_keys($byLocation)) ?>,
-            datasets:[{ label:'Patients', data: <?= json_encode(array_values($byLocation)) ?>,
-                backgroundColor:C.teal, borderColor:C.teal, borderWidth:1, borderRadius:8, maxBarThickness:44 }]
-        },
-        options:{
-            responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() } }},
-            plugins:{
-                legend:{ display:false },
-                datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=> (v>=3?fmt.format(v):'') }
-            }
-        }
+        data:{ labels: <?= json_encode(array_keys($byLocation)) ?>, datasets:[{ label:'Patients', data: <?= json_encode(array_values($byLocation)) ?>, backgroundColor:C.teal, borderColor:C.teal, borderWidth:1, borderRadius:8, maxBarThickness:44 }]},
+        options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() } }}, plugins:{ legend:{ display:false }, datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=> (v>=3?fmt.format(v):'') } } }
     });
 
     const avgScoresEye = new Chart(document.getElementById('avgScoresEye').getContext('2d'), {
         type:'bar',
-        data:{
-            labels:['OD','OS'],
-            datasets:[
-                { label:'Avg OCT', data:[<?= json_encode($avgByEye['OD']['oct']) ?>, <?= json_encode($avgByEye['OS']['oct']) ?>],
-                  backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
-                { label:'Avg VF',  data:[<?= json_encode($avgByEye['OD']['vf']) ?>,  <?= json_encode($avgByEye['OS']['vf']) ?>],
-                  backgroundColor:C.brand,  borderColor:C.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
-            ]
-        },
-        options:{
-            responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}},
-            plugins:{
-                datalabels:{ anchor:'end', align:'end', offset:4, color:'#333',
-                    formatter:v => (v===null||isNaN(v))?'':fmt.format(v) }
-            }
-        }
+        data:{ labels:['OD','OS'], datasets:[
+            { label:'Avg OCT', data:[<?= json_encode($avgByEye['OD']['oct']) ?>, <?= json_encode($avgByEye['OS']['oct']) ?>], backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
+            { label:'Avg VF',  data:[<?= json_encode($avgByEye['OD']['vf']) ?>,  <?= json_encode($avgByEye['OS']['vf']) ?>], backgroundColor:C.brand,  borderColor:C.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
+        ]},
+        options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}}, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v => (v===null||isNaN(v))?'':fmt.format(v) } } }
     });
 
     window._recolorCharts = () => {
         [testsChart, diagChart, locationBar, avgScoresEye].forEach(ch => {
             if (!ch) return;
-            if (ch.config.type === 'line') {
-                ch.data.datasets[0].backgroundColor = (ctx)=>lineGradientFor(ch);
-            }
+            if (ch.config.type === 'line') ch.data.datasets[0].backgroundColor = (ctx)=>lineGradientFor(ch);
             if (ch.options.scales?.x?.grid) ch.options.scales.x.grid.color = gridColor();
             if (ch.options.scales?.y?.grid) ch.options.scales.y.grid.color = gridColor();
             ch.update('none');
@@ -937,29 +1000,20 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
     // ===== Helpers for filtering dataset (for CSV/per-patient modal) =====
     function rowMatchesData(r, f){
-        // text filters
         if (f.patientId && !(r.patient_id||'').toLowerCase().includes(f.patientId)) return false;
         if (f.testId    && !(r.test_id||'').toLowerCase().includes(f.testId)) return false;
-
-        // select filters
         if (f.location && r.location !== f.location) return false;
         if (f.diagnosis && r.report_diagnosis !== f.diagnosis) return false;
         if (f.eyes.size && !f.eyes.has(r.eye)) return false;
-
-        // date
-        const d = r.date_of_test ? new Date(r.date_of_test + 'T00:00:00') : null;
+        const d = r.date_of_test ? new Date(r.date_of_test+'T00:00:00') : null;
         if (f.dateStart && d && d < f.dateStart) return false;
         if (f.dateEnd   && d && d > f.dateEnd)   return false;
-
-        // numeric ranges
         const m = toNum(r.merci_score);
         if (f.merciMin !== null) { if (m === null || m < f.merciMin) return false; }
         if (f.merciMax !== null) { if (m === null || m > f.merciMax) return false; }
-
         const a = toNum(r.age);
         if (f.ageMin !== null) { if (a === null || a < f.ageMin) return false; }
         if (f.ageMax !== null) { if (a === null || a > f.ageMax) return false; }
-
         return true;
     }
     function filterRows(){ const f = getFilterState(); return EYE_ROWS.filter(r => rowMatchesData(r, f)); }
@@ -971,45 +1025,29 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
             if (v.includes('"') || v.includes(',') || v.includes('\n')) v = '"' + v.replace(/"/g,'""') + '"';
             return v;
         }).join(',')).join('\n');
-        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
-        setTimeout(()=>URL.revokeObjectURL(url), 500);
+        const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); setTimeout(()=>URL.revokeObjectURL(url), 500);
     }
     function exportFilteredRowsCSV(){
         const rows = filterRows();
         const header = ['subject_id','patient_id','test_id','date_of_test','eye','age','report_diagnosis','merci_score','oct_score','vf_score','location'];
-        const data = rows.map(r => [
-            r.subject_id, r.patient_id, r.test_id, r.date_of_test, r.eye,
-            r.age ?? '', r.report_diagnosis, r.merci_score ?? '', r.oct_score ?? '', r.vf_score ?? '', r.location
-        ]);
+        const data = rows.map(r => [ r.subject_id, r.patient_id, r.test_id, r.date_of_test, r.eye, r.age ?? '', r.report_diagnosis, r.merci_score ?? '', r.oct_score ?? '', r.vf_score ?? '', r.location ]);
         downloadCSV('filtered_eye_rows.csv', [header, ...data]);
     }
     exportBtn.addEventListener('click', exportFilteredRowsCSV);
 
     // ===== Filter & sort DOM list of patients/tests/eyes =====
-    function rowMatchesDOM(r, f){ return rowMatchesData(r, f); }
-
     function filterDOM(autoExpandAfter=true){
         const f = getFilterState();
         const patientCards = $$('#patientContainer .patient-item');
-
-        let firstVisiblePatient = null;
-        let firstVisibleTestBtn = null;
-
+        let firstVisiblePatient = null, firstVisibleTestBtn = null;
         let visPatients = 0, visTests = 0, visEyes = 0;
 
         patientCards.forEach(patient => {
             const patientId = (patient.getAttribute('data-patient-id')||'').toLowerCase();
             const patientLocation = patient.getAttribute('data-location') || '';
-
-            // If patientId filter fails early and no testId provided, we can hide fast:
-            const hasPatientIdFilter = !!f.patientId;
-            const hasTestIdFilter    = !!f.testId;
-
             const tests = patient.querySelectorAll('.test-wrapper');
-            let anyTestVisible = false;
-            let firstTestBtnInThisPatient = null;
+            let anyTestVisible = false; let firstTestBtnInThisPatient = null;
 
             tests.forEach(tw => {
                 const testId = (tw.getAttribute('data-testid')||'').toLowerCase();
@@ -1017,9 +1055,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
                 const testRows = tw.querySelectorAll('.eye-row');
                 let anyEyeVisible = false;
 
-                // Quick filter for testId if provided
-                if (hasTestIdFilter && !testId.includes(f.testId)) {
-                    // still need to hide all eyes
+                if (f.testId && !testId.includes(f.testId)) {
                     testRows.forEach(row=> row.style.display='none');
                     tw.style.display = 'none';
                     return;
@@ -1027,64 +1063,35 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
                 testRows.forEach(row => {
                     const r = {
-                        patient_id: patientId, // lowercased okay for contains
-                        test_id: testId,
-                        subject_id: row.getAttribute('data-subject') || '',
-                        report_diagnosis: row.getAttribute('data-diagnosis') || '',
-                        location: patientLocation,
-                        eye: row.getAttribute('data-eye') || '',
-                        date_of_test: row.getAttribute('data-test-date') || testDate,
-                        merci_score: row.getAttribute('data-merci'),
-                        age: row.getAttribute('data-age')
+                        patient_id: patientId, test_id: testId, subject_id: row.getAttribute('data-subject')||'',
+                        report_diagnosis: row.getAttribute('data-diagnosis')||'', location: patientLocation,
+                        eye: row.getAttribute('data-eye')||'', date_of_test: row.getAttribute('data-test-date')||testDate,
+                        merci_score: row.getAttribute('data-merci'), age: row.getAttribute('data-age')
                     };
-                    const visible = rowMatchesDOM(r, f);
+                    const visible = rowMatchesData(r, f);
                     row.style.display = visible ? 'block':'none';
-                    if (visible) {
-                        anyEyeVisible = true;
-                        visEyes++;
-                    }
+                    if (visible) { anyEyeVisible = true; visEyes++; }
                 });
 
                 const count = tw.querySelectorAll('.eye-row[style*="display: block"]').length;
-                const countEl = tw.querySelector('.eye-count');
-                if (countEl) countEl.textContent = count;
+                const countEl = tw.querySelector('.eye-count'); if (countEl) countEl.textContent = count;
 
                 tw.style.display = anyEyeVisible ? 'block':'none';
-                if (anyEyeVisible) {
-                    anyTestVisible = true;
-                    visTests++;
-                    if (!firstTestBtnInThisPatient) {
-                        firstTestBtnInThisPatient = tw.querySelector('.accordion-button');
-                    }
-                }
+                if (anyEyeVisible) { anyTestVisible = true; visTests++; if (!firstTestBtnInThisPatient) firstTestBtnInThisPatient = tw.querySelector('.accordion-button'); }
             });
 
-            // If patientId filter exists, enforce it at patient level too (unless testId matched something visible)
             let patientIdPass = true;
-            if (hasPatientIdFilter) patientIdPass = patientId.includes(f.patientId);
+            if (f.patientId) patientIdPass = patientId.includes(f.patientId);
 
             const showPatient = anyTestVisible && patientIdPass;
             patient.style.display = showPatient ? 'block':'none';
-
-            if (showPatient) {
-                if (!firstVisiblePatient) firstVisiblePatient = patient;
-                if (!firstVisibleTestBtn && firstTestBtnInThisPatient) firstVisibleTestBtn = firstTestBtnInThisPatient;
-                visPatients++;
-            }
+            if (showPatient) { if (!firstVisiblePatient) firstVisiblePatient = patient; if (!firstVisibleTestBtn && firstTestBtnInThisPatient) firstVisibleTestBtn = firstTestBtnInThisPatient; visPatients++; }
         });
 
-        // Update counters
-        resPatients.textContent = visPatients;
-        resTests.textContent    = visTests;
-        resEyes.textContent     = visEyes;
-
-        // Active filters badge (rough count)
-        let n = 0;
-        const f0 = getFilterState();
-        if (f0.patientId) n++;
-        if (f0.testId) n++;
-        if (f0.location) n++;
-        if (f0.diagnosis) n++;
+        // counters + active filters
+        resPatients.textContent = visPatients; resTests.textContent = visTests; resEyes.textContent = visEyes;
+        let n = 0; const f0 = getFilterState();
+        if (f0.patientId) n++; if (f0.testId) n++; if (f0.location) n++; if (f0.diagnosis) n++;
         if (!(f0.eyes.has('OD') && f0.eyes.has('OS'))) n++;
         const defStart = defaultState.dateStart ? defaultState.dateStart.getTime() : null;
         const defEnd   = defaultState.dateEnd   ? defaultState.dateEnd.getTime()   : null;
@@ -1093,102 +1100,58 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         if (defStart !== curStart || defEnd !== curEnd) n++;
         if (f0.merciMin !== null || f0.merciMax !== null) n++;
         if (f0.ageMin !== null || f0.ageMax !== null) n++;
+        filtersCount.textContent = n; filterFab.style.display = n ? 'block' : 'none';
 
-        filtersCount.textContent = n;
-        filterFab.style.display = n ? 'block' : 'none';
-
-        // Auto-expand first match
         if (autoExpand.checked && firstVisiblePatient && firstVisibleTestBtn && typeof bootstrap !== 'undefined') {
-            // ensure the containing collapse is opened
             const collapseId = firstVisibleTestBtn.getAttribute('data-bs-target');
             const collapseEl = document.querySelector(collapseId);
-            if (collapseEl) {
-                const c = new bootstrap.Collapse(collapseEl, {toggle:true});
-            }
+            if (collapseEl) new bootstrap.Collapse(collapseEl, {toggle:true});
             firstVisiblePatient.scrollIntoView({behavior:'smooth', block:'start'});
         }
     }
 
-    // ===== Sorting =====
     function sortPatients(){
         const container = $('#patientContainer');
         const items = Array.from(container.querySelectorAll('.patient-item'));
-        const key = sortBy.value;
+        const key = $('#sortBy').value;
         const dir = sortDirBtn.getAttribute('data-dir') === 'desc' ? -1 : 1;
-
         function val(item){
             if (key === 'subject') return (item.getAttribute('data-subject')||'').toLowerCase();
             if (key === 'location') return (item.getAttribute('data-location')||'').toLowerCase();
             if (key === 'tests') return Number(item.getAttribute('data-tests')||0);
             if (key === 'age') return Number(item.getAttribute('data-age')||0);
-            if (key === 'last_test') {
-                const d = item.getAttribute('data-lasttest')||'';
-                return d ? new Date(d+'T00:00:00').getTime() : 0;
-            }
+            if (key === 'last_test') { const d = item.getAttribute('data-lasttest')||''; return d ? new Date(d+'T00:00:00').getTime() : 0; }
             return (item.getAttribute('data-subject')||'').toLowerCase();
         }
-
-        items.sort((a,b)=>{
-            const va = val(a), vb = val(b);
-            if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
-            if (va < vb) return -1*dir;
-            if (va > vb) return 1*dir;
-            return 0;
-        });
-
+        items.sort((a,b)=>{ const va=val(a), vb=val(b); if (typeof va==='number' && typeof vb==='number') return (va-vb)*dir; if (va<vb) return -1*dir; if (va>vb) return 1*dir; return 0; });
         items.forEach(it => container.appendChild(it));
     }
 
     sortBy.addEventListener('change', sortPatients);
-    sortDirBtn.addEventListener('click', ()=>{
-        const cur = sortDirBtn.getAttribute('data-dir');
-        const next = cur === 'desc' ? 'asc' : 'desc';
-        sortDirBtn.setAttribute('data-dir', next);
-        sortDirBtn.innerHTML = next === 'desc' ? '<i class="bi bi-sort-down"></i>' : '<i class="bi bi-sort-up"></i>';
-        sortPatients();
-    });
+    sortDirBtn.addEventListener('click', ()=>{ const cur = sortDirBtn.getAttribute('data-dir'); const next = cur === 'desc' ? 'asc' : 'desc'; sortDirBtn.setAttribute('data-dir', next); sortDirBtn.innerHTML = next === 'desc' ? '<i class="bi bi-sort-down"></i>' : '<i class="bi bi-sort-up"></i>'; sortPatients(); });
 
-    // ===== Clear + presets =====
     function setPreset(days){
         const max = DATA_MAX ? new Date(DATA_MAX+'T00:00:00') : new Date();
         let start = null, end = max;
-        if (days === 'all') {
-            start = DATA_MIN ? new Date(DATA_MIN+'T00:00:00') : null;
-        } else {
-            const ms = Number(days) * 24*3600*1000;
-            start = new Date(end.getTime() - ms);
-        }
-        dateStartInput.value = fmtISO(start);
-        dateEndInput.value   = fmtISO(end);
+        if (days === 'all') { start = DATA_MIN ? new Date(DATA_MIN+'T00:00:00') : null; }
+        else { const ms = Number(days) * 24*3600*1000; start = new Date(end.getTime() - ms); }
+        dateStartInput.value = fmtISO(start); dateEndInput.value = fmtISO(end);
         applyFilters(false);
     }
-    presetBtns.forEach(btn=>{
-        const v = btn.getAttribute('data-preset');
-        if (!DATA_MIN || !DATA_MAX) btn.disabled = true;
-        btn.addEventListener('click', ()=> setPreset(v === 'all' ? 'all' : Number(v)));
-    });
+    presetBtns.forEach(btn=>{ const v=btn.getAttribute('data-preset'); if (!DATA_MIN || !DATA_MAX) btn.disabled = true; btn.addEventListener('click', ()=> setPreset(v === 'all' ? 'all' : Number(v))); });
 
     function clearFilters(){
-        patientIdInput.value = '';
-        testIdInput.value = '';
-        locSelect.value = '';
-        diagSelect.value = '';
+        patientIdInput.value = ''; testIdInput.value = ''; locSelect.value = ''; diagSelect.value = '';
         eyeOD.checked = true; eyeOS.checked = true;
-        dateStartInput.value = fmtISO(defaultState.dateStart);
-        dateEndInput.value   = fmtISO(defaultState.dateEnd);
-        merciMinInput.value = ''; merciMaxInput.value = '';
-        ageMinInput.value = ''; ageMaxInput.value = '';
+        dateStartInput.value = fmtISO(defaultState.dateStart); dateEndInput.value = fmtISO(defaultState.dateEnd);
+        merciMinInput.value = ''; merciMaxInput.value = ''; ageMinInput.value = ''; ageMaxInput.value = '';
         sortBy.value = 'subject'; sortDirBtn.setAttribute('data-dir','desc'); sortDirBtn.innerHTML = '<i class="bi bi-sort-down"></i>';
         applyFilters(true);
     }
     clearBtn.addEventListener('click', clearFilters);
     filtersPill.addEventListener('click', ()=>{ clearFilters(); window.scrollTo({top: 0, behavior: 'smooth'}); });
 
-    // ===== Apply filters (dom only) =====
-    function applyFilters(doAutoExpand=true){
-        sortPatients(); // sort first so "first match" is deterministic
-        filterDOM(doAutoExpand);
-    }
+    function applyFilters(doAutoExpand=true){ sortPatients(); filterDOM(doAutoExpand); }
 
     // Debounced text inputs
     let t1, t2;
@@ -1204,19 +1167,15 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     applyFilters(true);
 
     // ===== Print static analytics =====
+    const printBtnEl = printBtn;
     function preparePrint(){
         printTime.textContent = new Date().toLocaleString();
-        document.getElementById('printImg-tests').src = document.getElementById('testsOverTime').toDataURL('image/png', 1.0);
-        document.getElementById('printImg-diag').src  = document.getElementById('diagnosisPie').toDataURL('image/png', 1.0);
-        document.getElementById('printImg-loc').src   = document.getElementById('locationBar').toDataURL('image/png', 1.0);
-        document.getElementById('printImg-avg').src   = document.getElementById('avgScoresEye').toDataURL('image/png', 1.0);
+        $('#printImg-tests').src = $('#testsOverTime').toDataURL('image/png', 1.0);
+        $('#printImg-diag').src  = $('#diagnosisPie').toDataURL('image/png', 1.0);
+        $('#printImg-loc').src   = $('#locationBar').toDataURL('image/png', 1.0);
+        $('#printImg-avg').src   = $('#avgScoresEye').toDataURL('image/png', 1.0);
     }
-    printBtn.addEventListener('click', ()=>{
-        preparePrint();
-        printArea.style.display = 'block';
-        setTimeout(()=>window.print(), 100);
-        setTimeout(()=>{ printArea.style.display='none'; }, 400);
-    });
+    printBtnEl.addEventListener('click', ()=>{ preparePrint(); printArea.style.display='block'; setTimeout(()=>window.print(),100); setTimeout(()=>{ printArea.style.display='none'; }, 400); });
 
     // ===== Per-Patient Analytics Modal (respects filters) =====
     const modalEl = document.getElementById('patientModal');
@@ -1225,63 +1184,29 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     function destroyPmCharts(){ Object.values(pmCharts).forEach(ch=>{ if(ch) ch.destroy(); }); pmCharts = {tests:null, diag:null, avg:null}; }
 
     function patientAggregate(patientRows){
-        // Build monthly tests from rows (unique test_id per month)
         const map = new Map();
-        patientRows.forEach(r=>{
-            const ym = (r.date_of_test||'').slice(0,7);
-            if (!ym) return;
-            if (!map.has(ym)) map.set(ym,new Set());
-            map.get(ym).add(r.test_id);
-        });
-        const end = new Date();
-        const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
-        const labels=[], values=[];
-        for(let i=11;i>=0;i--){
-            const d = new Date(endMonth); d.setMonth(d.getMonth()-i);
-            const ym = d.toISOString().slice(0,7);
-            labels.push(d.toLocaleString(undefined,{month:'short',year:'numeric'}));
-            values.push(map.has(ym) ? map.get(ym).size : 0);
-        }
-        const diagCounts = {'normal':0,'abnormal':0,'exclude':0,'no input':0};
-        patientRows.forEach(r=>{ if (diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
-
-        const eyeStats = { OD:{oct:[],vf:[]}, OS:{oct:[],vf:[]} };
-        patientRows.forEach(r=>{ if (eyeStats[r.eye]){ if(r.oct_score!==null) eyeStats[r.eye].oct.push(Number(r.oct_score)); if(r.vf_score!==null) eyeStats[r.eye].vf.push(Number(r.vf_score)); }});
-        const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
-        const avgOD = {oct:avg(eyeStats.OD.oct), vf:avg(eyeStats.OD.vf)};
-        const avgOS = {oct:avg(eyeStats.OS.oct), vf:avg(eyeStats.OS.vf)};
+        patientRows.forEach(r=>{ const ym=(r.date_of_test||'').slice(0,7); if(!ym) return; if(!map.has(ym)) map.set(ym,new Set()); map.get(ym).add(r.test_id); });
+        const end=new Date(), endMonth=new Date(end.getFullYear(),end.getMonth(),1);
+        const labels=[], values=[]; for(let i=11;i>=0;i--){ const d=new Date(endMonth); d.setMonth(d.getMonth()-i); const ym=d.toISOString().slice(0,7); labels.push(d.toLocaleString(undefined,{month:'short',year:'numeric'})); values.push(map.has(ym)?map.get(ym).size:0); }
+        const diagCounts={'normal':0,'abnormal':0,'exclude':0,'no input':0}; patientRows.forEach(r=>{ if(diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
+        const eyeStats={ OD:{oct:[],vf:[]}, OS:{oct:[],vf:[]} }; patientRows.forEach(r=>{ if(eyeStats[r.eye]){ if(r.oct_score!==null) eyeStats[r.eye].oct.push(Number(r.oct_score)); if(r.vf_score!==null) eyeStats[r.eye].vf.push(Number(r.vf_score)); }});
+        const avg=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:null; const avgOD={oct:avg(eyeStats.OD.oct), vf:avg(eyeStats.OD.vf)}; const avgOS={oct:avg(eyeStats.OS.oct), vf:avg(eyeStats.OS.vf)};
         return {labels, values, diagCounts, avgOD, avgOS};
     }
 
     function patientCsvFor(chartId, agg){
-        if (chartId === 'pmTests') {
-            const data = [['Month','Tests']]; agg.labels.forEach((lab,i)=>data.push([lab, agg.values[i]])); return data;
-        }
-        if (chartId === 'pmDiag') {
-            const data = [['Diagnosis','Count']]; [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>data.push([lab, agg.diagCounts[key]||0])); return data;
-        }
-        if (chartId === 'pmAvg') {
-            return [['Eye','Avg OCT','Avg VF'], ['OD', agg.avgOD.oct, agg.avgOD.vf], ['OS', agg.avgOS.oct, agg.avgOS.vf]];
-        }
+        if (chartId === 'pmTests') { const data=[['Month','Tests']]; agg.labels.forEach((lab,i)=>data.push([lab,agg.values[i]])); return data; }
+        if (chartId === 'pmDiag')  { const data=[['Diagnosis','Count']]; [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>data.push([lab, agg.diagCounts[key]||0])); return data; }
+        if (chartId === 'pmAvg')   { return [['Eye','Avg OCT','Avg VF'], ['OD',agg.avgOD.oct,agg.avgOD.vf], ['OS',agg.avgOS.oct,agg.avgOS.vf]]; }
         return [['Info'],['Unsupported']];
     }
 
     function openPatientAnalytics(pid, subject){
-        $('#pmSubject').textContent = subject;
-        $('#pmId').textContent = pid;
-        modalEl.setAttribute('data-patient-id', pid);
-
-        const rows = filterRows().filter(r => r.patient_id.toLowerCase() === pid.toLowerCase());
+        $('#pmSubject').textContent = subject; $('#pmId').textContent = pid; modalEl.setAttribute('data-patient-id', pid);
+        const rows = filterRows().filter(r => (r.patient_id||'').toLowerCase() === pid.toLowerCase());
         const agg = patientAggregate(rows);
-
         destroyPmCharts();
-
-        const Cc = {
-            brand: '#1a73e8', brandLight:'#6ea8fe',
-            green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d',
-            teal:'#20c997', purple:'#6f42c1'
-        };
-
+        const Cc = C;
         pmCharts.tests = new Chart(document.getElementById('pmTests').getContext('2d'), {
             type:'line',
             data:{ labels: agg.labels, datasets:[{ label:'Tests', data: agg.values, borderColor: Cc.brand,
@@ -1289,14 +1214,12 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
                 tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
             options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} } }
         });
-
         const diagVals = ['normal','abnormal','exclude','no input'].map(k=>agg.diagCounts[k]||0);
         pmCharts.diag = new Chart(document.getElementById('pmDiag').getContext('2d'),{
             type:'doughnut',
             data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:diagVals, backgroundColor:[Cc.green,Cc.red,Cc.gray,Cc.amber], borderWidth:2, borderColor:'#fff' }]},
             options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom'}, datalabels:{ color:'#111', formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); const p=t?(v/t*100):0; return p>=6?`${p.toFixed(0)}%`:''; } } } }
         });
-
         pmCharts.avg = new Chart(document.getElementById('pmAvg').getContext('2d'),{
             type:'bar',
             data:{ labels:['OD','OS'], datasets:[
@@ -1305,39 +1228,162 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
             ]},
             options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=>(v===null||isNaN(v))?'':v.toFixed(2) } } }
         });
-
-        // Wire CSV/PNG buttons inside modal
         modalEl.querySelectorAll('[data-csv], [data-download]').forEach(btn=>{
             btn.onclick = ()=>{
                 const id = btn.getAttribute('data-csv') || btn.getAttribute('data-download');
                 if (btn.hasAttribute('data-download')) {
-                    const canvas = document.getElementById(id);
-                    if (!canvas) return;
-                    const link = document.createElement('a');
-                    link.href = canvas.toDataURL('image/png', 1.0);
-                    link.download = `${id}.png`;
-                    link.click();
-                } else {
-                    const data = patientCsvFor(id, agg);
-                    downloadCSV(`${id}.csv`, data);
-                }
+                    const canvas = document.getElementById(id); if (!canvas) return;
+                    const link = document.createElement('a'); link.href = canvas.toDataURL('image/png', 1.0); link.download = `${id}.png`; link.click();
+                } else { const data = patientCsvFor(id, agg); downloadCSV(`${id}.csv`, data); }
             };
         });
-
         patientModal.show();
     }
-
-    document.addEventListener('click', (e)=>{
-        const btn = e.target.closest('.btn-patient-analytics');
-        if (!btn) return;
-        const pid = btn.getAttribute('data-patient');
-        const subject = btn.getAttribute('data-subject');
-        openPatientAnalytics(pid, subject);
-    });
+    document.addEventListener('click', (e)=>{ const btn=e.target.closest('.btn-patient-analytics'); if (!btn) return; openPatientAnalytics(btn.getAttribute('data-patient'), btn.getAttribute('data-subject')); });
     document.getElementById('patientModal').addEventListener('hidden.bs.modal', ()=>destroyPmCharts());
+
+    /* ============
+       EDIT MODE
+    ============ */
+
+    // Toggle edit for an entire patient card (patient fields + show per-row edit)
+    document.addEventListener('click', (e)=>{
+        if (e.target.closest('.btn-edit-patient')) {
+            const card = e.target.closest('.patient-card'); card.classList.add('editing'); flash('Editing enabled', 'info');
+        }
+        if (e.target.closest('.btn-cancel-edit')) {
+            const card = e.target.closest('.patient-card'); card.classList.remove('editing');
+        }
+    });
+
+    // Save patient fields (subject_id, date_of_birth, location)
+    document.addEventListener('click', async (e)=>{
+        if (!e.target.closest('.btn-save-patient')) return;
+        const card = e.target.closest('.patient-card');
+        const wrap = card.closest('.patient-item');
+        const patientId = wrap.getAttribute('data-patient-id');
+        const payload = {
+            type: 'patient',
+            id: patientId,
+            data: {}
+        };
+        card.querySelectorAll('.edit-patient-field').forEach(inp=>{
+            payload.data[inp.getAttribute('data-field')] = inp.value;
+        });
+
+        try {
+            const res = await fetch('update_api.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ csrf: CSRF, ...payload })
+            });
+            const json = await res.json();
+            if (json.ok) {
+                // update view
+                const subj = payload.data.subject_id ?? '';
+                const loc  = payload.data.location ?? '';
+                const dob  = payload.data.date_of_birth ?? '';
+                if (subj) { card.querySelector('.patient-subject').textContent = subj; wrap.setAttribute('data-subject', subj); card.querySelectorAll('.view-field .view-val')[0].textContent = subj; }
+                if (loc)  { wrap.setAttribute('data-location', loc); card.querySelector('.badge.bg-secondary').textContent = loc; card.querySelectorAll('.view-field .view-val')[1].textContent = loc; }
+                if (dob)  { const d = new Date(dob+'T00:00:00'); card.querySelectorAll('.view-field .view-val')[2].textContent = d.toLocaleDateString(); }
+                card.classList.remove('editing');
+                flash('Patient saved', 'success');
+            } else {
+                flash(json.error || 'Save failed', 'danger');
+            }
+        } catch(err){ console.error(err); flash('Network error saving patient', 'danger'); }
+    });
+
+    // Save test date
+    document.addEventListener('click', async (e)=>{
+        if (!e.target.closest('.btn-save-test')) return;
+        const acc = e.target.closest('.test-wrapper');
+        const testId = acc.getAttribute('data-testid');
+        const dateInput = acc.querySelector('.edit-test-date');
+        const payload = { type:'test', id:testId, data:{ date_of_test: dateInput.value } };
+        try {
+            const res = await fetch('update_api.php', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ csrf: CSRF, ...payload }) });
+            const json = await res.json();
+            if (json.ok) {
+                // update view label + data attr
+                const d = new Date(dateInput.value+'T00:00:00');
+                acc.querySelector('.view-val').innerHTML = `<i class="bi bi-calendar-event"></i> ${d.toLocaleDateString()}`;
+                acc.setAttribute('data-test-date', dateInput.value);
+                // also update each eye-row data-test-date
+                acc.querySelectorAll('.eye-row').forEach(r=> r.setAttribute('data-test-date', dateInput.value));
+                flash('Test saved', 'success');
+            } else {
+                flash(json.error || 'Save failed', 'danger');
+            }
+        } catch(err){ console.error(err); flash('Network error saving test', 'danger'); }
+    });
+
+    // Toggle edit/save for an eye row
+    document.addEventListener('click', (e)=>{
+        if (e.target.closest('.btn-edit-eye')) {
+            const row = e.target.closest('.eye-row');
+            row.classList.add('editing');
+        }
+        if (e.target.closest('.btn-cancel-eye')) {
+            const row = e.target.closest('.eye-row');
+            row.classList.remove('editing');
+        }
+    });
+
+    document.addEventListener('click', async (e)=>{
+        if (!e.target.closest('.btn-save-eye')) return;
+        const row = e.target.closest('.eye-row');
+        const resultId = row.getAttribute('data-result-id');
+        if (!resultId) { flash('Cannot save: missing result_id', 'danger'); return; }
+
+        const data = {
+            age: row.querySelector('.e-age').value || null,
+            merci_score: row.querySelector('.e-merci').value || null,
+            oct_score: row.querySelector('.e-oct').value || null,
+            vf_score: row.querySelector('.e-vf').value || null,
+            faf_grade: row.querySelector('.e-faf').value || null,
+            report_diagnosis: (row.querySelector('.e-report').value || '').toLowerCase(),
+            actual_diagnosis: row.querySelector('.e-actual').value || null,
+            dosage: row.querySelector('.e-dosage').value || null,
+            duration_days: row.querySelector('.e-duration').value || null,
+            cumulative_dosage: row.querySelector('.e-cumulative').value || null,
+            date_of_continuation: row.querySelector('.e-cont').value || null
+        };
+
+        const payload = { type:'eye', id: resultId, data };
+        try {
+            const res = await fetch('update_api.php', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ csrf: CSRF, ...payload }) });
+            const json = await res.json();
+            if (json.ok) {
+                // Update view texts + data-attrs
+                row.querySelector('.v-age').textContent   = data.age ?? 'N/A';
+                row.querySelector('.v-merci').textContent = data.merci_score ?? 'N/A';
+                row.querySelector('.v-oct').textContent   = data.oct_score ?? 'N/A';
+                row.querySelector('.v-vf').textContent    = data.vf_score ?? 'N/A';
+                row.querySelector('.v-faf').textContent   = data.faf_grade ?? 'N/A';
+                row.querySelector('.v-actual').textContent= data.actual_diagnosis ?? 'N/A';
+
+                row.setAttribute('data-age', data.age ?? '');
+                row.setAttribute('data-merci', data.merci_score ?? '');
+                row.setAttribute('data-oct', data.oct_score ?? '');
+                row.setAttribute('data-vf', data.vf_score ?? '');
+                row.setAttribute('data-diagnosis', data.report_diagnosis ?? '');
+
+                // Update diagnosis badge class/text
+                const badge = row.querySelector('.diagnosis-badge');
+                const diagClass = (data.report_diagnosis === 'no input') ? 'no-input' : (data.report_diagnosis || 'no input');
+                badge.className = `badge diagnosis-badge ${diagClass}`;
+                badge.querySelector('.view-val').textContent = (data.report_diagnosis || 'no input');
+
+                row.classList.remove('editing');
+                flash('Eye saved', 'success');
+            } else {
+                flash(json.error || 'Save failed', 'danger');
+            }
+        } catch(err){ console.error(err); flash('Network error saving eye', 'danger'); }
+    });
 
 })();
 </script>
 </body>
 </html>
-
