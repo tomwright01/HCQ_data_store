@@ -938,7 +938,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     // ===== Helpers for filtering dataset (for CSV/per-patient modal) =====
     function rowMatchesData(r, f){
         // text filters
-        if (f.patientId && !(r.patient_id||'').toLowerCase().includes(f.patientId)) return false;
+        if (f.patientId && !(r.patient_id||'').toLowerCase() === f.patientId.toString().toLowerCase()) return false;
         if (f.testId    && !(r.test_id||'').toLowerCase().includes(f.testId)) return false;
 
         // select filters
@@ -1061,7 +1061,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
             // If patientId filter exists, enforce it at patient level too (unless testId matched something visible)
             let patientIdPass = true;
-            if (hasPatientIdFilter) patientIdPass = patientId.includes(f.patientId);
+            if (hasPatientIdFilter) patientIdPass = (patientId === f.patientId);
 
             const showPatient = anyTestVisible && patientIdPass;
             patient.style.display = showPatient ? 'block':'none';
