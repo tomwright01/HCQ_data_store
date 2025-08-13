@@ -16,8 +16,6 @@ if ($res = $conn->query("SELECT COUNT(*) AS c FROM test_eyes")){ $row = $res->fe
 // ----------------------------
 // Server-side analytics (initial, all data)
 // ----------------------------
-
-// Patients by location
 $byLocation = ['KH' => 0, 'CHUSJ' => 0, 'IWK' => 0, 'IVEY' => 0];
 if ($res = $conn->query("SELECT location, COUNT(*) AS c FROM patients GROUP BY location")) {
     while ($row = $res->fetch_assoc()) {
@@ -25,7 +23,6 @@ if ($res = $conn->query("SELECT location, COUNT(*) AS c FROM patients GROUP BY l
     }
 }
 
-// Diagnosis distribution
 $diagnoses = ['normal' => 0, 'abnormal' => 0, 'exclude' => 0, 'no input' => 0];
 if ($res = $conn->query("SELECT report_diagnosis, COUNT(*) AS c FROM test_eyes GROUP BY report_diagnosis")) {
     while ($row = $res->fetch_assoc()) {
@@ -33,7 +30,6 @@ if ($res = $conn->query("SELECT report_diagnosis, COUNT(*) AS c FROM test_eyes G
     }
 }
 
-// Avg scores by eye
 $avgByEye = ['OD' => ['oct' => null, 'vf' => null], 'OS' => ['oct' => null, 'vf' => null]];
 if ($res = $conn->query("SELECT eye, AVG(oct_score) AS oct_avg, AVG(vf_score) AS vf_avg FROM test_eyes GROUP BY eye")) {
     while ($row = $res->fetch_assoc()) {
@@ -72,7 +68,6 @@ $testsLast12Values = array_values($countsByMonth);
 // ----------------------------
 $patients = getPatientsWithTests($conn);
 
-// Utility to safely read possibly-missing keys (for optional columns)
 function safe_get($arr, $key, $default = null) {
     return is_array($arr) && array_key_exists($key, $arr) ? $arr[$key] : $default;
 }
@@ -109,7 +104,6 @@ if ($res = $conn->query($sqlAll)) {
     }
 }
 
-// dataset min/max dates for default pickers
 $allDates = array_column($eyeRows, 'date_of_test');
 sort($allDates);
 $minDate = $allDates ? $allDates[0] : null;
@@ -122,39 +116,23 @@ $maxDate = $allDates ? end($allDates) : null;
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Patient Data Dashboard</title>
 
-<!-- Bootstrap & Icons -->
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 
-<!-- Chart.js + plugins -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.5/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.umd.min.js"></script>
 
 <style>
 :root{
-    --brand:#1a73e8;
-    --brand-2:#6ea8fe;
-    --ok:#198754;
-    --warn:#ffc107;
-    --danger:#dc3545;
-    --muted:#6c757d;
-    --bg:#f7f8fb;
-    --card:#ffffff;
-    --text:#111827;
-    --grid:rgba(0,0,0,.06);
-    --border:rgba(0,0,0,.08);
+    --brand:#1a73e8; --brand-2:#6ea8fe; --ok:#198754; --warn:#ffc107; --danger:#dc3545; --muted:#6c757d;
+    --bg:#f7f8fb; --card:#ffffff; --text:#111827; --grid:rgba(0,0,0,.06); --border:rgba(0,0,0,.08);
     --shadow: 0 8px 24px rgba(0,0,0,0.09);
     --chart-grad: radial-gradient(1200px 400px at 10% 0%, rgba(26,115,232,.06), transparent 60%);
 }
 body.dark{
-    --bg:#0f1220;
-    --card:#151a2c;
-    --text:#e5e7eb;
-    --grid:rgba(255,255,255,.12);
-    --border:rgba(255,255,255,.14);
-    --muted:#9aa4b2;
-    --shadow: 0 12px 28px rgba(0,0,0,0.45);
+    --bg:#0f1220; --card:#151a2c; --text:#e5e7eb; --grid:rgba(255,255,255,.12); --border:rgba(255,255,255,.14);
+    --muted:#9aa4b2; --shadow: 0 12px 28px rgba(0,0,0,0.45);
     --chart-grad: radial-gradient(1200px 400px at 10% 0%, rgba(110,168,254,.12), transparent 60%);
 }
 body { background: var(--bg); color: var(--text); }
@@ -185,18 +163,15 @@ body.dark .navbar-blur { background-color: rgba(21,26,44,0.85); }
 .chart-toolbar .btn { --bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .85rem; }
 canvas { max-height: 380px; }
 
-.filter-fab {
-    position: fixed; right: 18px; bottom: 18px; z-index: 1000;
-    display: none;
-}
+.filter-fab { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: none; }
 .filter-fab .btn { box-shadow: var(--shadow); }
 
-/* Print */
+.result-badges .badge { font-size: .92rem; }
+.empty-state { border: 1px dashed var(--border); border-radius: .75rem; background: rgba(0,0,0,0.02); }
+
 @media print {
-  body { background: #fff !important; }
   nav, .sticky-actions, .card:has(#filtersArea), .filter-fab, .btn, .navbar { display: none !important; }
   #printArea { display: block !important; }
-  #analytics, #patients { page-break-before: always; }
   .card { box-shadow: none !important; }
 }
 #printArea { display:none; }
@@ -207,9 +182,7 @@ canvas { max-height: 380px; }
 <!-- Nav -->
 <nav class="navbar navbar-expand-lg navbar-light navbar-blur sticky-top py-2">
   <div class="container-fluid">
-    <a class="navbar-brand fw-semibold" href="#">
-      <i class="bi bi-people-fill me-2"></i>Patient Data Dashboard
-    </a>
+    <a class="navbar-brand fw-semibold" href="#"><i class="bi bi-people-fill me-2"></i>Patient Data Dashboard</a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain">
       <span class="navbar-toggler-icon"></span>
     </button>
@@ -221,18 +194,12 @@ canvas { max-height: 380px; }
       </ul>
 
       <div class="d-flex align-items-center gap-2 gap-lg-3">
-        <!-- Dark mode toggle -->
         <div class="form-check form-switch mb-0">
             <input class="form-check-input" type="checkbox" id="darkToggle">
             <label class="form-check-label" for="darkToggle"><i class="bi bi-moon-stars"></i></label>
         </div>
-
-        <a href="form.php" class="btn btn-outline-primary pill">
-            <i class="bi bi-file-earmark-plus"></i> Add via Form
-        </a>
-        <a href="csv_import.php" class="btn btn-primary pill">
-            <i class="bi bi-upload"></i> Import CSV
-        </a>
+        <a href="form.php" class="btn btn-outline-primary pill"><i class="bi bi-file-earmark-plus"></i> Add via Form</a>
+        <a href="csv_import.php" class="btn btn-primary pill"><i class="bi bi-upload"></i> Import CSV</a>
       </div>
     </div>
   </div>
@@ -245,9 +212,7 @@ canvas { max-height: 380px; }
             <p class="text-muted mb-0">Quick stats and data entry.</p>
         </div>
         <div class="col-auto">
-            <button id="printSummaryBtn" class="btn btn-outline-secondary pill">
-                <i class="bi bi-printer"></i> Print summary
-            </button>
+            <button id="printSummaryBtn" class="btn btn-outline-secondary pill"><i class="bi bi-printer"></i> Print summary</button>
         </div>
     </div>
 
@@ -359,7 +324,6 @@ canvas { max-height: 380px; }
                         <input type="date" id="dateStart" class="form-control" value="<?= htmlspecialchars($minDate ?? '') ?>">
                         <input type="date" id="dateEnd" class="form-control" value="<?= htmlspecialchars($maxDate ?? '') ?>">
                     </div>
-                    <!-- Quick presets -->
                     <div class="mt-2 d-flex flex-wrap gap-2">
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="30">Last 30d</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" data-preset="90">Last 90d</button>
@@ -402,13 +366,18 @@ canvas { max-height: 380px; }
                 </div>
 
                 <div class="col-12 col-lg-3 d-flex justify-content-end gap-2">
-                    <button id="exportFilteredCsv" class="btn btn-outline-success">
-                        <i class="bi bi-filetype-csv"></i> Export filtered rows
-                    </button>
-                    <button id="clearFilters" class="btn btn-outline-secondary">
-                        <i class="bi bi-eraser"></i> Clear
-                    </button>
+                    <button id="exportFilteredCsv" class="btn btn-outline-success"><i class="bi bi-filetype-csv"></i> Export filtered rows</button>
+                    <button id="clearFilters" class="btn btn-outline-secondary"><i class="bi bi-eraser"></i> Clear</button>
                     <a href="#patients" class="btn btn-outline-primary"><i class="bi bi-people"></i> Patients</a>
+                </div>
+
+                <!-- Results bar -->
+                <div class="col-12">
+                    <div id="resultsBar" class="d-flex flex-wrap align-items-center gap-2 mt-2 result-badges">
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis border"><i class="bi bi-people me-1"></i><span id="countPatients">0</span> patients</span>
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis border"><i class="bi bi-clipboard2-pulse me-1"></i><span id="countTests">0</span> tests</span>
+                        <span class="badge bg-secondary-subtle text-secondary-emphasis border"><i class="bi bi-eye me-1"></i><span id="countEyes">0</span> eye records</span>
+                    </div>
                 </div>
             </div>
         </div>
@@ -485,6 +454,13 @@ canvas { max-height: 380px; }
         </div>
     </div>
 
+    <!-- Empty state -->
+    <div id="emptyState" class="empty-state text-center text-muted py-5 d-none">
+        <i class="bi bi-search fs-1 d-block mb-2"></i>
+        <div class="mb-2">No results match your search/filters.</div>
+        <button class="btn btn-outline-secondary btn-sm" id="emptyClear"><i class="bi bi-eraser"></i> Clear filters</button>
+    </div>
+
     <!-- Patients List -->
     <div class="row" id="patientContainer">
         <?php foreach ($patients as $patient): ?>
@@ -492,8 +468,6 @@ canvas { max-height: 380px; }
             $tests = getTestsByPatient($conn, $patient['patient_id']);
             $dob = new DateTime($patient['date_of_birth']);
             $ageYears = $dob->diff(new DateTime())->y;
-
-            // compute last test date for sorting
             $lastDate = null;
             if ($tests) {
                 $dates = array_map(fn($t) => $t['date_of_test'], $tests);
@@ -510,10 +484,7 @@ canvas { max-height: 380px; }
                  data-lasttest="<?= htmlspecialchars($lastDate ?? '') ?>">
                 <div class="card patient-card">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="bi bi-person-circle"></i>
-                            <?= htmlspecialchars($patient['subject_id']) ?>
-                        </h5>
+                        <h5 class="mb-0"><i class="bi bi-person-circle"></i> <?= htmlspecialchars($patient['subject_id']) ?></h5>
                         <div class="d-flex align-items-center gap-2">
                             <button class="btn btn-sm btn-outline-secondary btn-patient-analytics"
                                     data-patient="<?= htmlspecialchars($patient['patient_id']) ?>"
@@ -632,7 +603,7 @@ canvas { max-height: 380px; }
     <button class="btn btn-primary pill" id="filtersPill"><i class="bi bi-funnel"></i> <span id="filtersCount">0</span> active • Clear</button>
 </div>
 
-<!-- Per-Patient Analytics Modal -->
+<!-- Per-Patient Analytics Modal (unchanged) -->
 <div class="modal fade" id="patientModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
@@ -694,7 +665,7 @@ canvas { max-height: 380px; }
   </div>
 </div>
 
-<!-- Printable Summary -->
+<!-- Printable Summary (unchanged) -->
 <section id="printArea" class="container-fluid py-4">
   <h2 class="mb-1">Patient Data Summary</h2>
   <p class="text-muted">Generated at <span id="printTime"></span></p>
@@ -742,11 +713,10 @@ canvas { max-height: 380px; }
   </div>
 </section>
 
-<!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// ===== Theme (dark mode) =====
-(function themeInit(){
+// Dark mode
+(function(){
     const toggle = document.getElementById('darkToggle');
     const saved = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
     if (saved === 'dark') document.body.classList.add('dark');
@@ -760,28 +730,25 @@ canvas { max-height: 380px; }
 </script>
 
 <script>
-// ===== Data for client filters/charts =====
+// ===== Data =====
 const EYE_ROWS = <?= json_encode($eyeRows) ?>;
 const DATA_MIN = <?= $minDate ? '"'.htmlspecialchars($minDate).'"' : 'null' ?>;
 const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 const MONTH_LABELS_BASE = <?= json_encode($monthLabels) ?>;
 const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
-(function chartsAndFilters(){
-    // Utilities
-    const $ = sel => document.querySelector(sel);
-    const $$ = sel => Array.from(document.querySelectorAll(sel));
+(function(){
+    const $ = s => document.querySelector(s);
+    const $$ = s => Array.from(document.querySelectorAll(s));
     const fmt = new Intl.NumberFormat();
     const toNum = v => v === null || v === '' || isNaN(v) ? null : Number(v);
     const parseDate = s => s ? new Date(s + 'T00:00:00') : null;
     const fmtISO = d => d ? d.toISOString().slice(0,10) : '';
-    const cloneCanvasToImg = (canvas) => canvas.toDataURL('image/png', 1.0);
 
     // Inputs
     const searchInput    = $('#searchInput');
     const locSelect      = $('#locationFilter');
-    theDiagSelect      = $('#diagnosisFilter');
-    const diagSelect      = $('#diagnosisFilter');
+    const diagSelect     = $('#diagnosisFilter');
     const eyeOD          = $('#eyeOD');
     const eyeOS          = $('#eyeOS');
     const dateStartInput = $('#dateStart');
@@ -799,13 +766,15 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     const sortBy         = $('#sortBy');
     const sortDirBtn     = $('#sortDir');
 
+    // Results counters + empty state
+    const countPatientsEl = $('#countPatients');
+    const countTestsEl    = $('#countTests');
+    const countEyesEl     = $('#countEyes');
+    const emptyState      = $('#emptyState');
+    const emptyClear      = $('#emptyClear');
+
     // Print elems
     const printBtn   = $('#printSummaryBtn');
-    const printArea  = $('#printArea');
-    const printTime  = $('#printTime');
-    const printFilters = $('#printFilters');
-    const printDiagTbl = $('#printDiagTbl');
-    const printLocTbl  = $('#printLocTbl');
 
     const defaultState = {
         dateStart: DATA_MIN ? parseDate(DATA_MIN) : null,
@@ -833,7 +802,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
     }
 
     function rowMatches(r, f){
-        // 🔎 include patient_id in text search
+        // includes PATIENT ID in the free-text search 👍
         const t = `${r.subject_id||''} ${r.patient_id||''} ${r.test_id||''} ${r.report_diagnosis||''}`.toLowerCase();
         if (f.search && !t.includes(f.search)) return false;
 
@@ -856,126 +825,40 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         return true;
     }
 
-    // ===== CHARTS =====
+    // ===== Charts (same as before) =====
     Chart.register(ChartDataLabels);
-    const C = {
-        brand: '#1a73e8', brandLight:'#6ea8fe',
-        green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d',
-        teal:'#20c997', purple:'#6f42c1'
-    };
-
-    const shadowPlugin = {
-        id: 'shadow',
-        beforeDatasetsDraw(chart) {
-            const {ctx} = chart; ctx.save();
-            ctx.shadowColor = document.body.classList.contains('dark') ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.15)';
-            ctx.shadowBlur = 12; ctx.shadowOffsetY = 6;
-        },
-        afterDatasetsDraw(chart) { chart.ctx.restore(); }
-    };
+    const C = { brand:'#1a73e8', brandLight:'#6ea8fe', green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d', teal:'#20c997', purple:'#6f42c1' };
+    const shadowPlugin = { id:'shadow', beforeDatasetsDraw(chart){ const {ctx}=chart; ctx.save(); ctx.shadowColor = document.body.classList.contains('dark')?'rgba(0,0,0,0.8)':'rgba(0,0,0,0.15)'; ctx.shadowBlur=12; ctx.shadowOffsetY=6; }, afterDatasetsDraw(chart){ chart.ctx.restore(); } };
     Chart.register(shadowPlugin);
-
     function gridColor(){ return getComputedStyle(document.body).getPropertyValue('--grid'); }
-    function lineGradientFor(chart){
-        const {ctx, chartArea} = chart;
-        if (!chartArea) return C.brandLight;
-        const top = document.body.classList.contains('dark') ? 'rgba(110,168,254,0.35)' : 'rgba(26,115,232,0.35)';
-        const bot = document.body.classList.contains('dark') ? 'rgba(110,168,254,0.05)' : 'rgba(26,115,232,0.05)';
-        const g = chart.ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-        g.addColorStop(0, top); g.addColorStop(1, bot);
-        return g;
-    }
+    function lineGradientFor(chart){ const {ctx, chartArea} = chart; if (!chartArea) return C.brandLight; const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom); g.addColorStop(0, document.body.classList.contains('dark')?'rgba(110,168,254,0.35)':'rgba(26,115,232,0.35)'); g.addColorStop(1, document.body.classList.contains('dark')?'rgba(110,168,254,0.05)':'rgba(26,115,232,0.05)'); return g; }
 
-    const testsCtx = document.getElementById('testsOverTime').getContext('2d');
-    const diagCtx  = document.getElementById('diagnosisPie').getContext('2d');
-    const locCtx   = document.getElementById('locationBar').getContext('2d');
-    const avgCtx   = document.getElementById('avgScoresEye').getContext('2d');
-
-    const testsChart = new Chart(testsCtx, {
-        type: 'line',
-        data: { labels: MONTH_LABELS_BASE.slice(), datasets: [{
-            label: 'Tests',
-            data: TESTS_LAST12_BASE.slice(),
-            borderColor: C.brand,
-            backgroundColor: (ctx)=>lineGradientFor(ctx.chart),
-            tension: 0.35, fill: true, borderWidth: 3, pointRadius: 3, pointHoverRadius: 5
-        }]},
-        options: {
-            responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ color:gridColor() } }, y:{ beginAtZero:true, grid:{ color:gridColor() } } },
-            plugins:{
-                legend:{ display:false },
-                tooltip:{ callbacks:{ label:ctx=>` ${fmt.format(ctx.parsed.y)} tests`} },
-                zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} }
-            }
-        }
+    const testsChart = new Chart(document.getElementById('testsOverTime').getContext('2d'), {
+        type:'line',
+        data:{ labels: MONTH_LABELS_BASE.slice(), datasets:[{ label:'Tests', data: TESTS_LAST12_BASE.slice(), borderColor:C.brand, backgroundColor:(ctx)=>lineGradientFor(ctx.chart), tension:.35, fill:true, borderWidth:3, pointRadius:3, pointHoverRadius:5 }]},
+        options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{color:gridColor()}}, y:{ beginAtZero:true, grid:{color:gridColor()}}}, plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:ctx=>` ${fmt.format(ctx.parsed.y)} tests`}}, zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} } } }
     });
-
-    const diagChart = new Chart(diagCtx, {
+    const diagChart = new Chart(document.getElementById('diagnosisPie').getContext('2d'), {
         type:'doughnut',
-        data:{
-            labels:['Normal','Abnormal','Exclude','No Input'],
-            datasets:[{ data:[<?= $diagnoses['normal'] ?>, <?= $diagnoses['abnormal'] ?>, <?= $diagnoses['exclude'] ?>, <?= $diagnoses['no input'] ?>],
-                backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}]
-        },
-        options:{
-            responsive:true, maintainAspectRatio:false, cutout:'62%',
-            plugins:{
-                legend:{ position:'bottom' },
-                datalabels:{ color:'#111', formatter:(v,ctx)=>{ const total=ctx.dataset.data.reduce((a,b)=>a+b,0)||1; const p=v/total*100; return p>=6?`${p.toFixed(0)}%`:''; } }
-            }
-        }
+        data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:[<?= $diagnoses['normal'] ?>, <?= $diagnoses['abnormal'] ?>, <?= $diagnoses['exclude'] ?>, <?= $diagnoses['no input'] ?>], backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}]},
+        options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom'}, datalabels:{ color:'#111', formatter:(v,ctx)=>{ const total=ctx.dataset.data.reduce((a,b)=>a+b,0)||1; const p=v/total*100; return p>=6?`${p.toFixed(0)}%`:''; } } } }
     });
-
-    const locChart = new Chart(locCtx, {
+    const locChart = new Chart(document.getElementById('locationBar').getContext('2d'), {
         type:'bar',
-        data:{
-            labels: <?= json_encode(array_keys($byLocation)) ?>,
-            datasets:[{ label:'Patients', data: <?= json_encode(array_values($byLocation)) ?>,
-                backgroundColor:C.teal, borderColor:C.teal, borderWidth:1, borderRadius:8, maxBarThickness:44 }]
-        },
-        options:{
-            responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}},
-            plugins:{
-                legend:{ display:false },
-                datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=> (v>=3?fmt.format(v):'') }
-            }
-        }
+        data:{ labels: <?= json_encode(array_keys($byLocation)) ?>, datasets:[{ label:'Patients', data: <?= json_encode(array_values($byLocation)) ?>, backgroundColor:C.teal, borderColor:C.teal, borderWidth:1, borderRadius:8, maxBarThickness:44 }]},
+        options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:gridColor()}}}, plugins:{ legend:{display:false}, datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=> (v>=3?fmt.format(v):'') } } }
     });
-
-    const avgChart = new Chart(avgCtx, {
+    const avgChart = new Chart(document.getElementById('avgScoresEye').getContext('2d'), {
         type:'bar',
-        data:{
-            labels:['OD','OS'],
-            datasets:[
-                { label:'Avg OCT', data:[<?= json_encode($avgByEye['OD']['oct']) ?>, <?= json_encode($avgByEye['OS']['oct']) ?>],
-                  backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
-                { label:'Avg VF',  data:[<?= json_encode($avgByEye['OD']['vf']) ?>,  <?= json_encode($avgByEye['OS']['vf']) ?>],
-                  backgroundColor:C.brand,  borderColor:C.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
-            ]
-        },
-        options:{
-            responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}},
-            plugins:{
-                datalabels:{ anchor:'end', align:'end', offset:4, color:'#333',
-                    formatter:v => (v===null||isNaN(v))?'':fmt.format(v) }
-            }
-        }
+        data:{ labels:['OD','OS'], datasets:[
+            { label:'Avg OCT', data:[<?= json_encode($avgByEye['OD']['oct']) ?>, <?= json_encode($avgByEye['OS']['oct']) ?>], backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
+            { label:'Avg VF',  data:[<?= json_encode($avgByEye['OD']['vf']) ?>,  <?= json_encode($avgByEye['OS']['vf']) ?>],  backgroundColor:C.brand,  borderColor:C.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
+        ]},
+        options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:gridColor()}}}, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v => (v===null||isNaN(v))?'':fmt.format(v) } } }
     });
+    window._recolorCharts = () => [testsChart, diagChart, locChart, avgChart].forEach(ch => { if (!ch) return; if (ch.config.type==='line') ch.data.datasets[0].backgroundColor=(ctx)=>lineGradientFor(ch); if (ch.options.scales?.x?.grid) ch.options.scales.x.grid.color = gridColor(); if (ch.options.scales?.y?.grid) ch.options.scales.y.grid.color = gridColor(); ch.update('none'); });
 
-    window._recolorCharts = () => {
-        [testsChart, diagChart, locChart, avgChart].forEach(ch => {
-            if (!ch) return;
-            if (ch.config.type === 'line') ch.data.datasets[0].backgroundColor = (ctx)=>lineGradientFor(ch);
-            if (ch.options.scales?.x?.grid) ch.options.scales.x.grid.color = gridColor();
-            if (ch.options.scales?.y?.grid) ch.options.scales.y.grid.color = gridColor();
-            ch.update('none');
-        });
-    };
-
-    // ===== Aggregation for filtered rows =====
+    // Aggregation
     function aggregateForCharts(rows){
         const map = new Map(); // ym -> Set(test_id)
         rows.forEach(r => {
@@ -987,13 +870,11 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
         const endDate = getFilterState().dateEnd || new Date();
         const endMonth = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
-        const labels = [];
-        const values = [];
+        const labels = [], values=[];
         for (let i=11;i>=0;i--){
             const d = new Date(endMonth); d.setMonth(d.getMonth()-i);
             const ym = d.toISOString().slice(0,7);
-            const label = d.toLocaleString(undefined,{month:'short', year:'numeric'});
-            labels.push(label);
+            labels.push(d.toLocaleString(undefined,{month:'short', year:'numeric'}));
             values.push(map.has(ym) ? map.get(ym).size : 0);
         }
 
@@ -1012,48 +893,31 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
             if (r.vf_score  !== null) eyeStats[r.eye].vf.push(Number(r.vf_score));
         });
         const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
-        const avgOD = {oct: avg(eyeStats.OD.oct), vf: avg(eyeStats.OD.vf)};
-        const avgOS = {oct: avg(eyeStats.OS.oct), vf: avg(eyeStats.OS.vf)};
-
-        return { monthLabels:labels, monthCounts:values, diagCounts, locLabels, locVals, avgOD, avgOS };
+        return {
+            monthLabels: labels, monthCounts: values, diagCounts,
+            locLabels, locVals,
+            avgOD:{oct:avg(eyeStats.OD.oct), vf:avg(eyeStats.OD.vf)},
+            avgOS:{oct:avg(eyeStats.OS.oct), vf:avg(eyeStats.OS.vf)}
+        };
     }
+    function filterRows(){ const f=getFilterState(); return EYE_ROWS.filter(r => rowMatches(r,f)); }
 
-    function filterRows(){
-        const f = getFilterState();
-        return EYE_ROWS.filter(r => rowMatches(r,f));
-    }
-
-    // ===== Update charts according to current filters =====
+    // Update charts
     function updateCharts(){
         const rows = filterRows();
-        const agg = aggregateForCharts(rows);
-
-        testsChart.data.labels = agg.monthLabels;
-        testsChart.data.datasets[0].data = agg.monthCounts;
-        testsChart.update('none');
-
-        const diagOrder = ['normal','abnormal','exclude','no input'];
-        const diagVals = diagOrder.map(k => agg.diagCounts[k] || 0);
-        diagChart.data.labels = ['Normal','Abnormal','Exclude','No Input'];
-        diagChart.data.datasets[0].data = diagVals;
-        diagChart.update('none');
-
-        locChart.data.labels = agg.locLabels;
-        locChart.data.datasets[0].data = agg.locVals;
-        locChart.update('none');
-
-        avgChart.data.datasets[0].data = [agg.avgOD.oct, agg.avgOS.oct];
-        avgChart.data.datasets[1].data = [agg.avgOD.vf,  agg.avgOS.vf];
-        avgChart.update('none');
+        const a = aggregateForCharts(rows);
+        testsChart.data.labels=a.monthLabels; testsChart.data.datasets[0].data=a.monthCounts; testsChart.update('none');
+        const diagOrder=['normal','abnormal','exclude','no input'];
+        diagChart.data.labels=['Normal','Abnormal','Exclude','No Input']; diagChart.data.datasets[0].data=diagOrder.map(k=>a.diagCounts[k]||0); diagChart.update('none');
+        locChart.data.labels=a.locLabels; locChart.data.datasets[0].data=a.locVals; locChart.update('none');
+        avgChart.data.datasets[0].data=[a.avgOD.oct, a.avgOS.oct]; avgChart.data.datasets[1].data=[a.avgOD.vf, a.avgOS.vf]; avgChart.update('none');
     }
 
-    // ===== CSV export =====
+    // CSV export
     function downloadCSV(filename, rows){
         const csv = rows.map(r=>r.map(v=>{
             v = (v===null||v===undefined) ? '' : String(v);
-            if (v.includes('"') || v.includes(',') || v.includes('\n')) {
-                v = '"' + v.replace(/"/g,'""') + '"';
-            }
+            if (v.includes('"') || v.includes(',') || v.includes('\n')) v = '"' + v.replace(/"/g,'""') + '"';
             return v;
         }).join(',')).join('\n');
         const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
@@ -1061,77 +925,35 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
         setTimeout(()=>URL.revokeObjectURL(url), 500);
     }
-
     function csvFor(chartId){
-        const rows = filterRows();
-        if (chartId === 'testsOverTime') {
-            const a = aggregateForCharts(rows);
-            const data = [['Month','Tests']];
-            a.monthLabels.forEach((lab, i)=> data.push([lab, a.monthCounts[i]]));
-            return data;
-        }
-        if (chartId === 'diagnosisPie') {
-            const a = aggregateForCharts(rows);
-            const data = [['Diagnosis','Count']];
-            [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>{
-                data.push([lab, a.diagCounts[key]||0]);
-            });
-            return data;
-        }
-        if (chartId === 'locationBar') {
-            const a = aggregateForCharts(rows);
-            const data = [['Location','Patients']];
-            a.locLabels.forEach((lab, i)=> data.push([lab, a.locVals[i]]));
-            return data;
-        }
-        if (chartId === 'avgScoresEye') {
-            const a = aggregateForCharts(rows);
-            return [['Eye','Avg OCT','Avg VF'], ['OD', a.avgOD.oct, a.avgOD.vf], ['OS', a.avgOS.oct, a.avgOS.vf]];
-        }
-        if (chartId.startsWith('pm')) {
-            return patientCsvFor(chartId);
-        }
+        const rows = filterRows(); const a = aggregateForCharts(rows);
+        if (chartId === 'testsOverTime') { const d=[['Month','Tests']]; a.monthLabels.forEach((lab,i)=>d.push([lab,a.monthCounts[i]])); return d; }
+        if (chartId === 'diagnosisPie')  { const d=[['Diagnosis','Count']]; [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>d.push([lab,a.diagCounts[key]||0])); return d; }
+        if (chartId === 'locationBar')   { const d=[['Location','Patients']]; a.locLabels.forEach((lab,i)=>d.push([lab,a.locVals[i]])); return d; }
+        if (chartId === 'avgScoresEye')  { return [['Eye','Avg OCT','Avg VF'], ['OD', a.avgOD.oct, a.avgOD.vf], ['OS', a.avgOS.oct, a.avgOS.vf]]; }
+        if (chartId.startsWith('pm'))    { return patientCsvFor(chartId); }
         return [['Info'],['Unsupported']];
     }
-
     function exportFilteredRowsCSV(){
         const rows = filterRows();
         const header = ['subject_id','patient_id','test_id','date_of_test','eye','age','report_diagnosis','merci_score','oct_score','vf_score','location'];
-        const data = rows.map(r => [
-            r.subject_id, r.patient_id, r.test_id, r.date_of_test, r.eye,
-            r.age ?? '', r.report_diagnosis, r.merci_score ?? '', r.oct_score ?? '', r.vf_score ?? '', r.location
-        ]);
+        const data = rows.map(r => [r.subject_id, r.patient_id, r.test_id, r.date_of_test, r.eye, r.age ?? '', r.report_diagnosis, r.merci_score ?? '', r.oct_score ?? '', r.vf_score ?? '', r.location]);
         downloadCSV('filtered_eye_rows.csv', [header, ...data]);
     }
-
-    // wire toolbar buttons
     function wireDownloads(){
-        $$('[data-download]').forEach(btn=>{
-            btn.addEventListener('click', ()=>{
-                const id = btn.getAttribute('data-download');
-                const canvas = document.getElementById(id);
-                if (!canvas) return;
-                const link = document.createElement('a');
-                link.href = canvas.toDataURL('image/png', 1.0);
-                link.download = `${id}.png`;
-                link.click();
-            });
-        });
-        $$('[data-csv]').forEach(btn=>{
-            btn.addEventListener('click', ()=>{
-                const id = btn.getAttribute('data-csv');
-                const data = csvFor(id);
-                downloadCSV(`${id}.csv`, data);
-            });
-        });
-        $$('[data-resetzoom="testsOverTime"]').forEach(btn=>{
-            btn.addEventListener('click', ()=> testsChart.resetZoom());
-        });
+        $$('[data-download]').forEach(btn=>btn.addEventListener('click', ()=>{
+            const id=btn.getAttribute('data-download'); const canvas=document.getElementById(id); if (!canvas) return;
+            const link=document.createElement('a'); link.href=canvas.toDataURL('image/png',1.0); link.download=`${id}.png`; link.click();
+        }));
+        $$('[data-csv]').forEach(btn=>btn.addEventListener('click', ()=>{
+            const id=btn.getAttribute('data-csv'); const data = csvFor(id); downloadCSV(`${id}.csv`, data);
+        }));
+        $$('[data-resetzoom="testsOverTime"]').forEach(btn=>btn.addEventListener('click', ()=> testsChart.resetZoom()));
         exportBtn.addEventListener('click', exportFilteredRowsCSV);
     }
     wireDownloads();
 
-    // ===== Filter the DOM list (patients/tests/eyes) =====
+    // Filter DOM + counts
     function filterDOM(){
         const f = getFilterState();
         const patientCards = $$('.patient-item');
@@ -1146,7 +968,6 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
                 let anyEyeVisible = false;
 
                 testRows.forEach(row => {
-                    // 🔎 include patient_id from closest patient card
                     const patientEl = row.closest('.patient-item');
                     const r = {
                         patient_id: patientEl?.getAttribute('data-patient-id') || '',
@@ -1165,8 +986,7 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
                 });
 
                 const count = tw.querySelectorAll('.eye-row[style*="display: block"]').length;
-                const countEl = tw.querySelector('.eye-count');
-                if (countEl) countEl.textContent = count;
+                const countEl = tw.querySelector('.eye-count'); if (countEl) countEl.textContent = count;
 
                 tw.style.display = anyEyeVisible ? 'block':'none';
                 if (anyEyeVisible) anyTestVisible = true;
@@ -1174,35 +994,42 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
 
             patient.style.display = anyTestVisible ? 'block':'none';
         });
+
+        // compute live counts
+        const patientsVisible = $$('.patient-item').filter(el => el.style.display !== 'none').length;
+        const testsVisible    = $$('.test-wrapper').filter(el => el.style.display !== 'none').length;
+        const eyesVisible     = $$('.eye-row').filter(el => el.style.display !== 'none').length;
+
+        countPatientsEl.textContent = patientsVisible;
+        countTestsEl.textContent    = testsVisible;
+        countEyesEl.textContent     = eyesVisible;
+
+        // toggle empty state
+        emptyState.classList.toggle('d-none', patientsVisible > 0);
+        document.getElementById('patientContainer').classList.toggle('d-none', patientsVisible === 0);
     }
 
-    // ===== Sorting =====
+    // Sorting
     function sortPatients(){
-        const container = $('#patientContainer');
-        const items = Array.from(container.querySelectorAll('.patient-item'));
-        const key = sortBy.value;
+        const container = document.getElementById('patientContainer');
+        const items = Array.from(container.querySelectorAll('.patient-item')).filter(el=>el.style.display !== 'none');
+        const key = document.getElementById('sortBy').value;
         const dir = sortDirBtn.getAttribute('data-dir') === 'desc' ? -1 : 1;
-
         function val(item){
             if (key === 'subject') return (item.getAttribute('data-subject')||'').toLowerCase();
             if (key === 'location') return (item.getAttribute('data-location')||'').toLowerCase();
             if (key === 'tests') return Number(item.getAttribute('data-tests')||0);
             if (key === 'age') return Number(item.getAttribute('data-age')||0);
-            if (key === 'last_test') {
-                const d = item.getAttribute('data-lasttest')||'';
-                return d ? new Date(d+'T00:00:00').getTime() : 0;
-            }
+            if (key === 'last_test') { const d=item.getAttribute('data-lasttest')||''; return d ? new Date(d+'T00:00:00').getTime() : 0; }
             return (item.getAttribute('data-subject')||'').toLowerCase();
         }
-
         items.sort((a,b)=>{
-            const va = val(a), vb = val(b);
+            const va=val(a), vb=val(b);
             if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
             if (va < vb) return -1*dir;
             if (va > vb) return 1*dir;
             return 0;
         });
-
         items.forEach(it => container.appendChild(it));
     }
 
@@ -1215,10 +1042,9 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         sortPatients();
     });
 
-    // ===== Filters active pill =====
+    // Filters active pill
     function countActiveFilters(){
-        const f = getFilterState();
-        let n = 0;
+        const f = getFilterState(); let n=0;
         if (f.search) n++;
         if (f.location) n++;
         if (f.diagnosis) n++;
@@ -1232,56 +1058,35 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         if (f.ageMin !== null || f.ageMax !== null) n++;
         return n;
     }
-
     function updateFiltersPill(){
         const n = countActiveFilters();
-        if (n > 0) {
-            filtersCount.textContent = n;
-            filterFab.style.display = 'block';
-        } else {
-            filterFab.style.display = 'none';
-        }
+        if (n > 0) { filtersCount.textContent = n; filterFab.style.display = 'block'; }
+        else { filterFab.style.display = 'none'; }
     }
+    filtersPill.addEventListener('click', ()=>{ clearFilters(); window.scrollTo({top: 0, behavior: 'smooth'}); });
 
-    filtersPill.addEventListener('click', ()=>{
-        clearFilters();
-        window.scrollTo({top: 0, behavior: 'smooth'});
-    });
-
-    // ===== Apply filters =====
-    function applyFilters(){
-        filterDOM();
-        updateCharts();
-        updateFiltersPill();
-        sortPatients();
-    }
+    // Apply filters
+    function applyFilters(){ filterDOM(); updateCharts(); updateFiltersPill(); sortPatients(); }
 
     // Debounced search
     let searchTimer;
     searchInput.addEventListener('input', ()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(applyFilters, 150); });
-    [locSelect, diagSelect, eyeOD, eyeOS, dateStartInput, dateEndInput, merciMinInput, merciMaxInput, ageMinInput, ageMaxInput]
-        .forEach(el => el.addEventListener('change', applyFilters));
+    [locSelect, diagSelect, eyeOD, eyeOS, dateStartInput, dateEndInput, merciMinInput, merciMaxInput, ageMinInput, ageMaxInput].forEach(el => el.addEventListener('change', applyFilters));
 
-    // Quick date presets
+    // Date presets
     function setPreset(days){
         const max = DATA_MAX ? new Date(DATA_MAX+'T00:00:00') : new Date();
-        let start = null, end = max;
-        if (days === 'all') {
-            start = DATA_MIN ? new Date(DATA_MIN+'T00:00:00') : null;
-        } else {
-            const ms = Number(days) * 24*3600*1000;
-            start = new Date(end.getTime() - ms);
-        }
-        dateStartInput.value = fmtISO(start);
-        dateEndInput.value   = fmtISO(end);
-        applyFilters();
+        let start=null, end=max;
+        if (days === 'all') start = DATA_MIN ? new Date(DATA_MIN+'T00:00:00') : null;
+        else { const ms = Number(days) * 86400000; start = new Date(end.getTime() - ms); }
+        dateStartInput.value = fmtISO(start); dateEndInput.value = fmtISO(end); applyFilters();
     }
     presetBtns.forEach(btn=>{
-        const v = btn.getAttribute('data-preset');
-        if (!DATA_MIN || !DATA_MAX) btn.disabled = true;
+        const v = btn.getAttribute('data-preset'); if (!DATA_MIN || !DATA_MAX) btn.disabled = true;
         btn.addEventListener('click', ()=> setPreset(v === 'all' ? 'all' : Number(v)));
     });
 
+    // Clear filters
     function clearFilters(){
         searchInput.value = '';
         locSelect.value = '';
@@ -1291,22 +1096,22 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         dateEndInput.value   = fmtISO(defaultState.dateEnd);
         merciMinInput.value = ''; merciMaxInput.value = '';
         ageMinInput.value = ''; ageMaxInput.value = '';
-        sortBy.value = 'subject'; sortDirBtn.setAttribute('data-dir','desc'); sortDirBtn.innerHTML = '<i class="bi bi-sort-down"></i>';
+        document.getElementById('sortBy').value = 'subject';
+        sortDirBtn.setAttribute('data-dir','desc'); sortDirBtn.innerHTML = '<i class="bi bi-sort-down"></i>';
         applyFilters();
     }
     clearBtn.addEventListener('click', clearFilters);
+    emptyClear.addEventListener('click', clearFilters);
 
     // Initial
     dateStartInput.value = fmtISO(defaultState.dateStart);
     dateEndInput.value   = fmtISO(defaultState.dateEnd);
     applyFilters();
 
-    // ===== Printable Summary =====
-    const printDiagTbl = document.getElementById('printDiagTbl');
-    const printLocTbl  = document.getElementById('printLocTbl');
+    // Print summary
+    function cloneCanvasToImg(canvas){ return canvas.toDataURL('image/png', 1.0); }
     function listActiveFilters(){
-        const f = getFilterState();
-        const items = [];
+        const f = getFilterState(); const items = [];
         if (f.search) items.push(`Search: "${f.search}"`);
         if (f.location) items.push(`Location: ${f.location}`);
         if (f.diagnosis) items.push(`Diagnosis: ${f.diagnosis}`);
@@ -1316,150 +1121,60 @@ const TESTS_LAST12_BASE  = <?= json_encode($testsLast12Values) ?>;
         if (f.ageMin !== null || f.ageMax !== null) items.push(`Age: ${f.ageMin??'…'} to ${f.ageMax??'…'}`);
         return items;
     }
-
     function preparePrint(){
         const rows = filterRows();
         const agg = aggregateForCharts(rows);
-
         document.getElementById('printTime').textContent = new Date().toLocaleString();
-
-        const ul = document.getElementById('printFilters');
-        ul.innerHTML = '';
-        const liItems = listActiveFilters();
-        if (liItems.length === 0) ul.innerHTML = '<li>None</li>';
-        else liItems.forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
-
+        const ul = document.getElementById('printFilters'); ul.innerHTML = '';
+        const liItems = listActiveFilters(); if (liItems.length === 0) ul.innerHTML = '<li>None</li>'; else liItems.forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
         document.getElementById('printImg-tests').src = cloneCanvasToImg(document.getElementById('testsOverTime'));
         document.getElementById('printImg-diag').src  = cloneCanvasToImg(document.getElementById('diagnosisPie'));
         document.getElementById('printImg-loc').src   = cloneCanvasToImg(document.getElementById('locationBar'));
         document.getElementById('printImg-avg').src   = cloneCanvasToImg(document.getElementById('avgScoresEye'));
-
-        printDiagTbl.innerHTML = '';
-        [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>{
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${lab}</td><td>${agg.diagCounts[key]||0}</td>`;
-            printDiagTbl.appendChild(tr);
-        });
-
-        printLocTbl.innerHTML = '';
-        agg.locLabels.forEach((lab,i)=>{
-            const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${lab}</td><td>${agg.locVals[i]}</td>`;
-            printLocTbl.appendChild(tr);
-        });
+        const printDiagTbl = document.getElementById('printDiagTbl'); const printLocTbl = document.getElementById('printLocTbl');
+        printDiagTbl.innerHTML = ''; [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${lab}</td><td>${agg.diagCounts[key]||0}</td>`; printDiagTbl.appendChild(tr); });
+        printLocTbl.innerHTML = ''; agg.locLabels.forEach((lab,i)=>{ const tr=document.createElement('tr'); tr.innerHTML = `<td>${lab}</td><td>${agg.locVals[i]}</td>`; printLocTbl.appendChild(tr); });
     }
-
-    document.getElementById('printSummaryBtn').addEventListener('click', ()=>{
+    printBtn.addEventListener('click', ()=>{
         preparePrint();
         document.getElementById('printArea').style.display = 'block';
         setTimeout(()=>window.print(), 100);
         setTimeout(()=>{ document.getElementById('printArea').style.display='none'; }, 400);
     });
 
-    // ===== Per-Patient Analytics Modal =====
+    // Patient analytics modal
     const modalEl = document.getElementById('patientModal');
     const patientModal = new bootstrap.Modal(modalEl);
     let pmCharts = { tests:null, diag:null, avg:null };
-    function destroyPmCharts(){
-        Object.values(pmCharts).forEach(ch => { if (ch) ch.destroy(); });
-        pmCharts = { tests:null, diag:null, avg:null };
-    }
-
-    function filterRowsForPatient(patientId){
-        return filterRows().filter(r => r.patient_id === patientId);
-    }
-
-    function patientAggregate(patientRows){
-        return aggregateForCharts(patientRows);
-    }
-
+    function destroyPmCharts(){ Object.values(pmCharts).forEach(ch => { if (ch) ch.destroy(); }); pmCharts = { tests:null, diag:null, avg:null }; }
+    function filterRowsForPatient(patientId){ return filterRows().filter(r => r.patient_id === patientId); }
+    function patientAggregate(rows){ return aggregateForCharts(rows); }
     function patientCsvFor(chartId){
-        const pid = modalEl.getAttribute('data-patient-id');
-        const rows = filterRowsForPatient(pid);
-        const a = patientAggregate(rows);
-        if (chartId === 'pmTests') {
-            const data = [['Month','Tests']];
-            a.monthLabels.forEach((lab, i)=> data.push([lab, a.monthCounts[i]]));
-            return data;
-        }
-        if (chartId === 'pmDiag') {
-            const data = [['Diagnosis','Count']];
-            [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>{
-                data.push([lab, a.diagCounts[key]||0]);
-            });
-            return data;
-        }
-        if (chartId === 'pmAvg') {
-            return [['Eye','Avg OCT','Avg VF'], ['OD', a.avgOD.oct, a.avgOD.vf], ['OS', a.avgOS.oct, a.avgOS.vf]];
-        }
+        const pid = modalEl.getAttribute('data-patient-id'); const rows = filterRowsForPatient(pid); const a = patientAggregate(rows);
+        if (chartId === 'pmTests'){ const d=[['Month','Tests']]; a.monthLabels.forEach((lab,i)=> d.push([lab, a.monthCounts[i]])); return d; }
+        if (chartId === 'pmDiag'){ const d=[['Diagnosis','Count']]; [['Normal','normal'],['Abnormal','abnormal'],['Exclude','exclude'],['No Input','no input']].forEach(([lab,key])=>d.push([lab, a.diagCounts[key]||0])); return d; }
+        if (chartId === 'pmAvg'){ return [['Eye','Avg OCT','Avg VF'], ['OD', a.avgOD.oct, a.avgOD.vf], ['OS', a.avgOS.oct, a.avgOS.vf]]; }
         return [['Info'],['Unsupported']];
     }
     window.patientCsvFor = patientCsvFor;
-
     function openPatientAnalytics(pid, subject){
         document.getElementById('pmSubject').textContent = subject;
         document.getElementById('pmId').textContent = pid;
         modalEl.setAttribute('data-patient-id', pid);
-
-        const rows = filterRowsForPatient(pid);
-        const agg = patientAggregate(rows);
-
-        destroyPmCharts();
-
-        const pmTestsCtx = document.getElementById('pmTests').getContext('2d');
-        pmCharts.tests = new Chart(pmTestsCtx, {
-            type:'line',
-            data:{ labels: agg.monthLabels, datasets:[{ label:'Tests', data: agg.monthCounts, borderColor: C.brand,
-                backgroundColor:(ctx)=> (function(){ const ch=ctx.chart; const {top,bottom}=ch.chartArea||{top:0,bottom:0}; const g=ch.ctx.createLinearGradient(0,top,0,bottom); g.addColorStop(0,'rgba(26,115,232,.35)'); g.addColorStop(1,'rgba(26,115,232,.05)'); return g; })(), tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
-            options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ grid:{color:gridColor()}}, y:{ beginAtZero:true, grid:{color:gridColor()}} } }
-        });
-
-        const pmDiagCtx = document.getElementById('pmDiag').getContext('2d');
-        const diagVals = ['normal','abnormal','exclude','no input'].map(k=>agg.diagCounts[k]||0);
-        pmCharts.diag = new Chart(pmDiagCtx,{
-            type:'doughnut',
-            data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:diagVals, backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff' }]},
-            options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom'}, datalabels:{ color:'#111', formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); const p=t?(v/t*100):0; return p>=6?`${p.toFixed(0)}%`:''; } } } }
-        });
-
-        const pmAvgCtx = document.getElementById('pmAvg').getContext('2d');
-        pmCharts.avg = new Chart(pmAvgCtx,{
-            type:'bar',
-            data:{ labels:['OD','OS'], datasets:[
-                { label:'Avg OCT', data:[agg.avgOD.oct, agg.avgOS.oct], backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
-                { label:'Avg VF',  data:[agg.avgOD.vf,  agg.avgOS.vf],  backgroundColor:C.brand,  borderColor:C.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
-            ]},
-            options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:gridColor()}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=>(v===null||isNaN(v))?'':fmt.format(v) } } }
-        });
-
+        const rows = filterRowsForPatient(pid); const a = patientAggregate(rows); destroyPmCharts();
+        pmCharts.tests = new Chart(document.getElementById('pmTests').getContext('2d'),{ type:'line', data:{ labels:a.monthLabels, datasets:[{ label:'Tests', data:a.monthCounts, borderColor:C.brand, backgroundColor:(ctx)=>{ const ch=ctx.chart; const {top,bottom}=ch.chartArea||{top:0,bottom:0}; const g=ch.ctx.createLinearGradient(0,top,0,bottom); g.addColorStop(0,'rgba(26,115,232,.35)'); g.addColorStop(1,'rgba(26,115,232,.05)'); return g; }, tension:.35, fill:true, borderWidth:3, pointRadius:3 }]}, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ grid:{color:gridColor()}}, y:{ beginAtZero:true, grid:{color:gridColor()}} } } });
+        const diagVals=['normal','abnormal','exclude','no input'].map(k=>a.diagCounts[k]||0);
+        pmCharts.diag  = new Chart(document.getElementById('pmDiag').getContext('2d'),{ type:'doughnut', data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:diagVals, backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff' }]}, options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom'}, datalabels:{ color:'#111', formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); const p=t?(v/t*100):0; return p>=6?`${p.toFixed(0)}%`:''; } } } });
+        pmCharts.avg   = new Chart(document.getElementById('pmAvg').getContext('2d'),{ type:'bar', data:{ labels:['OD','OS'], datasets:[ { label:'Avg OCT', data:[a.avgOD.oct, a.avgOS.oct], backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 }, { label:'Avg VF', data:[a.avgOD.vf, a.avgOS.vf], backgroundColor:C.brand, borderColor:C.brand, borderWidth:1, borderRadius:8, maxBarThickness:36 } ]}, options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:gridColor()}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=>(v===null||isNaN(v))?'':fmt.format(v) } } } });
         patientModal.show();
     }
-
-    document.addEventListener('click', (e)=>{
-        const btn = e.target.closest('.btn-patient-analytics');
-        if (!btn) return;
-        const pid = btn.getAttribute('data-patient');
-        const subject = btn.getAttribute('data-subject');
-        openPatientAnalytics(pid, subject);
-    });
-
-    modalEl.addEventListener('hidden.bs.modal', destroyPmCharts);
-
-    // wire CSV/PNG inside modal (reuse global handlers)
+    document.addEventListener('click', (e)=>{ const btn=e.target.closest('.btn-patient-analytics'); if (!btn) return; openPatientAnalytics(btn.getAttribute('data-patient'), btn.getAttribute('data-subject')); });
+    document.getElementById('patientModal').addEventListener('hidden.bs.modal', destroyPmCharts);
     document.querySelectorAll('#patientModal [data-csv], #patientModal [data-download]').forEach(btn=>{
         btn.addEventListener('click', ()=>{
             const id = btn.getAttribute('data-csv') || btn.getAttribute('data-download');
-            if (btn.hasAttribute('data-download')) {
-                const canvas = document.getElementById(id);
-                if (!canvas) return;
-                const link = document.createElement('a');
-                link.href = canvas.toDataURL('image/png', 1.0);
-                link.download = `${id}.png`;
-                link.click();
-            } else {
-                const data = csvFor(id);
-                downloadCSV(`${id}.csv`, data);
-            }
+            if (btn.hasAttribute('data-download')) { const canvas=document.getElementById(id); if (!canvas) return; const link=document.createElement('a'); link.href=canvas.toDataURL('image/png',1.0); link.download=`${id}.png`; link.click(); }
+            else { const data = patientCsvFor(id); downloadCSV(`${id}.csv`, data); }
         });
     });
 })();
