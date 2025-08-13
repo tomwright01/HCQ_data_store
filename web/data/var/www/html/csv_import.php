@@ -205,7 +205,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $results['tests_processed']++;
 
                     // === Eye-related fields (same mapping) ===
-                    $eyes = ['OD', 'OS'];
+                    $eye = strtolower($data[5] ?? null);
+                    if (!in_array($eye, array("od", "os"))) {
+                        throw new Exception("Invalid eye: $data[5] on line $linenumber");
+                    }
+
                     $reportDiagnosis   = strtolower($data[6]  ?? 'no input');
                     $exclusion         = strtolower($data[7]  ?? 'none');
                     $merciScore        = isset($data[8]) ? (strtolower($data[8]) === 'unable' ? 'unable' : (is_numeric($data[8]) ? (int)$data[8] : null)) : null;
@@ -220,52 +224,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['csv_file'])) {
                     $cumulativeDosage  = isset($data[17]) && is_numeric($data[17]) ? round((float)$data[17], 2) : null;
                     $dateOfContinuation= trim($data[18] ?? '');
 
-                    foreach ($eyes as $eye) {
-                        // original debug print -> pretty debug log (same info)
-                        ob_start();
-                        echo "Preparing to insert test eye data for test_id: $testId, eye: $eye\n";
-                        print_r([
-                            'test_id' => $testId,
-                            'eye' => $eye,
-                            'age' => $age,
-                            'report_diagnosis' => $reportDiagnosis,
-                            'exclusion' => $exclusion,
-                            'merci_score' => $merciScore,
-                            'merci_diagnosis' => $merciDiagnosis,
-                            'error_type' => $errorType,
-                            'faf_grade' => $fafGrade,
-                            'oct_score' => $octScore,
-                            'vf_score' => $vfScore,
-                            'actual_diagnosis' => $actualDiagnosis,
-                            'dosage' => $dosage,
-                            'duration_days' => $durationDays,
-                            'cumulative_dosage' => $cumulativeDosage,
-                            'date_of_continuation' => $dateOfContinuation
-                        ]);
-                        $debugLogs[] = htmlspecialchars(ob_get_clean());
+                    // original debug print -> pretty debug log (same info)
+                    ob_start();
+                    echo "Preparing to insert test eye data for test_id: $testId, eye: $eye\n";
+                    print_r([
+                        'test_id' => $testId,
+                        'eye' => $eye,
+                        'age' => $age,
+                        'report_diagnosis' => $reportDiagnosis,
+                        'exclusion' => $exclusion,
+                        'merci_score' => $merciScore,
+                        'merci_diagnosis' => $merciDiagnosis,
+                        'error_type' => $errorType,
+                        'faf_grade' => $fafGrade,
+                        'oct_score' => $octScore,
+                        'vf_score' => $vfScore,
+                        'actual_diagnosis' => $actualDiagnosis,
+                        'dosage' => $dosage,
+                        'duration_days' => $durationDays,
+                        'cumulative_dosage' => $cumulativeDosage,
+                        'date_of_continuation' => $dateOfContinuation
+                    ]);
+                    $debugLogs[] = htmlspecialchars(ob_get_clean());
 
-                        // Insert eye (same)
-                        insertTestEye(
-                            $conn,
-                            $testId,
-                            $eye,
-                            $age,
-                            $reportDiagnosis,
-                            $exclusion,
-                            $merciScore,
-                            $merciDiagnosis,
-                            $errorType,
-                            $fafGrade,
-                            $octScore,
-                            $vfScore,
-                            $actualDiagnosis,
-                            $dosage,
-                            $durationDays,
-                            $cumulativeDosage,
-                            $dateOfContinuation
-                        );
-                        $results['eyes_processed']++;
-                    }
+                    // Insert eye (same)
+                    insertTestEye(
+                        $conn,
+                        $testId,
+                        $eye,
+                        $age,
+                        $reportDiagnosis,
+                        $exclusion,
+                        $merciScore,
+                        $merciDiagnosis,
+                        $errorType,
+                        $fafGrade,
+                        $octScore,
+                        $vfScore,
+                        $actualDiagnosis,
+                        $dosage,
+                        $durationDays,
+                        $cumulativeDosage,
+                        $dateOfContinuation
+                    );
+                    $results['eyes_processed']++;
 
                 } catch (Exception $e) {
                     $results['errors'][] = "Line $lineNumber: " . $e->getMessage();
