@@ -112,6 +112,24 @@ $allDates = array_column($eyeRows, 'date_of_test');
 sort($allDates);
 $minDate = $allDates ? $allDates[0] : null;
 $maxDate = $allDates ? end($allDates) : null;
+
+/* ----------------------------
+   Small helpers for view links
+----------------------------- */
+/**
+ * Build a view URL for a modality given test_id & eye
+ */
+function build_view_url(string $type, string $testId, string $eye): string {
+    $type = strtoupper($type);
+    $eye  = strtoupper($eye) === 'OS' ? 'OS' : 'OD';
+    switch ($type) {
+        case 'FAF':   return "view_faf.php?test_id=" . urlencode($testId) . "&eye=" . urlencode($eye);
+        case 'OCT':   return "view_oct.php?test_id=" . urlencode($testId) . "&eye=" . urlencode($eye);
+        case 'VF':    return "view_vf.php?test_id=" . urlencode($testId) . "&eye=" . urlencode($eye);
+        case 'MFERG': return "view_mferg.php?test_id=" . urlencode($testId) . "&eye=" . urlencode($eye);
+        default:      return "#";
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -178,6 +196,16 @@ canvas { max-height: 380px; }
 .results-badge { font-weight:600; }
 .filter-fab { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: none; }
 .filter-fab .btn { box-shadow: var(--shadow); }
+
+/* Attachments section */
+.attachments { border-top: 1px dashed var(--border); margin-top: .5rem; padding-top: .5rem; }
+.attachments .btn { --bs-btn-padding-y: .2rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .82rem; }
+.attachments .badge { font-weight: 500; }
+
+.diagnosis-badge.normal { background-color: #198754 !important; }
+.diagnosis-badge.abnormal { background-color: #dc3545 !important; }
+.diagnosis-badge.exclude { background-color: #6c757d !important; }
+.diagnosis-badge["no input"], .diagnosis-badge.no-input { background-color: #ffc107 !important; }
 
 /* Print */
 @media print {
@@ -588,6 +616,14 @@ canvas { max-height: 380px; }
                                                     $dosageUnit= safe_get($eye, 'dosage_unit', 'mg');
                                                     $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
                                                     $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
+
+                                                    // NEW: get per-eye image references from test_eyes
+                                                    $fafRef   = safe_get($eye, 'faf_reference_'   . $eyeSide);
+                                                    $octRef   = safe_get($eye, 'oct_reference_'   . $eyeSide);
+                                                    $vfRef    = safe_get($eye, 'vf_reference_'    . $eyeSide);
+                                                    $mfergRef = safe_get($eye, 'mferg_reference_' . $eyeSide);
+
+                                                    $hasAnyMedia = $fafRef || $octRef || $vfRef || $mfergRef;
                                                 ?>
                                                 <div class="card test-card mb-3 eye-row"
                                                      data-eye="<?= htmlspecialchars($eyeSide) ?>"
@@ -630,6 +666,40 @@ canvas { max-height: 380px; }
                                                                 <?php endif; ?>
                                                             </div>
                                                         <?php endif; ?>
+
+                                                        <!-- NEW: Attachments / Links to view_* pages -->
+                                                        <?php if ($hasAnyMedia): ?>
+                                                        <div class="attachments d-flex flex-wrap align-items-center gap-2 mt-2">
+                                                            <span class="badge bg-light text-dark"><i class="bi bi-paperclip"></i> Images / Files</span>
+                                                            <?php if ($fafRef): ?>
+                                                              <a class="btn btn-outline-dark btn-sm" href="<?= htmlspecialchars(build_view_url('FAF', $test['test_id'], $eyeSide)) ?>" title="FAF (<?= htmlspecialchars($fafRef) ?>)">
+                                                                <i class="bi bi-image"></i> FAF
+                                                              </a>
+                                                            <?php endif; ?>
+                                                            <?php if ($octRef): ?>
+                                                              <a class="btn btn-outline-dark btn-sm" href="<?= htmlspecialchars(build_view_url('OCT', $test['test_id'], $eyeSide)) ?>" title="OCT (<?= htmlspecialchars($octRef) ?>)">
+                                                                <i class="bi bi-file-earmark-richtext"></i> OCT
+                                                              </a>
+                                                            <?php endif; ?>
+                                                            <?php if ($vfRef): ?>
+                                                              <a class="btn btn-outline-dark btn-sm" href="<?= htmlspecialchars(build_view_url('VF', $test['test_id'], $eyeSide)) ?>" title="VF (<?= htmlspecialchars($vfRef) ?>)">
+                                                                <i class="bi bi-grid-3x3-gap"></i> VF
+                                                              </a>
+                                                            <?php endif; ?>
+                                                            <?php if ($mfergRef): ?>
+                                                              <a class="btn btn-outline-dark btn-sm" href="<?= htmlspecialchars(build_view_url('MFERG', $test['test_id'], $eyeSide)) ?>" title="mfERG (<?= htmlspecialchars($mfergRef) ?>)">
+                                                                <i class="bi bi-activity"></i> mfERG
+                                                              </a>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                        <?php else: ?>
+                                                        <div class="attachments d-flex align-items-center gap-2 mt-2">
+                                                            <span class="badge bg-light text-dark"><i class="bi bi-paperclip"></i> No files for this eye</span>
+                                                            <a class="btn btn-outline-secondary btn-sm" href="import_images.php"><i class="bi bi-plus"></i> Add files</a>
+                                                        </div>
+                                                        <?php endif; ?>
+                                                        <!-- /attachments -->
+
                                                     </div>
                                                 </div>
                                             <?php endforeach; ?>
