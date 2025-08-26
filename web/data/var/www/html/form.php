@@ -1,35 +1,55 @@
 <?php
+// Turn on errors while debugging. Remove after it works.
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/functions.php';
 
 $flash = ['type'=>null, 'msg'=>null];
+$debug = [];
+
+if (!isset($conn) || !($conn instanceof mysqli)) {
+    die('DB connection ($conn) not available. Check includes/config.php');
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_medication'])) {
     // Accept either Subject ID or Patient ID from one input
-    $typedId = trim($_POST['subject_id'] ?? '');
-    if ($typedId === '' && isset($_POST['patient_id'])) {
-        $typedId = trim($_POST['patient_id']);
-    }
+    $typedId = trim($_POST['subject_or_patient_id'] ?? '');
 
+    $debug[] = ['typedId' => $typedId];
+
+    // Resolve to canonical patients.patient_id using functions.php helper
     $patient_id = resolve_patient_id($conn, $typedId);
+
+    $debug[] = ['resolved_patient_id' => $patient_id];
+
     if (!$patient_id) {
-        $flash = ['type'=>'danger', 'msg'=>'Unknown patient. Enter an existing Subject ID or Patient ID.'];
+        $flash = ['type'=>'danger', 'msg'=>'Unknown patient. Enter an existing Subject ID or Patient ID exactly as stored.'];
     } else {
+        // Collect fields (all strings so NULLs can pass through bind_param in insertMedication)
         $medication_name   = trim($_POST['medication_name'] ?? '');
         $dosage_per_day    = ($_POST['dosage_per_day']    ?? '') === '' ? null : (string)$_POST['dosage_per_day'];
         $duration_days     = ($_POST['duration_days']     ?? '') === '' ? null : (string)$_POST['duration_days'];
         $cumulative_dosage = ($_POST['cumulative_dosage'] ?? '') === '' ? null : (string)$_POST['cumulative_dosage'];
-        $start_date        = trim($_POST['start_date'] ?? '') ?: null;  // YYYY-MM-DD or null
+        $start_date        = trim($_POST['start_date'] ?? '') ?: null;   // YYYY-MM-DD or null
         $end_date          = trim($_POST['end_date']   ?? '') ?: null;
         $notes             = trim($_POST['notes']      ?? '') ?: null;
 
         if ($medication_name === '') {
             $flash = ['type'=>'danger', 'msg'=>'Medication name is required.'];
         } else {
-            insertMedication($conn, $patient_id, $medication_name,
-                             $dosage_per_day, $duration_days, $cumulative_dosage,
-                             $start_date, $end_date, $notes);
-            // Redirect to avoid resubmission and show in index
+            // Do the insert; insertMedication() dies with an error if it fails
+            $newId = insertMedication(
+                $conn, $patient_id, $medication_name,
+                $dosage_per_day, $duration_days, $cumulative_dosage,
+                $start_date, $end_date, $notes
+            );
+
+            $debug[] = ['inserted_med_id' => $newId];
+
+            // Redirect (PRG pattern) so refresh doesn’t resubmit the form
             header('Location: index.php#patients');
             exit;
         }
@@ -43,6 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_medication'])) {
 <title>Add Medication</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 </head>
 <body class="bg-light">
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
@@ -62,16 +83,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_medication'])) {
           <h5 class="card-title mb-3"><i class="bi bi-capsule-pill"></i> Add Medication</h5>
 
           <?php if ($flash['type']): ?>
-            <div class="alert alert-<?= htmlspecialchars($flash['type']) ?>"><?= htmlspecialchars($flash['msg']) ?></div>
+            <div class="alert alert-<?= htmlspecialchars($flash['type']) ?>">
+              <?= htmlspecialchars($flash['msg']) ?>
+            </div>
           <?php endif; ?>
 
-          <form method="post">
+          <form method="post" novalidate>
             <input type="hidden" name="save_medication" value="1">
 
             <div class="mb-3">
               <label class="form-label">Subject or Patient ID</label>
-              <input type="text" name="subject_id" class="form-control" placeholder="e.g. SUBJ001 or P_abcd123..." required>
-              <div class="form-text">Type either the Subject ID or the Patient ID; we’ll link it correctly.</div>
+              <input type="text" name="subject_or_patient_id" class="form-control"
+                     placeholder="e.g. SUBJ001 or P_abcdef123456..." required>
+              <div class="form-text">
+                This can be the <strong>Subject ID</strong> or the <strong>Patient ID</strong>. We’ll link it correctly.
+              </div>
             </div>
 
             <div class="row g-3">
@@ -117,21 +143,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_medication'])) {
             </div>
           </form>
 
+          <?php if (!empty($debug)): ?>
+            <details class="mt-3">
+              <summary>Debug</summary>
+              <pre class="small bg-light border p-2"><?php echo htmlspecialchars(print_r($debug, true)); ?></pre>
+              <?php if ($conn->error) { ?>
+                <div class="alert alert-warning small mt-2">MySQLi error: <code><?= htmlspecialchars($conn->error) ?></code></div>
+              <?php } ?>
+            </details>
+          <?php endif; ?>
+
         </div>
       </div>
 
       <div class="text-muted small mt-3">
-        Tip: after saving, you’ll see the medication listed under the patient in <em>index.php</em>.
+        After saving, you’ll see the medication listed under the patient in <em>index.php</em>.
       </div>
     </div>
   </div>
 </div>
 
-<!-- Icons (optional) -->
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
-
-
-
