@@ -1,4 +1,7 @@
 <?php
+/* =============================================
+   index.php — FULL PAGE (with Medications support)
+   ============================================= */
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
@@ -71,6 +74,33 @@ $testsLast12Values = array_values($countsByMonth);
 ----------------------------- */
 $patients = getPatientsWithTests($conn);
 function safe_get($arr, $key, $default = null) { return is_array($arr) && array_key_exists($key, $arr) ? $arr[$key] : $default; }
+
+/* ----------------------------
+   Medications (grouped by patient)
+----------------------------- */
+$medsByPatient = [];
+if ($res = $conn->query("
+    SELECT med_id, patient_id, medication_name,
+           dosage_per_day, duration_days, cumulative_dosage,
+           start_date, end_date, notes
+    FROM medications
+    ORDER BY start_date DESC, med_id DESC
+")) {
+    while ($m = $res->fetch_assoc()) {
+        $pid = $m['patient_id'];
+        if (!isset($medsByPatient[$pid])) $medsByPatient[$pid] = [];
+        $medsByPatient[$pid][] = [
+            'med_id'           => (int)$m['med_id'],
+            'medication_name'  => $m['medication_name'],
+            'dosage_per_day'   => is_null($m['dosage_per_day'])   ? null : (float)$m['dosage_per_day'],
+            'duration_days'    => is_null($m['duration_days'])    ? null : (int)$m['duration_days'],
+            'cumulative'       => is_null($m['cumulative_dosage'])? null : (float)$m['cumulative_dosage'],
+            'start_date'       => $m['start_date'],
+            'end_date'         => $m['end_date'],
+            'notes'            => $m['notes'],
+        ];
+    }
+}
 
 /* ----------------------------
    Raw rows (one per eye) for CSV export, filters & charts
@@ -211,6 +241,13 @@ canvas { max-height: 380px; }
 .diagnosis-badge.abnormal { background-color: #dc3545 !important; }
 .diagnosis-badge.exclude { background-color: #6c757d !important; }
 .diagnosis-badge["no input"], .diagnosis-badge.no-input { background-color: #ffc107 !important; }
+
+/* Meds */
+.med-chip { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .6rem; border:1px solid var(--border);
+  border-radius:999px; background:rgba(26,115,232,.06); font-weight:600; margin:.2rem .3rem .2rem 0; }
+.med-chip small { font-weight:500; color:var(--muted); }
+.med-list .list-group-item{ display:flex; justify-content:space-between; align-items:center; }
+.med-metrics{ font-variant-numeric: tabular-nums; color: var(--muted); }
 
 /* Print */
 @media print {
@@ -583,6 +620,71 @@ canvas { max-height: 380px; }
                                 <p><strong>DOB:</strong> <?= $dob->format('M j, Y') ?></p>
                                 <p><strong>Tests:</strong> <?= count($tests) ?></p>
                             </div>
+                        </div>
+
+                        <?php
+                          $pmeds = $medsByPatient[$patient['patient_id']] ?? [];
+                          $hasMeds = !empty($pmeds);
+                        ?>
+                        <div class="card mb-3">
+                          <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                              <h6 class="mb-0"><i class="bi bi-capsule-pill"></i> Medications</h6>
+                              <a href="form.php#medications" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-plus"></i> Add Medication
+                              </a>
+                            </div>
+
+                            <?php if (!$hasMeds): ?>
+                              <div class="text-muted">No medications on file.</div>
+                            <?php else: ?>
+                              <div class="mb-2">
+                                <?php foreach ($pmeds as $m): ?>
+                                  <span class="med-chip">
+                                    <?= htmlspecialchars($m['medication_name']) ?>
+                                    <?php if (!is_null($m['dosage_per_day'])): ?>
+                                      <small><?= rtrim(rtrim(number_format($m['dosage_per_day'],3,'.',''), '0'),'.') ?>/day</small>
+                                    <?php endif; ?>
+                                  </span>
+                                <?php endforeach; ?>
+                              </div>
+
+                              <ul class="list-group med-list">
+                                <?php foreach ($pmeds as $m): ?>
+                                  <li class="list-group-item">
+                                    <div>
+                                      <div class="fw-semibold"><?= htmlspecialchars($m['medication_name']) ?></div>
+                                      <div class="small text-muted">
+                                        <?php
+                                          $sd = $m['start_date'] ? date('M j, Y', strtotime($m['start_date'])) : null;
+                                          $ed = $m['end_date']   ? date('M j, Y', strtotime($m['end_date']))   : null;
+                                        ?>
+                                        <?php if ($sd || $ed): ?>
+                                          <?= $sd ?: '—' ?> → <?= $ed ?: '—' ?>
+                                        <?php else: ?>
+                                          <span class="text-muted">Dates not set</span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($m['notes'])): ?>
+                                          • <em><?= htmlspecialchars($m['notes']) ?></em>
+                                        <?php endif; ?>
+                                      </div>
+                                    </div>
+                                    <div class="med-metrics text-end">
+                                      <?php if (!is_null($m['dosage_per_day'])): ?>
+                                        <div><?= rtrim(rtrim(number_format($m['dosage_per_day'],3,'.',''), '0'),'.') ?>/day</div>
+                                      <?php endif; ?>
+                                      <?php if (!is_null($m['duration_days'])): ?>
+                                        <div><?= (int)$m['duration_days'] ?> days</div>
+                                      <?php endif; ?>
+                                      <?php if (!is_null($m['cumulative'])): ?>
+                                        <div class="fw-semibold"><?= rtrim(rtrim(number_format($m['cumulative'],3,'.',''), '0'),'.') ?> total</div>
+                                      <?php endif; ?>
+                                    </div>
+                                  </li>
+                                <?php endforeach; ?>
+                              </ul>
+                            <?php endif; ?>
+                          </div>
                         </div>
 
                         <div class="accordion" id="testsAccordion-<?= htmlspecialchars($patient['patient_id']) ?>">
@@ -1462,7 +1564,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         patientRows.forEach(r=>{ if (diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
 
         const eyeStats = { OD:{oct:[],vf:[]}, OS:{oct:[],vf:[]} };
-        patientRows.forEach(r=>{ if (eyeStats[r.eye]){ if(r.oct_score!==null) eyeStats[r.eye].oct.push(Number(r.oct_score)); if(r.vf_score!==null) eyeStats[r.eye].vf.push(Number(r.vf_score)); }});
+        patientRows.forEach(r=>{ if (eyeStats[r.eye]){ if(r.oct_score!==null && r.oct_score!=='') eyeStats[r.eye].oct.push(Number(r.oct_score)); if(r.vf_score!==null && r.vf_score!=='') eyeStats[r.eye].vf.push(Number(r.vf_score)); }});
         const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
         const avgOD = {oct:avg(eyeStats.OD.oct), vf:avg(eyeStats.OD.vf)};
         const avgOS = {oct:avg(eyeStats.OS.oct), vf:avg(eyeStats.OS.vf)};
@@ -1519,7 +1621,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 { label:'Avg OCT', data:[agg.avgOD.oct, agg.avgOS.oct], backgroundColor:Cc.purple, borderColor:Cc.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
                 { label:'Avg VF',  data:[agg.avgOD.vf,  agg.avgOS.vf],  backgroundColor:Cc.brand,  borderColor:Cc.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
             ]},
-            options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=>(v===null||isNaN(v))?'':v.toFixed(2) } } }
+            options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=>(v===null||isNaN(v))?'':(typeof v==='number'?v.toFixed(2):v) } } }
         });
 
         // Wire CSV/PNG buttons inside modal
