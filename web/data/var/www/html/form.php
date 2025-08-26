@@ -3,8 +3,12 @@
 // Works with your updated includes/functions.php (with resolve_patient_id/insertMedication)
 // Writes to: patients, tests, test_eyes, medications (via insertMedication)
 // ---------------------------------------------------------------
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/functions.php';
+
 
 /* ===== Helpers ===== */
 function respond_json($arr) { header('Content-Type: application/json'); echo json_encode($arr); exit; }
