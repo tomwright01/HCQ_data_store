@@ -1,168 +1,1072 @@
 <?php
-// Turn on errors while debugging. Remove after it works.
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
-
+// form.php — two-mode data entry (Full Entry + Medications Only)
+// Works with your updated includes/functions.php (with resolve_patient_id/insertMedication)
+// Writes to: patients, tests, test_eyes, medications (via insertMedication)
+// ---------------------------------------------------------------
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/functions.php';
 
-$flash = ['type'=>null, 'msg'=>null];
-$debug = [];
-
-if (!isset($conn) || !($conn instanceof mysqli)) {
-    die('DB connection ($conn) not available. Check includes/config.php');
+/* ===== Helpers ===== */
+function respond_json($arr) { header('Content-Type: application/json'); echo json_encode($arr); exit; }
+function val($arr, $key, $default=null) { return isset($arr[$key]) && $arr[$key] !== '' ? $arr[$key] : $default; }
+function normalize_actual_dx($v) {
+    if ($v === null) return 'other';
+    $v = strtolower(trim($v));
+    if (in_array($v, ['ra','sle','sjogren','other'], true)) return $v;
+    if ($v === 'sjögren' || $v === "sjogren's") return 'sjogren';
+    return 'other';
+}
+function normalize_merci_score($v) {
+    if ($v === null || $v === '') return null;
+    $t = strtolower(trim($v));
+    if ($t === 'unable') return 'unable';
+    if (is_numeric($v)) {
+        $n = (float)$v;
+        if ($n >= 0 && $n <= 100) return (string)(int)$n; // keep as string
+    }
+    return null;
+}
+function compute_test_id($subject_id, $date_of_test) {
+    return 'T_' . substr(md5($subject_id . '|' . $date_of_test), 0, 20);
+}
+function safe_num($v, $decimals=2) {
+    if ($v === '' || $v === null) return null;
+    if (!is_numeric($v)) return null;
+    return round((float)$v, $decimals);
+}
+function safe_int($v, $min=null, $max=null) {
+    if ($v === '' || $v === null) return null;
+    if (!is_numeric($v)) return null;
+    $n = (int)$v;
+    if ($min !== null && $n < $min) return $min;
+    if ($max !== null && $n > $max) return $max;
+    return $n;
+}
+function ensure_dir($path) { if (!is_dir($path)) { @mkdir($path, 0775, true); } }
+function save_upload($field, $destDir, $prefix, $allow) {
+    if (!isset($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
+    $name = $_FILES[$field]['name'];
+    $tmp  = $_FILES[$field]['tmp_name'];
+    $type = mime_content_type($tmp);
+    $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+    if (!in_array($ext, $allow['ext'], true)) return null;
+    if (!in_array($type, $allow['mime'], true)) return null;
+    ensure_dir($destDir);
+    $fname = $prefix . '_' . uniqid('', true) . '.' . $ext;
+    $dest  = rtrim($destDir, '/').'/'.$fname;
+    if (move_uploaded_file($tmp, $dest)) return $dest;
+    return null;
+}
+function date_diff_inclusive_days(?string $start, ?string $end): ?int {
+    if (!$start || !$end) return null;
+    try {
+        $sd = new DateTime($start);
+        $ed = new DateTime($end);
+        if ($ed < $sd) return 0;
+        return $sd->diff($ed)->days + 1;
+    } catch (Throwable $e) { return null; }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_medication'])) {
-    // Accept either Subject ID or Patient ID from one input
-    $typedId = trim($_POST['subject_or_patient_id'] ?? '');
+/* ===== Duplicate-check mini API (patient + date + eye) ===== */
+if (isset($_GET['check']) && $_GET['check'] === '1') {
+    $subject = trim($_GET['subject'] ?? '');
+    $date    = trim($_GET['date'] ?? '');
+    $eye     = strtoupper(trim($_GET['eye'] ?? ''));
 
-    $debug[] = ['typedId' => $typedId];
+    if ($subject === '' || $date === '' || !in_array($eye, ['OD','OS'], true)) {
+        respond_json(['ok'=>false, 'exists'=>false, 'err'=>'bad params']);
+    }
 
-    // Resolve to canonical patients.patient_id using functions.php helper
-    $patient_id = resolve_patient_id($conn, $typedId);
+    $patientId = function_exists('generatePatientId')
+        ? generatePatientId($subject)
+        : ('P_' . substr(md5($subject), 0, 20));
 
-    $debug[] = ['resolved_patient_id' => $patient_id];
+    $sql = "
+        SELECT te.result_id
+        FROM test_eyes te
+        JOIN tests t ON te.test_id = t.test_id
+        WHERE t.patient_id = ? AND t.date_of_test = ? AND te.eye = ?
+        LIMIT 1
+    ";
+    $stmt = $conn->prepare($sql);
+    $stmt->bind_param('sss', $patientId, $date, $eye);
+    $stmt->execute();
+    $stmt->store_result();
+    $exists = $stmt->num_rows > 0;
+    $stmt->close();
 
-    if (!$patient_id) {
-        $flash = ['type'=>'danger', 'msg'=>'Unknown patient. Enter an existing Subject ID or Patient ID exactly as stored.'];
-    } else {
-        // Collect fields (all strings so NULLs can pass through bind_param in insertMedication)
-        $medication_name   = trim($_POST['medication_name'] ?? '');
-        $dosage_per_day    = ($_POST['dosage_per_day']    ?? '') === '' ? null : (string)$_POST['dosage_per_day'];
-        $duration_days     = ($_POST['duration_days']     ?? '') === '' ? null : (string)$_POST['duration_days'];
-        $cumulative_dosage = ($_POST['cumulative_dosage'] ?? '') === '' ? null : (string)$_POST['cumulative_dosage'];
-        $start_date        = trim($_POST['start_date'] ?? '') ?: null;   // YYYY-MM-DD or null
-        $end_date          = trim($_POST['end_date']   ?? '') ?: null;
-        $notes             = trim($_POST['notes']      ?? '') ?: null;
+    respond_json(['ok'=>true, 'exists'=>$exists]);
+}
 
-        if ($medication_name === '') {
-            $flash = ['type'=>'danger', 'msg'=>'Medication name is required.'];
+/* ===== Handle POST ===== */
+$successMessage = '';
+$errorMessage   = '';
+$activeTab      = 'full'; // default
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $mode = $_POST['mode'] ?? 'full'; // "full" | "meds"
+    $activeTab = ($mode === 'meds') ? 'meds' : 'full';
+
+    try {
+        if ($mode === 'full') {
+            // ----- FULL ENTRY (Patient + Eyes + Optional Medications) -----
+            $subject_id     = trim($_POST['subject_id'] ?? '');
+            $date_of_birth  = trim($_POST['date_of_birth'] ?? '');
+            $location       = $_POST['location'] ?? 'KH';
+            $actual_dx_ui   = $_POST['actual_diagnosis'] ?? 'other';
+
+            if ($subject_id === '' || $date_of_birth === '') {
+                throw new Exception('Subject ID and Date of Birth are required.');
+            }
+            if (!in_array($location, ['KH','CHUSJ','IWK','IVEY'], true)) {
+                throw new Exception('Invalid location.');
+            }
+            $actual_dx = normalize_actual_dx($actual_dx_ui);
+
+            // Derive patient_id
+            $patient_id = function_exists('generatePatientId')
+                ? generatePatientId($subject_id)
+                : ('P_' . substr(md5($subject_id), 0, 20));
+
+            $conn->begin_transaction();
+
+            // Upsert patient
+            $stmt = $conn->prepare("
+                INSERT INTO patients (patient_id, subject_id, location, date_of_birth)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    subject_id = VALUES(subject_id),
+                    location   = VALUES(location),
+                    date_of_birth = VALUES(date_of_birth)
+            ");
+            $stmt->bind_param('ssss', $patient_id, $subject_id, $location, $date_of_birth);
+            if (!$stmt->execute()) throw new Exception('Failed saving patient: '.$stmt->error);
+            $stmt->close();
+
+            /* --- Collect eye blocks (OD/OS) --- */
+            $EYES = ['OD','OS'];
+            $eyePayloads = [];
+            foreach ($EYES as $EYE) {
+                $key = "eye_data_{$EYE}";
+                if (!isset($_POST[$key]) || !is_array($_POST[$key])) continue;
+
+                $block = $_POST[$key];
+                $date_of_test = trim($block['date_of_test'] ?? '');
+                if ($date_of_test === '') continue; // skip empty eye
+
+                $age               = safe_int(val($block, 'age'), 0, 120);
+                $report_diagnosis  = val($block, 'report_diagnosis', 'no input');
+                if (!in_array($report_diagnosis, ['normal','abnormal','exclude','no input'], true)) $report_diagnosis = 'no input';
+
+                $exclusion         = val($block, 'exclusion', 'none');
+                $merci_score       = normalize_merci_score(val($block, 'merci_score'));
+                $merci_diagnosis   = val($block, 'merci_diagnosis', 'no value');
+                if (!in_array($merci_diagnosis, ['normal','abnormal','no value'], true)) $merci_diagnosis = 'no value';
+
+                $error_type        = val($block, 'error_type');
+                if ($error_type !== null && !in_array($error_type, ['TN','FP','TP','FN','none'], true)) $error_type = null;
+
+                $faf_grade         = safe_int(val($block, 'faf_grade'), 1, 4);
+                $oct_score         = safe_num(val($block, 'oct_score'));
+                $vf_score          = safe_num(val($block, 'vf_score'));
+
+                // Optional per-eye medication info (legacy columns on test_eyes)
+                $medication_name   = val($block, 'medication_name');
+                $dosage            = safe_num(val($block, 'dosage'));
+                $dosage_unit       = val($block, 'dosage_unit', 'mg');
+                $duration_days     = safe_int(val($block, 'duration_days'), 0, 32767);
+                $cumulative_dosage = safe_num(val($block, 'cumulative_dosage'));
+                $date_of_cont      = val($block, 'date_of_continuation');
+                $treatment_notes   = val($block, 'treatment_notes');
+
+                $override_test_id  = trim(val($block, 'test_id'));
+                $test_id           = $override_test_id !== '' ? $override_test_id : compute_test_id($subject_id, $date_of_test);
+
+                $eyePayloads[] = [
+                    'eye' => $EYE,
+                    'test_id' => $test_id,
+                    'date_of_test' => $date_of_test,
+                    'age' => $age,
+                    'report_diagnosis' => $report_diagnosis,
+                    'exclusion' => $exclusion,
+                    'merci_score' => $merci_score,
+                    'merci_diagnosis' => $merci_diagnosis,
+                    'error_type' => $error_type,
+                    'faf_grade' => $faf_grade,
+                    'oct_score' => $oct_score,
+                    'vf_score'  => $vf_score,
+                    'actual_diagnosis' => $actual_dx,
+                    'medication_name' => $medication_name,
+                    'dosage' => $dosage,
+                    'dosage_unit' => $dosage_unit,
+                    'duration_days' => $duration_days,
+                    'cumulative_dosage' => $cumulative_dosage,
+                    'date_of_continuation' => $date_of_cont,
+                    'treatment_notes' => $treatment_notes,
+                ];
+            }
+
+            /* --- Collect medication rows (UI -> DB via insertMedication) --- */
+            $medPayloads = [];
+            if (isset($_POST['meds']) && is_array($_POST['meds'])) {
+                foreach ($_POST['meds'] as $m) {
+                    $name   = trim(val($m, 'name', ''));
+                    if ($name === '') continue;
+
+                    $dose_val   = safe_num(val($m, 'dose'), 3);  // numeric
+                    $unit_in    = strtolower(val($m, 'unit', 'mg'));   // mg|g
+                    $freq_in    = strtolower(val($m, 'freq', 'per_day')); // per_day|per_week
+                    $start      = val($m, 'start_date');
+                    $end        = val($m, 'end_date');
+                    $months     = safe_int(val($m, 'months'), 0, 1200);
+                    $days       = safe_int(val($m, 'days'), 0, 100000);
+                    $notes      = val($m, 'notes');
+
+                    if ($dose_val === null) throw new Exception("Medication dose is required for '{$name}'.");
+
+                    // Store raw inputs for insertMedication (it will write subject_id + input_* safely)
+                    $input_value_mg = ($unit_in === 'g') ? $dose_val * 1000.0 : $dose_val;
+                    $period = ($freq_in === 'per_week') ? 'week' : 'day';
+
+                    $medPayloads[] = [
+                        'name' => $name,
+                        'input_value_mg' => $input_value_mg,
+                        'period' => $period,
+                        'start' => $start ?: null,
+                        'end'   => $end   ?: null,
+                        'months'=> $months,
+                        'days'  => $days,
+                        'notes' => $notes
+                    ];
+                }
+            }
+
+            if (empty($eyePayloads) && empty($medPayloads)) {
+                throw new Exception('Enter at least one Eye test or one Medication row.');
+            }
+
+            // Insert tests first
+            $seenTests = [];
+            foreach ($eyePayloads as $p) {
+                $tid = $p['test_id'];
+                if (isset($seenTests[$tid])) continue;
+                $stmt = $conn->prepare("
+                    INSERT INTO tests (test_id, patient_id, location, date_of_test)
+                    VALUES (?, ?, ?, ?)
+                    ON DUPLICATE KEY UPDATE
+                        location = VALUES(location),
+                        date_of_test = VALUES(date_of_test),
+                        updated_at = CURRENT_TIMESTAMP
+                ");
+                $stmt->bind_param('ssss', $tid, $patient_id, $location, $p['date_of_test']);
+                if (!$stmt->execute()) throw new Exception('Failed saving test ('.$tid.'): '.$stmt->error);
+                $stmt->close();
+                $seenTests[$tid] = true;
+            }
+
+            // Allowed uploads
+            $ALLOW_IMG = ['ext'=>['png','jpg','jpeg'], 'mime'=>['image/png','image/jpeg']];
+            $ALLOW_PDF = ['ext'=>['pdf'], 'mime'=>['application/pdf']];
+
+            // Upsert test_eyes per eye, with eye-specific reference columns
+            foreach ($eyePayloads as $p) {
+                $test_id = $p['test_id'];
+                $eye     = $p['eye'];
+
+                $upDir = 'uploads/'.$patient_id.'/'.$test_id;
+                $faf_ref   = save_upload("image_faf_".strtolower($eye),   $upDir, "FAF_{$eye}",   $ALLOW_IMG);
+                $oct_ref   = save_upload("image_oct_".strtolower($eye),   $upDir, "OCT_{$eye}",   $ALLOW_IMG);
+                $vf_ref    = save_upload("image_vf_".strtolower($eye),    $upDir, "VF_{$eye}",    $ALLOW_PDF);
+                $mferg_ref = save_upload("image_mferg_".strtolower($eye), $upDir, "MFERG_{$eye}", $ALLOW_IMG);
+
+                $refCols = ($eye === 'OD')
+                    ? ['faf_reference_OD','oct_reference_OD','vf_reference_OD','mferg_reference_OD']
+                    : ['faf_reference_OS','oct_reference_OS','vf_reference_OS','mferg_reference_OS'];
+
+                // existing row?
+                $existing_id = null;
+                $stmt = $conn->prepare("SELECT result_id FROM test_eyes WHERE test_id = ? AND eye = ? LIMIT 1");
+                $stmt->bind_param('ss', $test_id, $eye);
+                $stmt->execute();
+                $stmt->bind_result($rid);
+                if ($stmt->fetch()) $existing_id = (int)$rid;
+                $stmt->close();
+
+                if ($existing_id) {
+                    $setRefs = "{$refCols[0]} = COALESCE(?, {$refCols[0]}),
+                                {$refCols[1]} = COALESCE(?, {$refCols[1]}),
+                                {$refCols[2]} = COALESCE(?, {$refCols[2]}),
+                                {$refCols[3]} = COALESCE(?, {$refCols[3]})";
+
+                    $sql = "
+                        UPDATE test_eyes SET
+                            age=?, report_diagnosis=?, exclusion=?, merci_score=?, merci_diagnosis=?, error_type=?,
+                            faf_grade=?, oct_score=?, vf_score=?, actual_diagnosis=?,
+                            medication_name=?, dosage=?, dosage_unit=?, duration_days=?, cumulative_dosage=?, date_of_continuation=?, treatment_notes=?,
+                            $setRefs,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE result_id = ?
+                    ";
+                    $stmt = $conn->prepare($sql);
+                    $types = str_repeat('s', 21) . 'i';
+                    $stmt->bind_param(
+                        $types,
+                        $p['age'],
+                        $p['report_diagnosis'],
+                        $p['exclusion'],
+                        $p['merci_score'],
+                        $p['merci_diagnosis'],
+                        $p['error_type'],
+                        $p['faf_grade'],
+                        $p['oct_score'],
+                        $p['vf_score'],
+                        $p['actual_diagnosis'],
+                        $p['medication_name'],
+                        $p['dosage'],
+                        $p['dosage_unit'],
+                        $p['duration_days'],
+                        $p['cumulative_dosage'],
+                        $p['date_of_continuation'],
+                        $p['treatment_notes'],
+                        $faf_ref,
+                        $oct_ref,
+                        $vf_ref,
+                        $mferg_ref,
+                        $existing_id
+                    );
+                    if (!$stmt->execute()) throw new Exception('Failed updating '.$eye.' eye: '.$stmt->error);
+                    $stmt->close();
+                } else {
+                    $cols = "
+                        test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
+                        faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
+                        duration_days, cumulative_dosage, date_of_continuation, treatment_notes,
+                        {$refCols[0]}, {$refCols[1]}, {$refCols[2]}, {$refCols[3]}
+                    ";
+                    $placeholders = implode(',', array_fill(0, 23, '?'));
+                    $sql = "INSERT INTO test_eyes ($cols) VALUES ($placeholders)";
+                    $stmt = $conn->prepare($sql);
+                    $types = str_repeat('s', 23);
+                    $stmt->bind_param(
+                        $types,
+                        $test_id,
+                        $eye,
+                        $p['age'],
+                        $p['report_diagnosis'],
+                        $p['exclusion'],
+                        $p['merci_score'],
+                        $p['merci_diagnosis'],
+                        $p['error_type'],
+                        $p['faf_grade'],
+                        $p['oct_score'],
+                        $p['vf_score'],
+                        $p['actual_diagnosis'],
+                        $p['medication_name'],
+                        $p['dosage'],
+                        $p['dosage_unit'],
+                        $p['duration_days'],
+                        $p['cumulative_dosage'],
+                        $p['date_of_continuation'],
+                        $p['treatment_notes'],
+                        $faf_ref,
+                        $oct_ref,
+                        $vf_ref,
+                        $mferg_ref
+                    );
+                    if (!$stmt->execute()) throw new Exception('Failed inserting '.$eye.' eye: '.$stmt->error);
+                    $stmt->close();
+                }
+            }
+
+            // Insert medications via NEW logic (safe against generated cols)
+            if (!empty($medPayloads)) {
+                foreach ($medPayloads as $m) {
+                    insertMedication(
+                        $conn,
+                        $subject_id,                // can be subject or patient id; resolver handles both
+                        $m['name'],
+                        null,                       // dosage_per_day (ignored if generated)
+                        null,                       // duration_days (computed in DB, pass null)
+                        null,                       // cumulative_dosage (computed in DB, pass null)
+                        $m['start'],
+                        $m['end'],
+                        $m['notes'],
+                        $m['input_value_mg'],       // input_dosage_value (mg)
+                        'mg',                       // input_dosage_unit stored as mg baseline
+                        $m['period'],               // 'day'|'week'
+                        $m['months'],               // duration_months (optional)
+                        $m['days']                  // duration_days_manual (optional)
+                    );
+                }
+            }
+
+            $conn->commit();
+            $successMessage = 'Saved successfully.';
+            $activeTab = 'full';
+
         } else {
-            // Do the insert; insertMedication() dies with an error if it fails
-            $newId = insertMedication(
-                $conn, $patient_id, $medication_name,
-                $dosage_per_day, $duration_days, $cumulative_dosage,
-                $start_date, $end_date, $notes
-            );
+            // ----- MEDICATIONS ONLY -----
+            $patient_or_subject = trim($_POST['m_patient_or_subject'] ?? '');
+            if ($patient_or_subject === '') throw new Exception('Patient or Subject ID is required.');
 
-            $debug[] = ['inserted_med_id' => $newId];
+            // multiple med rows
+            $rows = $_POST['meds2'] ?? [];
+            if (!is_array($rows) || empty($rows)) throw new Exception('Add at least one medication row.');
 
-            // Redirect (PRG pattern) so refresh doesn’t resubmit the form
-            header('Location: index.php#patients');
-            exit;
+            $conn->begin_transaction();
+            $inserted = 0;
+
+            foreach ($rows as $row) {
+                $name = trim(val($row, 'name', ''));
+                if ($name === '') continue;
+
+                $dose = safe_num(val($row,'dose'), 3);
+                if ($dose === null) throw new Exception("Dose is required for '{$name}'.");
+
+                $unit  = strtolower(val($row,'unit','mg')); // mg|g
+                $freq  = strtolower(val($row,'freq','per_day')); // per_day|per_week
+                $start = val($row,'start_date');
+                $end   = val($row,'end_date');
+                $months= safe_int(val($row,'months'), 0, 1200);
+                $days  = safe_int(val($row,'days'), 0, 100000);
+                $notes = val($row,'notes');
+
+                $input_value_mg = ($unit === 'g') ? $dose * 1000.0 : $dose;
+                $period = ($freq === 'per_week') ? 'week' : 'day';
+
+                insertMedication(
+                    $conn,
+                    $patient_or_subject,
+                    $name,
+                    null,            // dosage_per_day (ignored if generated)
+                    null,            // duration_days (computed in DB)
+                    null,            // cumulative_dosage (computed in DB)
+                    $start ?: null,
+                    $end   ?: null,
+                    $notes,
+                    $input_value_mg,
+                    'mg',            // we pass normalized mg
+                    $period,         // 'day'|'week'
+                    $months,         // optional months
+                    $days            // optional manual days
+                );
+                $inserted++;
+            }
+
+            $conn->commit();
+            $successMessage = "Added {$inserted} medication(s) for ".htmlspecialchars($patient_or_subject).".";
+            $activeTab = 'meds';
         }
+
+    } catch (Throwable $e) {
+        if ($conn && $conn->errno === 0) { /* ignore */ }
+        @$conn->rollback();
+        $errorMessage = $e->getMessage();
     }
 }
+
+/* ===== UI pieces ===== */
+function eye_block_html($eye) {
+    $lower = strtolower($eye);
+    ob_start(); ?>
+<div class="card mb-4" id="<?php echo $lower; ?>-block">
+  <div class="card-body">
+    <h5 class="mb-3"><i class="bi bi-eye<?php echo $eye==='OS' ? '-slash' : ''; ?>"></i> <?php echo $eye==='OD'?'Right':'Left'; ?> Eye (<?php echo $eye; ?>)</h5>
+    <div class="row g-3">
+      <div class="col-md-4">
+        <label class="form-label">Test Date</label>
+        <input type="date" class="form-control" name="eye_data_<?php echo $eye; ?>[date_of_test]" id="<?php echo $lower; ?>_date_of_test" data-role="date">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Age at Test</label>
+        <input type="number" min="0" max="120" class="form-control" name="eye_data_<?php echo $eye; ?>[age]" placeholder="e.g., 52">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Test ID (optional override)</label>
+        <input type="text" class="form-control" name="eye_data_<?php echo $eye; ?>[test_id]" placeholder="Leave blank to auto-generate">
+        <div class="help mt-1" data-role="testid-tip">Suggested Test ID will appear here.</div>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Report Diagnosis</label>
+        <select class="form-select" name="eye_data_<?php echo $eye; ?>[report_diagnosis]">
+          <option value="normal">Normal</option>
+          <option value="abnormal">Abnormal</option>
+          <option value="exclude">Exclude</option>
+          <option value="no input" selected>No Input</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Exclusion</label>
+        <select class="form-select" name="eye_data_<?php echo $eye; ?>[exclusion]">
+          <option value="none" selected>None</option>
+          <option value="retinal detachment">Retinal Detachment</option>
+          <option value="generalized retinal dysfunction">Generalized Retinal Dysfunction</option>
+          <option value="unilateral testing">Unilateral Testing</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Error Type</label>
+        <select class="form-select" name="eye_data_<?php echo $eye; ?>[error_type]">
+          <option value="">—</option>
+          <option value="TN">TN</option>
+          <option value="FP">FP</option>
+          <option value="TP">TP</option>
+          <option value="FN">FN</option>
+          <option value="none">none</option>
+        </select>
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">MERCI Score</label>
+        <input type="text" class="form-control" name="eye_data_<?php echo $eye; ?>[merci_score]" placeholder="0–100 or 'unable'">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">MERCI Diagnosis</label>
+        <select class="form-select" name="eye_data_<?php echo $eye; ?>[merci_diagnosis]">
+          <option value="normal">Normal</option>
+          <option value="abnormal">Abnormal</option>
+          <option value="no value" selected>No Value</option>
+        </select>
+      </div>
+
+      <div class="col-md-4"></div>
+
+      <div class="col-md-4">
+        <label class="form-label">FAF Grade (1–4)</label>
+        <input type="number" min="1" max="4" class="form-control" name="eye_data_<?php echo $eye; ?>[faf_grade]" placeholder="1–4">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">OCT Score</label>
+        <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[oct_score]" placeholder="e.g., 7.25">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">VF Score</label>
+        <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[vf_score]" placeholder="e.g., 2.40">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Medication Name (optional)</label>
+        <input type="text" class="form-control" name="eye_data_<?php echo $eye; ?>[medication_name]" placeholder="e.g., Hydroxychloroquine">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Dosage</label>
+        <div class="input-group">
+          <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[dosage]" placeholder="e.g., 200">
+          <select class="form-select" name="eye_data_<?php echo $eye; ?>[dosage_unit]" style="max-width:110px">
+            <option value="mg" selected>mg</option>
+            <option value="g">g</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Duration (days)</label>
+        <input type="number" min="0" class="form-control" name="eye_data_<?php echo $eye; ?>[duration_days]" placeholder="e.g., 90">
+      </div>
+
+      <div class="col-md-4">
+        <label class="form-label">Cumulative Dosage</label>
+        <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[cumulative_dosage]" placeholder="e.g., 1800">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Date of Continuation</label>
+        <input type="date" class="form-control" name="eye_data_<?php echo $eye; ?>[date_of_continuation]">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Treatment Notes</label>
+        <input type="text" class="form-control" name="eye_data_<?php echo $eye; ?>[treatment_notes]" placeholder="Optional notes">
+      </div>
+    </div>
+
+    <hr class="my-4">
+
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label">FAF Image (PNG/JPG)</label>
+        <div class="dropzone"><i class="bi bi-cloud-arrow-up"></i> Drop file or click</div>
+        <input type="file" class="form-control mt-2" name="image_faf_<?php echo strtolower($eye); ?>" accept="image/png,image/jpeg" hidden>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">OCT Image (PNG/JPG)</label>
+        <div class="dropzone"><i class="bi bi-cloud-arrow-up"></i> Drop file or click</div>
+        <input type="file" class="form-control mt-2" name="image_oct_<?php echo strtolower($eye); ?>" accept="image/png,image/jpeg" hidden>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">VF Report (PDF)</label>
+        <div class="dropzone"><i class="bi bi-cloud-arrow-up"></i> Drop file or click</div>
+        <input type="file" class="form-control mt-2" name="image_vf_<?php echo strtolower($eye); ?>" accept="application/pdf" hidden>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">MFERG Image (PNG/JPG)</label>
+        <div class="dropzone"><i class="bi bi-cloud-arrow-up"></i> Drop file or click</div>
+        <input type="file" class="form-control mt-2" name="image_mferg_<?php echo strtolower($eye); ?>" accept="image/png,image/jpeg" hidden>
+      </div>
+    </div>
+  </div>
+</div>
+<?php
+    return ob_get_clean();
+}
 ?>
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<title>Add Medication</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<title>Data Entry — Full & Medications Only</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+<style>
+:root{
+  --brand:#1a73e8; --brand2:#6ea8fe; --ok:#198754; --warn:#f59f00; --danger:#dc3545;
+  --bg:#f6f8fb; --card:#ffffff; --border:#e7eaf0; --muted:#6c757d; --shadow:0 10px 28px rgba(16,24,40,.08);
+}
+body { background:var(--bg); }
+.card { border:1px solid var(--border); box-shadow:var(--shadow); }
+.badge-bg { background: linear-gradient(135deg, var(--brand2), var(--brand)); }
+.help { color: var(--muted); font-size:.875rem; }
+input[type=file]::file-selector-button{ border:1px solid var(--border); border-radius:.5rem; padding:.375rem .75rem; margin-right:.75rem; background:#f8f9fb; }
+.dropzone { border:1px dashed var(--border); border-radius:.75rem; padding:1rem; text-align:center; background:#fafbff;}
+.dropzone.dragover { background:#eef3ff; }
+.section-title { display:flex; align-items:center; gap:.5rem; }
+.nav-pills .nav-link.active{ background:var(--brand); }
+
+/* meds */
+.meds-row{ background:#fbfcff; border:1px solid var(--border); border-radius:.75rem; padding:1rem; margin-bottom: .75rem;}
+.meds-row .form-label{ margin-bottom: .25rem; }
+.meds-row .del-row{ visibility:hidden;}
+.meds-row:hover .del-row{ visibility:visible;}
+.meds-chip{ display:inline-block; padding:.25rem .6rem; border-radius:999px; border:1px solid var(--border); background:#f2f7ff; }
+
+.toast-container{ z-index:1080; }
+</style>
 </head>
-<body class="bg-light">
-<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+<body>
+<nav class="navbar navbar-light bg-white border-bottom">
   <div class="container-fluid">
-    <a class="navbar-brand" href="index.php"><i class="bi bi-capsule-pill"></i> Hydroxychloroquine Repo</a>
-    <div class="ms-auto">
-      <a href="index.php#patients" class="btn btn-outline-secondary">Back to Patients</a>
+    <a class="navbar-brand fw-semibold" href="index.php"><i class="bi bi-people"></i> Patient Dashboard</a>
+    <div class="d-flex gap-2">
+      <a href="csv_import.php" class="btn btn-primary"><i class="bi bi-upload"></i> Import CSV</a>
     </div>
   </div>
 </nav>
 
 <div class="container py-4">
-  <div class="row justify-content-center">
-    <div class="col-lg-7">
-      <div class="card shadow-sm">
-        <div class="card-body">
-          <h5 class="card-title mb-3"><i class="bi bi-capsule-pill"></i> Add Medication</h5>
-
-          <?php if ($flash['type']): ?>
-            <div class="alert alert-<?= htmlspecialchars($flash['type']) ?>">
-              <?= htmlspecialchars($flash['msg']) ?>
-            </div>
-          <?php endif; ?>
-
-          <form method="post" novalidate>
-            <input type="hidden" name="save_medication" value="1">
-
-            <div class="mb-3">
-              <label class="form-label">Subject or Patient ID</label>
-              <input type="text" name="subject_or_patient_id" class="form-control"
-                     placeholder="e.g. SUBJ001 or P_abcdef123456..." required>
-              <div class="form-text">
-                This can be the <strong>Subject ID</strong> or the <strong>Patient ID</strong>. We’ll link it correctly.
-              </div>
-            </div>
-
-            <div class="row g-3">
-              <div class="col-md-8">
-                <label class="form-label">Medication name</label>
-                <input type="text" name="medication_name" class="form-control" required>
-              </div>
-              <div class="col-md-4">
-                <label class="form-label">Dosage per day</label>
-                <input type="number" step="0.001" name="dosage_per_day" class="form-control" placeholder="e.g. 200">
-              </div>
-            </div>
-
-            <div class="row g-3 mt-1">
-              <div class="col-md-4">
-                <label class="form-label">Duration (days)</label>
-                <input type="number" name="duration_days" class="form-control">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label">Cumulative dosage</label>
-                <input type="number" step="0.001" name="cumulative_dosage" class="form-control">
-              </div>
-              <div class="col-md-4">
-                <label class="form-label">Start date</label>
-                <input type="date" name="start_date" class="form-control">
-              </div>
-            </div>
-
-            <div class="row g-3 mt-1">
-              <div class="col-md-4">
-                <label class="form-label">End date</label>
-                <input type="date" name="end_date" class="form-control">
-              </div>
-              <div class="col-md-8">
-                <label class="form-label">Notes</label>
-                <input type="text" name="notes" class="form-control" placeholder="Optional">
-              </div>
-            </div>
-
-            <div class="mt-4 d-flex gap-2">
-              <button class="btn btn-primary"><i class="bi bi-check"></i> Save</button>
-              <a class="btn btn-outline-secondary" href="index.php#patients">Cancel</a>
-            </div>
-          </form>
-
-          <?php if (!empty($debug)): ?>
-            <details class="mt-3">
-              <summary>Debug</summary>
-              <pre class="small bg-light border p-2"><?php echo htmlspecialchars(print_r($debug, true)); ?></pre>
-              <?php if ($conn->error) { ?>
-                <div class="alert alert-warning small mt-2">MySQLi error: <code><?= htmlspecialchars($conn->error) ?></code></div>
-              <?php } ?>
-            </details>
-          <?php endif; ?>
-
+  <div class="row g-4">
+    <div class="col-12">
+      <div class="card p-3 p-md-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h1 class="h4 m-0 section-title"><span class="badge badge-bg text-white">New / Edit</span> Data Entry</h1>
+          <a href="index.php" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back</a>
         </div>
-      </div>
 
-      <div class="text-muted small mt-3">
-        After saving, you’ll see the medication listed under the patient in <em>index.php</em>.
+        <?php if ($successMessage): ?>
+          <div class="alert alert-success"><i class="bi bi-check-circle"></i> <?= htmlspecialchars($successMessage) ?></div>
+        <?php elseif ($errorMessage): ?>
+          <div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <?= htmlspecialchars($errorMessage) ?></div>
+        <?php endif; ?>
+
+        <!-- Mode tabs -->
+        <ul class="nav nav-pills mb-3" id="modeTabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button class="nav-link <?= $activeTab==='full'?'active':'' ?>" id="tab-full" data-bs-toggle="pill" data-bs-target="#pane-full" type="button" role="tab">Full Entry</button>
+          </li>
+          <li class="nav-item" role="presentation">
+            <button class="nav-link <?= $activeTab==='meds'?'active':'' ?>" id="tab-meds" data-bs-toggle="pill" data-bs-target="#pane-meds" type="button" role="tab">Medications Only</button>
+          </li>
+        </ul>
+
+        <div class="tab-content" id="modeTabsContent">
+
+          <!-- ================= FULL ENTRY ================= -->
+          <div class="tab-pane fade <?= $activeTab==='full'?'show active':'' ?>" id="pane-full" role="tabpanel">
+            <div id="dup-alert" class="alert alert-warning d-none"><i class="bi bi-exclamation-circle"></i>
+              A record for this <strong>patient + date + eye</strong> already exists. Submitting will update it.</div>
+
+            <form method="post" enctype="multipart/form-data" id="dataForm" novalidate>
+              <input type="hidden" name="mode" value="full" />
+              <!-- Patient -->
+              <div class="card mb-4">
+                <div class="card-body">
+                  <h5 class="mb-3"><i class="bi bi-person-lines-fill"></i> Patient</h5>
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label class="form-label">Subject ID <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" name="subject_id" id="subject_id" required>
+                      <div class="help">We auto-generate a <code>patient_id</code> from this.</div>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Date of Birth <span class="text-danger">*</span></label>
+                      <input type="date" class="form-control" name="date_of_birth" id="date_of_birth" required>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Location</label>
+                      <select class="form-select" name="location" id="location">
+                        <option value="KH">KH</option>
+                        <option value="CHUSJ">CHUSJ</option>
+                        <option value="IWK">IWK</option>
+                        <option value="IVEY">IVEY</option>
+                      </select>
+                    </div>
+                    <div class="col-md-4">
+                      <label class="form-label">Actual Diagnosis</label>
+                      <select class="form-select" name="actual_diagnosis" id="actual_diagnosis">
+                        <option value="ra">RA</option>
+                        <option value="sle">SLE</option>
+                        <option value="sjogren">Sjogren</option>
+                        <option value="other" selected>Other</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Eye tabs -->
+              <ul class="nav nav-pills mb-3" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-bs-toggle="pill" data-bs-target="#od-pane" type="button">Right Eye (OD)</button></li>
+                <li class="nav-item"><button class="nav-link" data-bs-toggle="pill" data-bs-target="#os-pane" type="button">Left Eye (OS)</button></li>
+              </ul>
+              <div class="tab-content">
+                <div class="tab-pane fade show active" id="od-pane"><?php echo eye_block_html('OD'); ?></div>
+                <div class="tab-pane fade" id="os-pane"><?php echo eye_block_html('OS'); ?></div>
+              </div>
+
+              <!-- Medications (optional in Full Entry) -->
+              <div class="card mb-4" id="medications">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h5 class="mb-0"><i class="bi bi-capsule-pill"></i> Medications</h5>
+                    <button type="button" id="addMed" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Add row</button>
+                  </div>
+                  <p class="help mb-3">Enter per-day or per-week dosing. We store <code>input_dosage_value (mg)</code> + <code>input_dosage_period</code>; the DB computes <code>dosage_per_day</code>, <code>duration_days</code>, and <code>cumulative_dosage</code>.</p>
+                  <div id="medsContainer"></div>
+                  <div class="small text-muted">Provide Start/End dates or Months/Days. If both dates given, they take priority.</div>
+                </div>
+              </div>
+
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="syncDates" checked>
+                  <label class="form-check-label" for="syncDates">Keep OS test date in sync with OD</label>
+                </div>
+                <button class="btn btn-lg btn-primary"><i class="bi bi-save"></i> Save</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- ================= MEDS ONLY ================= -->
+          <div class="tab-pane fade <?= $activeTab==='meds'?'show active':'' ?>" id="pane-meds" role="tabpanel">
+            <form method="post" id="medsOnlyForm" novalidate>
+              <input type="hidden" name="mode" value="meds" />
+              <div class="card mb-3">
+                <div class="card-body">
+                  <h5 class="mb-3"><i class="bi bi-capsule"></i> Quick Medications Entry</h5>
+                  <div class="row g-3">
+                    <div class="col-md-6">
+                      <label class="form-label">Patient or Subject ID <span class="text-danger">*</span></label>
+                      <input type="text" class="form-control" name="m_patient_or_subject" id="m_patient_or_subject" placeholder="P_... or SUBJECT..." required>
+                      <div class="help">You can paste either the internal <code>patient_id</code> or the <code>subject_id</code>. We’ll map it.</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card mb-4">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0">Medications</h6>
+                    <button type="button" id="addMed2" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Add row</button>
+                  </div>
+                  <div id="meds2Container"></div>
+                  <div class="small text-muted">Dose can be mg or g; choose per-day or per-week; optional dates or months/days; notes optional.</div>
+                </div>
+              </div>
+
+              <div class="d-flex justify-content-end">
+                <button class="btn btn-lg btn-primary"><i class="bi bi-save"></i> Save Medications</button>
+              </div>
+            </form>
+          </div>
+
+        </div><!-- /tab-content -->
+
       </div>
     </div>
   </div>
 </div>
 
+<!-- Toasts -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="toastOk" class="toast align-items-center text-bg-success border-0" role="alert">
+    <div class="d-flex"><div class="toast-body"><i class="bi bi-check2-circle me-2"></i>Looks good!</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>
+  </div>
+  <div id="toastWarn" class="toast align-items-center text-bg-warning border-0" role="alert">
+    <div class="d-flex"><div class="toast-body"><i class="bi bi-exclamation-triangle me-2"></i>Please complete required fields.</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/crypto-js@4.2.0/crypto-js.js"></script>
+<script>
+// Small utilities
+const $ = (s, r=document)=> r.querySelector(s);
+const $$ = (s, r=document)=> Array.from(r.querySelectorAll(s));
+const toast = id => new bootstrap.Toast(document.getElementById(id));
+
+// md5 (UI hint only)
+function md5(str){ return CryptoJS.MD5(str).toString(); }
+function makeTestId(subject, dateStr){ return (!subject || !dateStr) ? '' : 'T_' + md5(subject+'|'+dateStr).slice(0,20); }
+
+function wireEye(eye){
+  const root = document.getElementById(eye.toLowerCase()+'-block');
+  const date = $('[data-role="date"]', root);
+  const tip  = $('[data-role="testid-tip"]', root);
+  const sub  = $('#subject_id');
+  function updateTip(){
+    const t = makeTestId((sub?.value||'').trim(), date?.value);
+    if (tip) tip.textContent = t ? `Suggested Test ID: ${t}` : 'Suggested Test ID will appear here.';
+  }
+  date?.addEventListener('change', updateTip);
+  sub?.addEventListener('input', updateTip);
+  updateTip();
+
+  // Dropzones
+  $$('.dropzone', root).forEach(dz=>{
+    const inp = dz.nextElementSibling;
+    dz.addEventListener('click', ()=> inp.click());
+    dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
+    dz.addEventListener('drop', e=>{
+      e.preventDefault(); dz.classList.remove('dragover');
+      if (e.dataTransfer.files?.length) { inp.files = e.dataTransfer.files; }
+    });
+  });
+}
+
+// ===== Full Entry — Medications block (same visual as old) =====
+let medIdx = 0;
+function medRowTemplate(i){
+  return `
+  <div class="meds-row" data-med="${i}">
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="fw-semibold">Medication #${i+1}</div>
+      <button class="btn btn-sm btn-outline-danger del-row" type="button"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="row g-3 align-items-end mt-1">
+      <div class="col-md-4">
+        <label class="form-label">Name</label>
+        <input type="text" name="meds[${i}][name]" class="form-control" placeholder="e.g., Hydroxychloroquine">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Dose</label>
+        <div class="input-group">
+          <input type="number" step="0.001" name="meds[${i}][dose]" class="form-control" placeholder="e.g., 200">
+          <select name="meds[${i}][unit]" class="form-select" style="max-width:110px">
+            <option value="mg" selected>mg</option>
+            <option value="g">g</option>
+          </select>
+          <select name="meds[${i}][freq]" class="form-select" style="max-width:140px">
+            <option value="per_day" selected>/day</option>
+            <option value="per_week">/week</option>
+          </select>
+        </div>
+        <div class="help">Stored as mg/day (DB computes). Dose is required if a name is set.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Notes</label>
+        <input type="text" name="meds[${i}][notes]" class="form-control" placeholder="Optional notes">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Start</label>
+        <input type="date" name="meds[${i}][start_date]" class="form-control js-start">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">End</label>
+        <input type="date" name="meds[${i}][end_date]" class="form-control js-end">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Duration (months)</label>
+        <input type="number" min="0" name="meds[${i}][months]" class="form-control js-months" placeholder="e.g., 6">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Duration (days)</label>
+        <input type="number" min="0" name="meds[${i}][days]" class="form-control js-days" placeholder="e.g., 90">
+      </div>
+
+      <div class="col-12">
+        <div class="small text-muted">
+          <span class="meds-chip"><strong>Preview:</strong> <span class="js-preview">—</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  `;
+}
+function recalcMedRow(row){
+  const dose = parseFloat($('input[name$="[dose]"]', row)?.value || '');
+  const unit = $('select[name$="[unit]"]', row)?.value || 'mg';
+  const freq = $('select[name$="[freq]"]', row)?.value || 'per_day';
+  const s = $('input.js-start', row)?.value || '';
+  const e = $('input.js-end', row)?.value || '';
+  const months = parseInt($('input.js-months', row)?.value || '0', 10) || 0;
+  const days   = parseInt($('input.js-days', row)?.value || '0', 10) || 0;
+
+  let dose_mg = isFinite(dose) ? dose * (unit === 'g' ? 1000 : 1) : NaN;
+  let per_day = (freq === 'per_week') ? (dose_mg/7) : dose_mg;
+
+  // duration
+  let dur = null;
+  if (s && e) {
+    const sd = new Date(s+'T00:00:00'), ed = new Date(e+'T00:00:00');
+    dur = (ed >= sd) ? Math.round((ed - sd)/(24*3600*1000)) + 1 : 0;
+  } else if ((months || days)) {
+    dur = (months*30 + days);
+  }
+
+  let cum = (isFinite(per_day) && dur !== null) ? (per_day * Math.max(0,dur)) : null;
+  const pv = $('.js-preview', row);
+  const fmt = (n)=> (isFinite(n) && n !== null) ? String(Math.round(n*1000)/1000) : '—';
+  if (pv) pv.textContent = `dosage_per_day ≈ ${fmt(per_day)} mg/day • duration_days = ${dur??'—'} • cumulative ≈ ${fmt(cum)} mg`;
+}
+function addMedRow(){
+  const html = medRowTemplate(medIdx++);
+  $('#medsContainer').insertAdjacentHTML('beforeend', html);
+  const row = $('#medsContainer .meds-row:last-child');
+  $('.del-row', row).addEventListener('click', ()=>{ row.remove(); });
+  $$('input, select', row).forEach(el => {
+    el.addEventListener('input', ()=> recalcMedRow(row));
+    el.addEventListener('change', ()=> recalcMedRow(row));
+  });
+  recalcMedRow(row);
+}
+
+// ===== Medications Only block =====
+let med2Idx = 0;
+function med2RowTemplate(i){
+  return `
+  <div class="meds-row" data-med2="${i}">
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="fw-semibold">Medication #${i+1}</div>
+      <button class="btn btn-sm btn-outline-danger del-row" type="button"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="row g-3 align-items-end mt-1">
+      <div class="col-md-4">
+        <label class="form-label">Name</label>
+        <input type="text" name="meds2[${i}][name]" class="form-control" placeholder="e.g., Hydroxychloroquine">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Dose</label>
+        <div class="input-group">
+          <input type="number" step="0.001" name="meds2[${i}][dose]" class="form-control" placeholder="e.g., 200">
+          <select name="meds2[${i}][unit]" class="form-select" style="max-width:110px">
+            <option value="mg" selected>mg</option>
+            <option value="g">g</option>
+          </select>
+          <select name="meds2[${i}][freq]" class="form-select" style="max-width:140px">
+            <option value="per_day" selected>/day</option>
+            <option value="per_week">/week</option>
+          </select>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Notes</label>
+        <input type="text" name="meds2[${i}][notes]" class="form-control" placeholder="Optional notes">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Start</label>
+        <input type="date" name="meds2[${i}][start_date]" class="form-control js-start2">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">End</label>
+        <input type="date" name="meds2[${i}][end_date]" class="form-control js-end2">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Duration (months)</label>
+        <input type="number" min="0" name="meds2[${i}][months]" class="form-control js-months2" placeholder="e.g., 6">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Duration (days)</label>
+        <input type="number" min="0" name="meds2[${i}][days]" class="form-control js-days2" placeholder="e.g., 90">
+      </div>
+    </div>
+  </div>
+  `;
+}
+function addMed2Row(){
+  const html = med2RowTemplate(med2Idx++);
+  $('#meds2Container').insertAdjacentHTML('beforeend', html);
+  const row = $('#meds2Container .meds-row:last-child');
+  $('.del-row', row).addEventListener('click', ()=>{ row.remove(); });
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Full Entry eye blocks
+  wireEye('OD'); wireEye('OS');
+
+  // Sync dates (OD -> OS)
+  const sync = $('#syncDates');
+  const odDate = $('#od_date_of_test');
+  const osDate = $('#os_date_of_test');
+  function syncNow(){ if (sync?.checked && odDate?.value) osDate.value = odDate.value; }
+  sync?.addEventListener('change', syncNow);
+  odDate?.addEventListener('change', syncNow);
+
+  // Duplicate warning (patient + date + eye)
+  async function checkDup(eye){
+    const subject = $('#subject_id')?.value.trim();
+    const date = eye==='OD' ? $('#od_date_of_test')?.value : $('#os_date_of_test')?.value;
+    if (!subject || !date) return false;
+    const params = new URLSearchParams({check:'1', subject, date, eye});
+    const resp = await fetch(`form.php?${params.toString()}`);
+    const j = await resp.json();
+    return j.ok && j.exists;
+  }
+  async function updateDupBanner(){
+    const a = await checkDup('OD');
+    const b = await checkDup('OS');
+    $('#dup-alert')?.classList.toggle('d-none', !(a || b));
+  }
+  $('#subject_id')?.addEventListener('blur', updateDupBanner);
+  $('#od_date_of_test')?.addEventListener('change', updateDupBanner);
+  $('#os_date_of_test')?.addEventListener('change', updateDupBanner);
+
+  // Full Entry meds
+  $('#addMed')?.addEventListener('click', addMedRow);
+  addMedRow();
+
+  // Meds Only rows
+  $('#addMed2')?.addEventListener('click', addMed2Row);
+  addMed2Row();
+
+  // Client-side minimal checks
+  $('#dataForm')?.addEventListener('submit', (e)=>{
+    const req = ['#subject_id','#date_of_birth'];
+    let ok = true;
+    req.forEach(sel => { if (!$(sel)?.value) ok=false; });
+    // allow submit if at least one eye date OR at least one medication name
+    const hasOD = !!$('#od_date_of_test')?.value;
+    const hasOS = !!$('#os_date_of_test')?.value;
+    const medNames = $$('#medsContainer input[name^="meds"][name$="[name]"]');
+    const hasMed = medNames.length && medNames.some(inp => (inp.value||'').trim() !== '');
+
+    if (!hasOD && !hasOS && !hasMed) ok = false;
+    if (!ok) { e.preventDefault(); toast('toastWarn').show(); }
+    else { /* let server validate more */ }
+  });
+
+  $('#medsOnlyForm')?.addEventListener('submit', (e)=>{
+    let ok = true;
+    if (!$('#m_patient_or_subject')?.value) ok = false;
+    const medNames = $$('#meds2Container input[name^="meds2"][name$="[name]"]');
+    const hasMed = medNames.length && medNames.some(inp => (inp.value||'').trim() !== '');
+    if (!hasMed) ok = false;
+    if (!ok) { e.preventDefault(); toast('toastWarn').show(); }
+  });
+
+  // Dropzone wiring already in wireEye()
+});
+</script>
 </body>
 </html>
