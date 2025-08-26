@@ -73,10 +73,18 @@ CREATE TABLE test_eyes (
     cumulative_dosage DECIMAL(10,2) NULL,
     date_of_continuation VARCHAR(255) NULL,
     treatment_notes TEXT NULL,
-    faf_reference VARCHAR(255) NULL,
-    oct_reference VARCHAR(255) NULL,
-    vf_reference VARCHAR(255) NULL,
-    mferg_reference VARCHAR(255) NULL,
+    faf_reference_OD VARCHAR(255) NULL,
+    faf_reference_OS VARCHAR(255) NULL,
+    
+    oct_reference_OD VARCHAR(255) NULL,
+    oct_reference_OS VARCHAR(255) NULL,
+
+    vf_reference_OD VARCHAR(255) NULL,
+    vf_reference_OS VARCHAR(255) NULL,
+
+    mferg_reference_OD VARCHAR(255) NULL,
+    mferg_reference_OS VARCHAR(255) NULL,
+
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (test_id) REFERENCES tests(test_id) ON DELETE CASCADE,
