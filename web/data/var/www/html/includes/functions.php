@@ -1,11 +1,16 @@
 <?php
 require_once __DIR__ . '/config.php';
 
-/* ---------- helpers ---------- */
-
+/* ---------------------------------------------------
+   INFORMATION_SCHEMA helpers
+--------------------------------------------------- */
 function has_column(mysqli $conn, string $table, string $column): bool {
-    $sql = "SELECT 1 FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1";
+    $sql = "SELECT 1
+              FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ?
+               AND TABLE_NAME   = ?
+               AND COLUMN_NAME  = ?
+             LIMIT 1";
     $stmt = $conn->prepare($sql);
     $db = DB_NAME;
     $stmt->bind_param("sss", $db, $table, $column);
@@ -15,7 +20,28 @@ function has_column(mysqli $conn, string $table, string $column): bool {
     return $ok;
 }
 
-/** Accepts either a patient_id or a subject_id and returns the canonical patients.patient_id */
+/** Is a column VIRTUAL/STORED GENERATED? */
+function is_generated_column(mysqli $conn, string $table, string $column): bool {
+    $sql = "SELECT EXTRA
+              FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = ?
+               AND TABLE_NAME   = ?
+               AND COLUMN_NAME  = ?
+             LIMIT 1";
+    $stmt = $conn->prepare($sql);
+    $db = DB_NAME;
+    $stmt->bind_param("sss", $db, $table, $column);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if (!$row) return false;
+    // EXTRA will contain 'VIRTUAL GENERATED' or 'STORED GENERATED' for generated cols
+    return stripos($row['EXTRA'] ?? '', 'generated') !== false;
+}
+
+/* ---------------------------------------------------
+   Patient ID resolution
+--------------------------------------------------- */
 function resolve_patient_id(mysqli $conn, string $typedId): ?string {
     if ($typedId === '') return null;
 
@@ -36,7 +62,6 @@ function resolve_patient_id(mysqli $conn, string $typedId): ?string {
     return $row['patient_id'] ?? null;
 }
 
-/** Fetch subject_id for a given patient_id */
 function get_patient_subject_id(mysqli $conn, string $patient_id): ?string {
     $stmt = $conn->prepare("SELECT subject_id FROM patients WHERE patient_id = ? LIMIT 1");
     $stmt->bind_param("s", $patient_id);
@@ -46,16 +71,17 @@ function get_patient_subject_id(mysqli $conn, string $patient_id): ?string {
     return $row['subject_id'] ?? null;
 }
 
-/* =========================================================
+/* ---------------------------------------------------
    MEDICATIONS
-   - Fills subject_id if present in schema
-   - Fills input_dosage_value / input_dosage_unit if present
-   ========================================================= */
+   - Skips generated columns (e.g., dosage_per_day)
+   - Populates subject_id (if column exists)
+   - Populates input_dosage_value/unit with safe defaults
+--------------------------------------------------- */
 function insertMedication(
     mysqli $conn,
     string $patient_or_subject_id,
     string $medication_name,
-    ?string $dosage_per_day = null,
+    ?string $dosage_per_day = null,      // will be ignored if column is GENERATED
     ?string $duration_days = null,
     ?string $cumulative_dosage = null,
     ?string $start_date = null,
@@ -68,31 +94,30 @@ function insertMedication(
         throw new InvalidArgumentException('medication_name is required');
     }
 
-    // Resolve to canonical patient_id (accepts subject or patient)
+    // Resolve to canonical patient_id
     $patient_id = resolve_patient_id($conn, $patient_or_subject_id);
     if (!$patient_id) {
         throw new InvalidArgumentException("Unknown patient/subject id: {$patient_or_subject_id}");
     }
 
-    // Optional columns present?
+    // Subject column?
     $hasSubjectCol   = has_column($conn, 'medications', 'subject_id');
+    $subject_id      = $hasSubjectCol ? (get_patient_subject_id($conn, $patient_id) ?? $patient_id) : null;
+
+    // Input dosage columns?
     $hasInputValCol  = has_column($conn, 'medications', 'input_dosage_value');
     $hasInputUnitCol = has_column($conn, 'medications', 'input_dosage_unit');
 
-    $subject_id = $hasSubjectCol ? (get_patient_subject_id($conn, $patient_id) ?? $patient_id) : null;
-
-    // If input_* columns exist, ensure we provide safe values even if nulls were passed
+    // Ensure input_* get safe values (for NOT NULL schemas)
     if ($hasInputValCol) {
         if ($input_dosage_value === null || $input_dosage_value === '') {
-            // Try to derive from dosage_per_day like "200", "200 mg", "200mg/day"
+            // Try to derive from dosage_per_day e.g. "200", "200 mg/day"
             $derived = null;
             if ($dosage_per_day !== null && $dosage_per_day !== '') {
                 if (is_numeric($dosage_per_day)) {
                     $derived = $dosage_per_day;
-                } else {
-                    if (preg_match('/([0-9]+(?:\.[0-9]+)?)/', $dosage_per_day, $m)) {
-                        $derived = $m[1];
-                    }
+                } else if (preg_match('/([0-9]+(?:\.[0-9]+)?)/', $dosage_per_day, $m)) {
+                    $derived = $m[1];
                 }
             }
             $input_dosage_value = ($derived !== null) ? (string)$derived : '0';
@@ -100,56 +125,38 @@ function insertMedication(
     }
     if ($hasInputUnitCol) {
         if ($input_dosage_unit === null || $input_dosage_unit === '') {
-            // Best-effort default
             $input_dosage_unit = 'mg';
         }
     }
 
-    // Build dynamic INSERT to include only columns that exist, but
-    // include input_* and subject_id when present to avoid NOT NULL errors.
+    // Helper: include only columns that exist AND are not generated
+    $include = function(string $col) use ($conn): bool {
+        return has_column($conn, 'medications', $col) && !is_generated_column($conn, 'medications', $col);
+    };
+
     $cols = ['patient_id', 'medication_name'];
     $vals = [$patient_id, $medication_name];
 
-    // Subject id if column exists
-    if ($hasSubjectCol) {
-        $cols[] = 'subject_id';
-        $vals[] = $subject_id;
-    }
+    if ($hasSubjectCol) { $cols[] = 'subject_id'; $vals[] = $subject_id; }
 
-    // Common optional columns (add them if they exist in your schema; harmless if NULL)
-    if (has_column($conn, 'medications', 'dosage_per_day')) {
-        $cols[] = 'dosage_per_day'; $vals[] = $dosage_per_day;
-    }
-    if (has_column($conn, 'medications', 'duration_days')) {
-        $cols[] = 'duration_days'; $vals[] = $duration_days;
-    }
-    if (has_column($conn, 'medications', 'cumulative_dosage')) {
-        $cols[] = 'cumulative_dosage'; $vals[] = $cumulative_dosage;
-    }
-    if (has_column($conn, 'medications', 'start_date')) {
-        $cols[] = 'start_date'; $vals[] = $start_date;
-    }
-    if (has_column($conn, 'medications', 'end_date')) {
-        $cols[] = 'end_date'; $vals[] = $end_date;
-    }
-    if (has_column($conn, 'medications', 'notes')) {
-        $cols[] = 'notes'; $vals[] = $notes;
-    }
+    // Skip generated columns (e.g., dosage_per_day)
+    if ($include('dosage_per_day'))   { $cols[] = 'dosage_per_day';    $vals[] = $dosage_per_day; }
+    if ($include('duration_days'))    { $cols[] = 'duration_days';     $vals[] = $duration_days; }
+    if ($include('cumulative_dosage')){ $cols[] = 'cumulative_dosage'; $vals[] = $cumulative_dosage; }
 
-    // Input columns (important for NOT NULL schemas)
-    if ($hasInputValCol) {
-        $cols[] = 'input_dosage_value'; $vals[] = $input_dosage_value;
-    }
-    if ($hasInputUnitCol) {
-        $cols[] = 'input_dosage_unit';  $vals[] = $input_dosage_unit;
-    }
+    if ($include('start_date'))       { $cols[] = 'start_date';        $vals[] = $start_date; }
+    if ($include('end_date'))         { $cols[] = 'end_date';          $vals[] = $end_date; }
+    if ($include('notes'))            { $cols[] = 'notes';             $vals[] = $notes; }
+
+    // Input columns (often NOT NULL)
+    if ($hasInputValCol)  { $cols[] = 'input_dosage_value'; $vals[] = $input_dosage_value; }
+    if ($hasInputUnitCol) { $cols[] = 'input_dosage_unit';  $vals[] = $input_dosage_unit; }
 
     $placeholders = implode(',', array_fill(0, count($cols), '?'));
     $sql = "INSERT INTO medications (" . implode(',', $cols) . ") VALUES ($placeholders)";
     $stmt = $conn->prepare($sql);
 
-    // Bind all as strings (MySQL casts as needed)
-    $types = str_repeat('s', count($vals));
+    $types = str_repeat('s', count($vals)); // bind as strings; MySQL will coerce
     $stmt->bind_param($types, ...$vals);
 
     if (!$stmt->execute()) {
@@ -162,10 +169,9 @@ function insertMedication(
     return (int)$newId;
 }
 
-/* =========================================================
-   OTHER HELPERS (unchanged from your previous version)
-   ========================================================= */
-
+/* ---------------------------------------------------
+   (Your existing helpers left intact)
+--------------------------------------------------- */
 function generatePatientId($subject_id) {
     return 'P_' . substr(md5($subject_id), 0, 20);
 }
