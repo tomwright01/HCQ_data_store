@@ -5,105 +5,140 @@ require_once 'includes/functions.php';
 set_time_limit(0);
 ini_set('memory_limit', '1024M');
 
-// ------------ Config ------------
-const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50 MB
+/* ----------------------------
+   Config
+----------------------------- */
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024; // 50MB
+
+// Display name => subdir name
 $ALLOWED_TEST_TYPES = [
-    'FAF'   => 'faf',
-    'OCT'   => 'oct',
-    'VF'    => 'vf',
-    'MFERG' => 'mferg'
-];
-$ALLOWED_MIME = [
-    'image/png'               => 'png',
-    'application/pdf'         => 'pdf',
-    'application/octet-stream'=> 'bin' // allow generic for .exp
+  'FAF'   => 'faf',
+  'OCT'   => 'oct',
+  'VF'    => 'vf',
+  'MFERG' => 'mferg'
 ];
 
-// ------------ Helpers ------------
+$ALLOWED_EXTS = [
+  'FAF'   => ['png', 'pdf'],
+  'OCT'   => ['png', 'pdf'],
+  'VF'    => ['png', 'pdf'],
+  'MFERG' => ['png', 'pdf', 'exp'], // mfERG also supports .exp
+];
+
+/* ----------------------------
+   Helpers
+----------------------------- */
 function respond_json($ok, $msg, $extra = []) {
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode(array_merge(['status' => $ok ? 'success' : 'error', 'message' => $msg], $extra));
     exit;
 }
+
 function sanitize_filename($name) {
     $name = preg_replace('/[^A-Za-z0-9._-]/', '_', $name);
     return substr($name, 0, 255);
 }
-// Ensure a test for (patient_id, Y-m-d). Returns test_id.
-function ensure_test_for_patient_date(mysqli $conn, string $patientId, string $dateYmd): string {
-    $date_sql = DateTime::createFromFormat('Ymd', $dateYmd);
-    if (!$date_sql) { throw new RuntimeException('Bad date in filename'); }
-    $date_sql = $date_sql->format('Y-m-d');
 
-    $q = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
-    $q->bind_param('ss', $patientId, $date_sql);
-    $q->execute();
-    $res = $q->get_result();
-    if ($row = $res->fetch_assoc()) return $row['test_id'];
+/**
+ * Ensure there is a tests row for (patient, date). Return test_id.
+ */
+function get_or_create_test(mysqli $conn, string $patientId, string $dateYmd): string {
+    $sqlDate = DateTime::createFromFormat('Ymd', $dateYmd)->format('Y-m-d');
 
-    $testId = $patientId . '_' . str_replace('-', '', $date_sql) . '_' . substr(bin2hex(random_bytes(2)), 0, 4);
+    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ?");
+    $stmt->bind_param('ss', $patientId, $sqlDate);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    if ($row = $res->fetch_assoc()) {
+        return $row['test_id'];
+    }
+
+    $testId = $patientId . '_' . $dateYmd . '_' . substr(bin2hex(random_bytes(2)), 0, 4);
     $ins = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test) VALUES (?, ?, ?)");
-    $ins->bind_param('sss', $testId, $patientId, $date_sql);
-    if (!$ins->execute()) throw new RuntimeException('DB insert error (tests): ' . $conn->error);
+    $ins->bind_param('sss', $testId, $patientId, $sqlDate);
+    if (!$ins->execute()) {
+        throw new RuntimeException('DB insert error (tests): ' . $conn->error);
+    }
     return $testId;
 }
-// Ensure test_eyes row exists
+
+/**
+ * Ensure there is a test_eyes row for (test_id, eye).
+ */
 function ensure_test_eye(mysqli $conn, string $testId, string $eye): void {
-    $q = $conn->prepare("SELECT 1 FROM test_eyes WHERE test_id = ? AND eye = ?");
+    $q = $conn->prepare("SELECT result_id FROM test_eyes WHERE test_id = ? AND eye = ?");
     $q->bind_param('ss', $testId, $eye);
     $q->execute();
     $res = $q->get_result();
-    if ($res && $res->fetch_row()) return;
+    if ($res && $res->fetch_assoc()) return;
 
     $ins = $conn->prepare("INSERT INTO test_eyes (test_id, eye) VALUES (?, ?)");
     $ins->bind_param('ss', $testId, $eye);
-    if (!$ins->execute()) throw new RuntimeException('DB insert error (test_eyes): ' . $conn->error);
-}
-// Which column to update in test_eyes
-function eye_reference_col(string $type): ?string {
-    switch (strtoupper($type)) {
-        case 'FAF':   return 'faf_reference';
-        case 'OCT':   return 'oct_reference';
-        case 'VF':    return 'vf_reference';
-        case 'MFERG': return 'mferg_reference';
-        default:      return null;
+    if (!$ins->execute()) {
+        throw new RuntimeException('DB insert error (test_eyes): ' . $conn->error);
     }
 }
-// Save file under uploads/<type>/<YYYY>/<MM>/..., return ['stored'=>filename,'path'=>fullpath]
-function save_uploaded_file(array $file, string $type, string $originalName): array {
-    global $ALLOWED_TEST_TYPES, $ALLOWED_MIME;
 
-    if (!isset($ALLOWED_TEST_TYPES[$type])) throw new RuntimeException('Invalid test type.');
+/**
+ * Map modality + eye to the correct column in test_eyes (per your schema).
+ * Returns e.g. faf_reference_OD, oct_reference_OS, etc.
+ */
+function reference_column(string $testType, string $eye): string {
+    $eye = strtoupper($eye) === 'OS' ? 'OS' : 'OD';
+    switch (strtoupper($testType)) {
+        case 'FAF':   return "faf_reference_{$eye}";
+        case 'OCT':   return "oct_reference_{$eye}";
+        case 'VF':    return "vf_reference_{$eye}";
+        case 'MFERG': return "mferg_reference_{$eye}";
+        default: throw new RuntimeException('Unsupported test type');
+    }
+}
+
+/**
+ * Save uploaded file to uploads/<type>/<YYYY>/<MM>/<unique>.ext and return [path, stored]
+ * We store only the basename (stored) in the DB.
+ */
+function save_uploaded_file(array $file, string $testType, string $originalName, array $ALLOWED_TEST_TYPES, array $ALLOWED_EXTS): array {
     if ($file['error'] !== UPLOAD_ERR_OK)  throw new RuntimeException('Upload error code: ' . $file['error']);
-    if ($file['size'] > MAX_UPLOAD_BYTES)  throw new RuntimeException('File too large.');
+    if ($file['size'] > MAX_UPLOAD_BYTES)  throw new RuntimeException('File too large');
 
-    $mime = mime_content_type($file['tmp_name']) ?: '';
-    $ext  = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    $ext = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+    if (!in_array($ext, $ALLOWED_EXTS[$testType] ?? [], true)) {
+        throw new RuntimeException("Unsupported file type for {$testType}. Allowed: " . implode(', ', $ALLOWED_EXTS[$testType] ?? []));
+    }
 
-    $extAllowed  = in_array($ext, ['png','pdf']) || ($type === 'MFERG' && $ext === 'exp');
-    $mimeAllowed = isset($ALLOWED_MIME[$mime]) || ($type === 'MFERG' && $ext === 'exp');
-    if (!$extAllowed || !$mimeAllowed) throw new RuntimeException('Unsupported file type.');
-
-    $dir = 'uploads/' . $ALLOWED_TEST_TYPES[$type] . '/' . date('Y') . '/' . date('m');
-    if (!is_dir($dir) && !mkdir($dir, 0775, true)) throw new RuntimeException('Failed to create upload folder.');
+    $dir = 'uploads/' . $ALLOWED_TEST_TYPES[$testType] . '/' . date('Y') . '/' . date('m');
+    if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
+        throw new RuntimeException('Failed to create upload folders');
+    }
 
     $base = pathinfo($originalName, PATHINFO_FILENAME);
     $safe = sanitize_filename($base) . '.' . $ext;
 
+    // Avoid collisions
     $target = $dir . '/' . $safe;
-    for ($i=1; file_exists($target); $i++) {
+    $i = 1;
+    while (file_exists($target)) {
         $target = $dir . '/' . sanitize_filename($base) . "_{$i}." . $ext;
+        $i++;
     }
+
     if (!move_uploaded_file($file['tmp_name'], $target)) {
-        throw new RuntimeException('Failed to move uploaded file.');
+        throw new RuntimeException('Failed to move uploaded file');
     }
-    return ['stored' => basename($target), 'path' => $target];
+
+    return ['path' => $target, 'stored' => basename($target)];
 }
-// Core: process 1 file -> writes to test_eyes.<modality>_reference
-function process_one_file(mysqli $conn, string $testType, string $filename, array $fileInfo): array {
-    $pattern = (strtoupper($testType) === 'MFERG')
-        ? '/^([A-Za-z0-9-]+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
-        : '/^([A-Za-z0-9-]+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
+
+/**
+ * Process a single file whose filename encodes patient/eye/date, e.g.:
+ *   P_12345_OD_20250131.png   (MFERG also supports .exp)
+ */
+function process_one_file(mysqli $conn, string $testType, string $filename, array $fileInfo, array $ALLOWED_TEST_TYPES, array $ALLOWED_EXTS): array {
+    $isMferg = strtoupper($testType) === 'MFERG';
+    $pattern = $isMferg
+        ? '/^([A-Za-z0-9_-]+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
+        : '/^([A-Za-z0-9_-]+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
 
     if (!preg_match($pattern, $filename, $m)) {
         return ['ok' => false, 'msg' => 'Filename must be PatientID_OD|OS_YYYYMMDD.ext'];
@@ -113,39 +148,54 @@ function process_one_file(mysqli $conn, string $testType, string $filename, arra
     $eye       = strtoupper($m[2]); // OD/OS
     $dateYmd   = $m[3];
 
-    if (!in_array($eye, ['OD','OS'], true)) return ['ok'=>false,'msg'=>'Eye must be OD or OS'];
+    if (!in_array($eye, ['OD','OS'], true)) {
+        return ['ok' => false, 'msg' => 'Eye must be OD or OS'];
+    }
 
-    $saved = save_uploaded_file($fileInfo, $testType, $filename);
-    $testId = ensure_test_for_patient_date($conn, $patientId, $dateYmd);
+    // 1) Save file
+    $saved = save_uploaded_file($fileInfo, $testType, $filename, $ALLOWED_TEST_TYPES, $ALLOWED_EXTS);
+
+    // 2) Ensure tests row
+    $testId = get_or_create_test($conn, $patientId, $dateYmd);
+
+    // 3) Ensure test_eyes row for this eye
     ensure_test_eye($conn, $testId, $eye);
 
-    $col = eye_reference_col($testType);
-    if (!$col) return ['ok'=>false,'msg'=>'Unsupported test type'];
-
-    $sql = "UPDATE test_eyes SET {$col} = ?, updated_at = CURRENT_TIMESTAMP WHERE test_id = ? AND eye = ?";
+    // 4) Update the proper column in test_eyes for this eye
+    $col = reference_column($testType, $eye); // e.g., faf_reference_OD
+    $sql = "UPDATE test_eyes SET {$col} = ? WHERE test_id = ? AND eye = ?";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param('sss', $saved['stored'], $testId, $eye);
-    if (!$stmt->execute()) return ['ok'=>false,'msg'=>'DB error: '.$conn->error];
+    if (!$stmt->execute()) {
+        return ['ok' => false, 'msg' => 'DB error: ' . $conn->error];
+    }
 
-    return ['ok' => true, 'msg' => "{$testType} image saved for {$eye}", 'test_id' => $testId, 'eye' => $eye];
+    return ['ok' => true, 'msg' => "{$testType} file saved for {$eye}", 'test_id' => $testId, 'eye' => $eye, 'stored' => $saved['stored']];
 }
 
-// ------------ API (bulk via fetch) ------------
+/* ----------------------------
+   API: Bulk (folder) via fetch
+----------------------------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
     $testType = $_POST['test_type'] ?? '';
     if (!isset($ALLOWED_TEST_TYPES[$testType])) respond_json(false, 'Invalid test type');
     if (!isset($_FILES['image'])) respond_json(false, 'No file provided');
 
     try {
-        $result = process_one_file($conn, $testType, $_FILES['image']['name'], $_FILES['image']);
-        $result['ok'] ? respond_json(true, $result['msg'], ['test_id'=>$result['test_id'],'eye'=>$result['eye']])
-                      : respond_json(false, $result['msg']);
+        $result = process_one_file($conn, $testType, $_FILES['image']['name'], $_FILES['image'], $ALLOWED_TEST_TYPES, $ALLOWED_EXTS);
+        if ($result['ok']) {
+            respond_json(true, $result['msg'], ['test_id' => $result['test_id'], 'eye' => $result['eye'], 'file' => $result['stored']]);
+        } else {
+            respond_json(false, $result['msg']);
+        }
     } catch (Throwable $e) {
         respond_json(false, $e->getMessage());
     }
 }
 
-// ------------ Single submit (form POST) ------------
+/* ----------------------------
+   Single upload (form POST)
+----------------------------- */
 $flash = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
     $testType   = $_POST['test_type'] ?? '';
@@ -158,19 +208,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
         if (!$patientId) throw new RuntimeException('Patient ID required');
         if (!$testDate)  throw new RuntimeException('Test date required');
         if (!in_array($eye, ['OD','OS'], true)) throw new RuntimeException('Eye must be OD or OS');
-        if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) throw new RuntimeException('Upload failed');
+        if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+            throw new RuntimeException('Upload failed');
+        }
 
-        // Build synthetic filename so we can reuse the same parser
+        // Build a synthetic filename so the same parser can be used:
         $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION));
         if ($ext === '') $ext = 'png';
+        if (!in_array($ext, $ALLOWED_EXTS[$testType] ?? [], true)) {
+            throw new RuntimeException("Unsupported file type for {$testType}. Allowed: " . implode(', ', $ALLOWED_EXTS[$testType] ?? []));
+        }
         $synthetic = $patientId . '_' . $eye . '_' . str_replace('-', '', $testDate) . '.' . $ext;
 
-        $res = process_one_file($conn, $testType, $synthetic, $_FILES['image']);
+        $res = process_one_file($conn, $testType, $synthetic, $_FILES['image'], $ALLOWED_TEST_TYPES, $ALLOWED_EXTS);
         $flash = $res['ok']
-            ? ['type'=>'success','text'=>$res['msg'] . " (Test ID: {$res['test_id']})"]
-            : ['type'=>'danger','text'=>$res['msg']];
+          ? ['type' => 'success', 'text' => $res['msg'] . " (Test ID: {$res['test_id']})"]
+          : ['type' => 'danger',  'text' => $res['msg']];
     } catch (Throwable $e) {
-        $flash = ['type'=>'danger','text'=>$e->getMessage()];
+        $flash = ['type' => 'danger', 'text' => $e->getMessage()];
     }
 }
 ?>
@@ -188,6 +243,7 @@ body{background:#f7f8fb}
 .card-header{background:linear-gradient(135deg,#6ea8fe 0%,#1a73e8 100%); color:#fff}
 .progress-sm{height:12px}
 .list-scroll{max-height:260px; overflow:auto}
+.badge-eye{font-size:.8rem}
 </style>
 </head>
 <body>
@@ -237,11 +293,11 @@ body{background:#f7f8fb}
               </select>
             </div>
             <div>
-              <label class="form-label">File (PNG/PDF, MFERG allows .exp)</label>
+              <label class="form-label">File (PNG/PDF; mfERG also .exp)</label>
               <input type="file" name="image" class="form-control" accept="image/png,.pdf,.exp" required>
             </div>
             <button class="btn btn-primary mt-2" type="submit" name="import"><i class="bi bi-cloud-upload"></i> Upload</button>
-            <div class="form-text">For bulk, filenames must follow <code>PatientID_OD|OS_YYYYMMDD.ext</code>.</div>
+            <div class="form-text">For bulk, ensure filenames follow <code>PatientID_OD|OS_YYYYMMDD.ext</code>.</div>
           </form>
         </div>
       </div>
@@ -355,3 +411,4 @@ document.getElementById('startUpload').addEventListener('click', async () => {
 </script>
 </body>
 </html>
+
