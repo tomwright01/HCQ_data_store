@@ -9,13 +9,15 @@ header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
-// ---------- helpers ----------
+/* =========================
+   helpers
+   ========================= */
 
 function hasColumn(mysqli $conn, string $table, string $column): bool {
     $sql = "SELECT 1 FROM information_schema.COLUMNS 
             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1";
     $stmt = $conn->prepare($sql);
-    $db = DB_NAME;
+    $db = DB_NAME; // set in includes/config.php
     $stmt->bind_param("sss", $db, $table, $column);
     $stmt->execute();
     $ok = (bool)$stmt->get_result()->fetch_row();
@@ -34,7 +36,6 @@ function patientExists(mysqli $conn, string $patientId): bool {
 
 /** Ensure a tests row exists; return test_id */
 function ensureTest(mysqli $conn, string $patientId, string $dateYmd): string {
-    // Try to find by patient + date
     $dateSql = DateTime::createFromFormat('Ymd', $dateYmd)->format('Y-m-d');
     $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ? LIMIT 1");
     $stmt->bind_param("ss", $patientId, $dateSql);
@@ -43,18 +44,11 @@ function ensureTest(mysqli $conn, string $patientId, string $dateYmd): string {
     $stmt->close();
     if ($row && !empty($row['test_id'])) return $row['test_id'];
 
-    // Create a new test_id (deterministic-ish but unique)
+    // Create deterministic-ish unique test id
     $testId = $patientId . '_' . $dateYmd . '_' . substr(md5(uniqid('', true)), 0, 6);
 
-    // Insert minimal row; include eye if that column exists (optional)
-    $hasEyeCol = hasColumn($conn, 'tests', 'eye');
-    if ($hasEyeCol) {
-        $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test, eye) VALUES (?, ?, ?, NULL)");
-        $stmt->bind_param("sss", $testId, $patientId, $dateSql);
-    } else {
-        $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test) VALUES (?, ?, ?)");
-        $stmt->bind_param("sss", $testId, $patientId, $dateSql);
-    }
+    $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test) VALUES (?, ?, ?)");
+    $stmt->bind_param("sss", $testId, $patientId, $dateSql);
     $stmt->execute();
     $stmt->close();
     return $testId;
@@ -62,7 +56,6 @@ function ensureTest(mysqli $conn, string $patientId, string $dateYmd): string {
 
 /** Ensure a test_eyes row exists for (test_id, eye) */
 function ensureTestEye(mysqli $conn, string $testId, string $eye): void {
-    // Try to find existing
     $stmt = $conn->prepare("SELECT 1 FROM test_eyes WHERE test_id = ? AND eye = ? LIMIT 1");
     $stmt->bind_param("ss", $testId, $eye);
     $stmt->execute();
@@ -70,56 +63,70 @@ function ensureTestEye(mysqli $conn, string $testId, string $eye): void {
     $stmt->close();
     if ($exists) return;
 
-    // Insert empty eye row
     $stmt = $conn->prepare("INSERT INTO test_eyes (test_id, eye) VALUES (?, ?)");
     $stmt->bind_param("ss", $testId, $eye);
     $stmt->execute();
     $stmt->close();
 }
 
-/** Move file to /data/<Modality>/Filename and upsert DB refs (tests + test_eyes) */
+/**
+ * Save file and write refs to DB:
+ * - Saves to IMAGE_BASE_DIR/<ModalityDir>/<PatientID>_<EYE>_<YYYYMMDD>.<ext>
+ * - Writes to test_eyes.<modality>_reference_OD|OS (primary)
+ * - Optionally backfills tests.<modality>_reference_od|os if columns exist
+ */
 function processImage(mysqli $conn, string $testType, string $finalName, string $patientId, string $eye, string $dateYmd): array {
     $modality = strtoupper($testType);
-    if (!array_key_exists($modality, ALLOWED_TEST_TYPES)) {
+    if (!defined('ALLOWED_TEST_TYPES') || !is_array(ALLOWED_TEST_TYPES) || !array_key_exists($modality, ALLOWED_TEST_TYPES)) {
         return ['success' => false, 'message' => "Invalid test type"];
     }
 
-    // Save file to correct folder
+    // 1) Save the file
     $dirName   = ALLOWED_TEST_TYPES[$modality];
     $targetDir = rtrim(IMAGE_BASE_DIR, '/')."/{$dirName}/";
     if (!is_dir($targetDir)) { @mkdir($targetDir, 0777, true); }
-    $tmp = $_FILES['image']['tmp_name'] ?? null;  // will be set by caller before call
+
+    $tmp = $_FILES['image']['tmp_name'] ?? null;
     if (!$tmp || !is_uploaded_file($tmp)) {
         return ['success' => false, 'message' => "Upload failed (tmp not found)"];
     }
     $targetFile = $targetDir . $finalName;
-    if (file_exists($targetFile)) { @unlink($targetFile); }
+    if (is_file($targetFile)) { @unlink($targetFile); }
     if (!move_uploaded_file($tmp, $targetFile)) {
         return ['success' => false, 'message' => "Failed to move file"];
     }
 
-    // Ensure parent rows
+    // 2) Ensure parent rows
     $testId = ensureTest($conn, $patientId, $dateYmd);
     ensureTestEye($conn, $testId, $eye);
 
-    // Build column names
-    $eyeLower = strtolower($eye);
-    $refColTE = strtolower($modality) . '_reference';              // test_eyes: e.g. faf_reference
-    $refColT  = strtolower($modality) . "_reference_{$eyeLower}";  // tests:    e.g. faf_reference_od
+    // 3) Write DB references
+    $modLower = strtolower($modality);           // faf | oct | vf | mferg
+    $eyeLower = strtolower($eye);                // od | os
+    $eyeUpper = ($eye === 'OS') ? 'OS' : 'OD';   // schema uses UPPERCASE suffix
 
-    // Write into test_eyes if the column exists
-    if (hasColumn($conn, 'test_eyes', $refColTE)) {
-        $sql = "UPDATE test_eyes SET $refColTE = ? WHERE test_id = ? AND eye = ?";
-        $stmt = $conn->prepare($sql);
+    // Preferred: test_eyes.<modality>_reference_OD|OS
+    $tePerEye = "{$modLower}_reference_{$eyeUpper}";
+    if (hasColumn($conn, 'test_eyes', $tePerEye)) {
+        $stmt = $conn->prepare("UPDATE test_eyes SET $tePerEye = ? WHERE test_id = ? AND eye = ?");
         $stmt->bind_param("sss", $finalName, $testId, $eye);
         $stmt->execute();
         $stmt->close();
+    } else {
+        // Extremely old installs might only have a single column (not your schema, but we’re defensive)
+        $teSingle = "{$modLower}_reference";
+        if (hasColumn($conn, 'test_eyes', $teSingle)) {
+            $stmt = $conn->prepare("UPDATE test_eyes SET $teSingle = ? WHERE test_id = ? AND eye = ?");
+            $stmt->bind_param("sss", $finalName, $testId, $eye);
+            $stmt->execute();
+            $stmt->close();
+        }
     }
 
-    // Back-compat: also write into tests.(modality_reference_od|os) if exists
-    if (hasColumn($conn, 'tests', $refColT)) {
-        $sql = "UPDATE tests SET $refColT = ? WHERE test_id = ?";
-        $stmt = $conn->prepare($sql);
+    // Back-compat: tests.<modality>_reference_od|os if those columns exist
+    $tPerEye = "{$modLower}_reference_{$eyeLower}";
+    if (hasColumn($conn, 'tests', $tPerEye)) {
+        $stmt = $conn->prepare("UPDATE tests SET $tPerEye = ? WHERE test_id = ?");
         $stmt->bind_param("ss", $finalName, $testId);
         $stmt->execute();
         $stmt->close();
@@ -128,7 +135,7 @@ function processImage(mysqli $conn, string $testType, string $finalName, string 
     return ['success' => true, 'message' => "$finalName processed", 'test_id' => $testId];
 }
 
-/** Validate/normalize filename (bulk path) and route to processImage */
+/** Validate bulk filename and route to processImage */
 function handleSingleFile(mysqli $conn, string $testType, string $tmpName, string $originalName): array {
     // Pattern: 920_OD_20250112.(png|pdf|exp) (exp only allowed for MFERG)
     $allowExp = (strtoupper($testType) === 'MFERG');
@@ -148,13 +155,12 @@ function handleSingleFile(mysqli $conn, string $testType, string $tmpName, strin
         return ['success' => false, 'message' => "Patient $patientId not found"];
     }
 
-    // stash tmp into $_FILES slot expected by processImage
-    $_FILES['image']['tmp_name'] = $tmpName;
+    $_FILES['image']['tmp_name'] = $tmpName; // for processImage
 
     return processImage($conn, $testType, "{$patientId}_{$eye}_{$dateYmd}.{$ext}", $patientId, $eye, $dateYmd);
 }
 
-/** Handle the single-file form (construct canonical filename from fields) */
+/** Handle the single-file HTML form */
 function handleSingleForm(mysqli $conn): array {
     $testType  = $_POST['test_type']  ?? '';
     $patientId = trim($_POST['patient_id'] ?? '');
@@ -170,7 +176,6 @@ function handleSingleForm(mysqli $conn): array {
         return ['success' => false, 'message' => "Patient $patientId not found"];
     }
 
-    // ext from original
     $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
     $allowExp = (strtoupper($testType) === 'MFERG');
     $okExts = $allowExp ? ['png','pdf','exp'] : ['png','pdf'];
@@ -178,20 +183,23 @@ function handleSingleForm(mysqli $conn): array {
         return ['success' => false, 'message' => "Invalid extension .$ext for $testType"];
     }
 
-    // build canonical filename PatientID_EYE_YYYYMMDD.ext
     $dt = DateTime::createFromFormat('Y-m-d', $dateIso);
     if (!$dt) return ['success' => false, 'message' => "Invalid date"];
     $dateYmd = $dt->format('Ymd');
 
-    $_FILES['image']['tmp_name'] = $tmpName; // for processImage()
+    $_FILES['image']['tmp_name'] = $tmpName; // for processImage
 
     return processImage($conn, $testType, "{$patientId}_{$eye}_{$dateYmd}.{$ext}", $patientId, $eye, $dateYmd);
 }
 
-// ---------- AJAX bulk upload ----------
+/* =========================
+   routes
+   ========================= */
+
+// AJAX bulk upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
     $testType = $_POST['test_type'] ?? '';
-    if (!array_key_exists(strtoupper($testType), ALLOWED_TEST_TYPES)) {
+    if (!defined('ALLOWED_TEST_TYPES') || !array_key_exists(strtoupper($testType), ALLOWED_TEST_TYPES)) {
         echo json_encode(['status' => 'error', 'message' => 'Invalid test type']);
         exit;
     }
@@ -206,7 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
     exit;
 }
 
-// ---------- Single file form submit ----------
+// Single file HTML form submit
 $formMessage = null;
 $formClass   = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
@@ -338,7 +346,7 @@ document.getElementById('startUpload').addEventListener('click', async () => {
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const li = document.createElement('li');
-        li.textContent = file.webkitRelativePath;
+        li.textContent = file.webkitRelativePath || file.name;
         fileList.appendChild(li);
 
         const formData = new FormData();
@@ -373,5 +381,3 @@ document.getElementById('startUpload').addEventListener('click', async () => {
 </script>
 </body>
 </html>
-
-
