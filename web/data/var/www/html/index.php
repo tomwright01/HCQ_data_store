@@ -117,7 +117,7 @@ $maxDate = $allDates ? end($allDates) : null;
    Small helpers for view links
 ----------------------------- */
 /**
- * Build a view URL for a modality given test_id & eye
+ * Build a view URL for a modality given patient_id, eye and file ref (filename)
  */
 function build_view_url(string $type, string $patientId, string $eye, string $ref): string {
     $type = strtoupper($type);
@@ -129,7 +129,7 @@ function build_view_url(string $type, string $patientId, string $eye, string $re
         'MFERG' => 'view_mferg.php',
         default => '#',
     };
-    if ($page === '#') return '#';
+    if ($page === '#' || !$ref) return '#';
     return $page
         . '?ref='        . urlencode($ref)
         . '&patient_id=' . urlencode($patientId)
@@ -539,7 +539,7 @@ canvas { max-height: 380px; }
     <div class="row" id="patientContainer">
         <?php foreach ($patients as $patient): ?>
             <?php
-            $tests = getTestsByPatient($conn, $patient['patient_id']);
+            $tests = getTestsByPatient($conn, $patient['patient_id']); // SELECT * FROM tests
             $dob = new DateTime($patient['date_of_birth']);
             $ageYears = $dob->diff(new DateTime())->y;
 
@@ -588,7 +588,7 @@ canvas { max-height: 380px; }
                         <div class="accordion" id="testsAccordion-<?= htmlspecialchars($patient['patient_id']) ?>">
                             <?php foreach ($tests as $test): ?>
                                 <?php
-                                $testEyes = getTestEyes($conn, $test['test_id']);
+                                $testEyes = getTestEyes($conn, $test['test_id']); // SELECT * FROM test_eyes
                                 $testDate = new DateTime($test['date_of_test']);
                                 ?>
                                 <div class="accordion-item test-wrapper"
@@ -613,6 +613,7 @@ canvas { max-height: 380px; }
                                             <?php foreach ($testEyes as $eye): ?>
                                                 <?php
                                                     $eyeSide   = strtoupper($eye['eye']);
+                                                    $eyeLower  = strtolower($eyeSide);
                                                     $eyeClass  = $eyeSide === 'OS' ? 'os-badge' : 'od-badge';
                                                     $diag      = $eye['report_diagnosis'];
                                                     $diagClass = ($diag === 'no input') ? 'no-input' : $diag;
@@ -622,13 +623,17 @@ canvas { max-height: 380px; }
                                                     $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
                                                     $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
 
-                                                    // NEW: get per-eye image references from test_eyes
-                                                   // In the new schema each test_eyes row already knows the eye,
-                                                   // so the reference columns are NOT suffixed with OD/OS.
-                                                   $fafRef   = safe_get($eye, 'faf_reference');
-                                                   $octRef   = safe_get($eye, 'oct_reference');
-                                                   $vfRef    = safe_get($eye, 'vf_reference');
-                                                   $mfergRef = safe_get($eye, 'mferg_reference');
+                                                    // Primary refs from test_eyes (new schema)
+                                                    $fafRef   = safe_get($eye, 'faf_reference');
+                                                    $octRef   = safe_get($eye, 'oct_reference');
+                                                    $vfRef    = safe_get($eye, 'vf_reference');
+                                                    $mfergRef = safe_get($eye, 'mferg_reference');
+
+                                                    // Fallback to tests.<modality>_reference_od|_os (old schema)
+                                                    if (!$fafRef)   $fafRef   = safe_get($test, "faf_reference_{$eyeLower}");
+                                                    if (!$octRef)   $octRef   = safe_get($test, "oct_reference_{$eyeLower}");
+                                                    if (!$vfRef)    $vfRef    = safe_get($test, "vf_reference_{$eyeLower}");
+                                                    if (!$mfergRef) $mfergRef = safe_get($test, "mferg_reference_{$eyeLower}");
 
                                                     $hasAnyMedia = $fafRef || $octRef || $vfRef || $mfergRef;
                                                 ?>
@@ -674,27 +679,35 @@ canvas { max-height: 380px; }
                                                             </div>
                                                         <?php endif; ?>
 
-                                                        <!-- NEW: Attachments / Links to view_* pages -->
+                                                        <!-- Attachments / Links to view_* pages -->
                                                         <?php if ($hasAnyMedia): ?>
                                                         <div class="attachments d-flex flex-wrap align-items-center gap-2 mt-2">
                                                             <span class="badge bg-light text-dark"><i class="bi bi-paperclip"></i> Images / Files</span>
                                                             <?php if ($fafRef): ?>
-                                                              <a class="btn btn-outline-dark btn-sm" href="<?= htmlspecialchars(build_view_url('FAF', $test['test_id'], $eyeSide)) ?>" title="FAF (<?= htmlspecialchars($fafRef) ?>)">
+                                                              <a class="btn btn-outline-dark btn-sm"
+                                                                 href="<?= htmlspecialchars(build_view_url('FAF', $patient['patient_id'], $eyeSide, $fafRef)) ?>"
+                                                                 title="FAF (<?= htmlspecialchars($fafRef) ?>)">
                                                                 <i class="bi bi-image"></i> FAF
                                                               </a>
                                                             <?php endif; ?>
                                                             <?php if ($octRef): ?>
-                                                              <a class="btn btn-outline-dark btn-sm" href="<?= htmlspecialchars(build_view_url('OCT', $test['test_id'], $eyeSide)) ?>" title="OCT (<?= htmlspecialchars($octRef) ?>)">
+                                                              <a class="btn btn-outline-dark btn-sm"
+                                                                 href="<?= htmlspecialchars(build_view_url('OCT', $patient['patient_id'], $eyeSide, $octRef)) ?>"
+                                                                 title="OCT (<?= htmlspecialchars($octRef) ?>)">
                                                                 <i class="bi bi-file-earmark-richtext"></i> OCT
                                                               </a>
                                                             <?php endif; ?>
                                                             <?php if ($vfRef): ?>
-                                                              <a class="btn btn-outline-dark btn-sm" href="<?= htmlspecialchars(build_view_url('VF', $test['test_id'], $eyeSide)) ?>" title="VF (<?= htmlspecialchars($vfRef) ?>)">
+                                                              <a class="btn btn-outline-dark btn-sm"
+                                                                 href="<?= htmlspecialchars(build_view_url('VF', $patient['patient_id'], $eyeSide, $vfRef)) ?>"
+                                                                 title="VF (<?= htmlspecialchars($vfRef) ?>)">
                                                                 <i class="bi bi-grid-3x3-gap"></i> VF
                                                               </a>
                                                             <?php endif; ?>
                                                             <?php if ($mfergRef): ?>
-                                                              <a class="btn btn-outline-dark btn-sm" href="<?= htmlspecialchars(build_view_url('MFERG', $test['test_id'], $eyeSide)) ?>" title="mfERG (<?= htmlspecialchars($mfergRef) ?>)">
+                                                              <a class="btn btn-outline-dark btn-sm"
+                                                                 href="<?= htmlspecialchars(build_view_url('MFERG', $patient['patient_id'], $eyeSide, $mfergRef)) ?>"
+                                                                 title="mfERG (<?= htmlspecialchars($mfergRef) ?>)">
                                                                 <i class="bi bi-activity"></i> mfERG
                                                               </a>
                                                             <?php endif; ?>
@@ -1268,7 +1281,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         });
 
         // Update counters here only if analytics hasn't already overwritten them
-        // (renderAnalytics will set totals; we still set when analytics isn't called)
         if (!filterDOM.skipCounterUpdate) {
             resPatients.textContent = visPatients;
             resTests.textContent    = visTests;
