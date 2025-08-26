@@ -1,6 +1,7 @@
 <?php
 /* =============================================
    index.php — FULL PAGE (with Medications support)
+   (Option A) Display Subject ID as the “Patient ID” in UI/filters
    ============================================= */
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
@@ -19,7 +20,7 @@ if ($res = $conn->query("SELECT COUNT(*) AS c FROM test_eyes")){ $row = $res->fe
 /* ----------------------------
    Server-side analytics (base dataset)
 ----------------------------- */
-// Patients by location (base; charts will re-compute on client for filters)
+// Patients by location (base)
 $byLocation = ['KH' => 0, 'CHUSJ' => 0, 'IWK' => 0, 'IVEY' => 0];
 if ($res = $conn->query("SELECT location, COUNT(*) AS c FROM patients GROUP BY location")) {
     while ($row = $res->fetch_assoc()) {
@@ -47,7 +48,7 @@ if ($res = $conn->query("SELECT eye, AVG(oct_score) AS oct_avg, AVG(vf_score) AS
     }
 }
 
-// Tests over last 12 months (base; charts will re-compute on client)
+// Tests over last 12 months (base)
 $monthLabels = [];
 $countsByMonth = [];
 $now = new DateTimeImmutable('first day of this month');
@@ -146,9 +147,6 @@ $maxDate = $allDates ? end($allDates) : null;
 /* ----------------------------
    Small helpers for view links
 ----------------------------- */
-/**
- * Build a view URL for a modality given patient_id, eye and file ref (filename)
- */
 function build_view_url(string $type, string $patientId, string $eye, string $ref): string {
     $type = strtoupper($type);
     $eye  = ($eye === 'OS') ? 'OS' : 'OD';
@@ -232,24 +230,20 @@ canvas { max-height: 380px; }
 .filter-fab { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: none; }
 .filter-fab .btn { box-shadow: var(--shadow); }
 
-/* Attachments section */
 .attachments { border-top: 1px dashed var(--border); margin-top: .5rem; padding-top: .5rem; }
 .attachments .btn { --bs-btn-padding-y: .2rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .82rem; }
-.attachments .badge { font-weight: 500; }
 
 .diagnosis-badge.normal { background-color: #198754 !important; }
 .diagnosis-badge.abnormal { background-color: #dc3545 !important; }
 .diagnosis-badge.exclude { background-color: #6c757d !important; }
 .diagnosis-badge["no input"], .diagnosis-badge.no-input { background-color: #ffc107 !important; }
 
-/* Meds */
 .med-chip { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .6rem; border:1px solid var(--border);
   border-radius:999px; background:rgba(26,115,232,.06); font-weight:600; margin:.2rem .3rem .2rem 0; }
 .med-chip small { font-weight:500; color:var(--muted); }
 .med-list .list-group-item{ display:flex; justify-content:space-between; align-items:center; }
 .med-metrics{ font-variant-numeric: tabular-nums; color: var(--muted); }
 
-/* Print */
 @media print {
   body { background: #fff !important; }
   nav, .sticky-actions, .filter-fab, .btn, .navbar { display: none !important; }
@@ -279,7 +273,6 @@ canvas { max-height: 380px; }
       </ul>
 
       <div class="d-flex align-items-center gap-2 gap-lg-3">
-        <!-- Dark mode toggle -->
         <div class="form-check form-switch mb-0">
             <input class="form-check-input" type="checkbox" id="darkToggle">
             <label class="form-check-label" for="darkToggle"><i class="bi bi-moon-stars"></i></label>
@@ -294,10 +287,9 @@ canvas { max-height: 380px; }
         <a href="csv_import.php" class="btn btn-primary pill">
             <i class="bi bi-upload"></i> Import CSV
         </a>
-      <a href="export_csv.php" class="btn btn-success pill">
-          <i class="bi bi-download"></i> Export CSV
-      </a>
-
+        <a href="export_csv.php" class="btn btn-success pill">
+            <i class="bi bi-download"></i> Export CSV
+        </a>
       </div>
     </div>
   </div>
@@ -362,7 +354,6 @@ canvas { max-height: 380px; }
         </div>
     </div>
 
-    <!-- Analytics (NOW dynamic — respects patient filters) -->
     <div class="row mb-3" id="analytics">
         <div class="col">
             <h2 class="section-title"><i class="bi bi-graph-up-arrow"></i> Analytics</h2>
@@ -435,19 +426,18 @@ canvas { max-height: 380px; }
     </div>
 
     <!-- ===================== -->
-    <!-- Patient Filters (drive BOTH patients & analytics) -->
+    <!-- Patient Filters -->
     <!-- ===================== -->
     <div class="card mb-4" id="patientFilters">
         <div class="card-body">
-            <!-- Row 1: identifiers + categorical -->
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-lg-3">
-                    <label class="form-label">Patient ID</label>
-                    <input type="text" id="patientIdInput" class="form-control" placeholder="e.g. P_abc123">
+                    <label class="form-label">Patient/Subject ID</label>
+                    <input type="text" id="patientIdInput" class="form-control" placeholder="e.g. SUBJ001">
                 </div>
                 <div class="col-12 col-lg-3">
                     <label class="form-label">Test ID</label>
-                    <input type="text" id="testIdInput" class="form-control" placeholder="e.g. 20240101_OS_XXXX">
+                    <input type="text" id="testIdInput" class="form-control" placeholder="e.g. T_...">
                 </div>
 
                 <div class="col-6 col-lg-2">
@@ -487,7 +477,7 @@ canvas { max-height: 380px; }
                 </div>
             </div>
 
-            <!-- Row 2: aligned blocks (Date range, MERCI, Age, Sort) -->
+            <!-- Row 2 -->
             <div class="row g-3 align-items-end mt-1">
                 <div class="col-12 col-xl-3">
                     <label class="form-label">Date range</label>
@@ -536,7 +526,7 @@ canvas { max-height: 380px; }
                 </div>
             </div>
 
-            <!-- Row 3: options + actions -->
+            <!-- Row 3 -->
             <div class="row g-3 align-items-center mt-2">
                 <div class="col-12 col-lg-3">
                     <div class="form-check">
@@ -556,7 +546,6 @@ canvas { max-height: 380px; }
                 </div>
             </div>
 
-            <!-- Results summary -->
             <div class="mt-3">
                 <span class="badge bg-light text-dark results-badge">
                     Results: <span id="resPatients">0</span> patients • <span id="resTests">0</span> tests • <span id="resEyes">0</span> eye records
@@ -576,11 +565,10 @@ canvas { max-height: 380px; }
     <div class="row" id="patientContainer">
         <?php foreach ($patients as $patient): ?>
             <?php
-            $tests = getTestsByPatient($conn, $patient['patient_id']); // SELECT * FROM tests
+            $tests = getTestsByPatient($conn, $patient['patient_id']);
             $dob = new DateTime($patient['date_of_birth']);
             $ageYears = $dob->diff(new DateTime())->y;
 
-            // compute last test date for sorting
             $lastDate = null;
             if ($tests) {
                 $dates = array_map(fn($t) => $t['date_of_test'], $tests);
@@ -591,7 +579,7 @@ canvas { max-height: 380px; }
             <div class="col-lg-6 patient-item"
                  data-location="<?= htmlspecialchars($patient['location']) ?>"
                  data-subject="<?= htmlspecialchars($patient['subject_id']) ?>"
-                 data-patient-id="<?= htmlspecialchars($patient['subject_id']) ?>"
+                 data-patient-id="<?= htmlspecialchars($patient['subject_id']) ?>"  <!-- Option A: use subject_id for filtering/display -->
                  data-age="<?= (int)$ageYears ?>"
                  data-tests="<?= count($tests) ?>"
                  data-lasttest="<?= htmlspecialchars($lastDate ?? '') ?>">
@@ -690,7 +678,7 @@ canvas { max-height: 380px; }
                         <div class="accordion" id="testsAccordion-<?= htmlspecialchars($patient['patient_id']) ?>">
                             <?php foreach ($tests as $test): ?>
                                 <?php
-                                $testEyes = getTestEyes($conn, $test['test_id']); // SELECT * FROM test_eyes
+                                $testEyes = getTestEyes($conn, $test['test_id']);
                                 $testDate = new DateTime($test['date_of_test']);
                                 ?>
                                 <div class="accordion-item test-wrapper"
@@ -725,25 +713,18 @@ canvas { max-height: 380px; }
                                                     $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
                                                     $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
 
-                                                    // Primary refs from test_eyes (new schema)
-                                                    $fafRef   = safe_get($eye, 'faf_reference');
-                                                    $octRef   = safe_get($eye, 'oct_reference');
-                                                    $vfRef    = safe_get($eye, 'vf_reference');
-                                                    $mfergRef = safe_get($eye, 'mferg_reference');
-
-                                                    // Fallback to tests.<modality>_reference_od|_os (old schema)
-                                                   if ($eyeSide === 'OD') {
-                                                       $fafRef   = safe_get($eye, 'faf_reference_OD');
-                                                       $octRef   = safe_get($eye, 'oct_reference_OD');
-                                                       $vfRef    = safe_get($eye, 'vf_reference_OD');
-                                                       $mfergRef = safe_get($eye, 'mferg_reference_OD');
-                                                   } else {
-                                                       $fafRef   = safe_get($eye, 'faf_reference_OS');
-                                                       $octRef   = safe_get($eye, 'oct_reference_OS');
-                                                       $vfRef    = safe_get($eye, 'vf_reference_OS');
-                                                       $mfergRef = safe_get($eye, 'mferg_reference_OS');
-                                                   }
-
+                                                    // Correct per-eye refs from test_eyes (Option A fix)
+                                                    if ($eyeSide === 'OD') {
+                                                        $fafRef   = safe_get($eye, 'faf_reference_OD');
+                                                        $octRef   = safe_get($eye, 'oct_reference_OD');
+                                                        $vfRef    = safe_get($eye, 'vf_reference_OD');
+                                                        $mfergRef = safe_get($eye, 'mferg_reference_OD');
+                                                    } else {
+                                                        $fafRef   = safe_get($eye, 'faf_reference_OS');
+                                                        $octRef   = safe_get($eye, 'oct_reference_OS');
+                                                        $vfRef    = safe_get($eye, 'vf_reference_OS');
+                                                        $mfergRef = safe_get($eye, 'mferg_reference_OS');
+                                                    }
                                                     $hasAnyMedia = $fafRef || $octRef || $vfRef || $mfergRef;
                                                 ?>
                                                 <div class="card test-card mb-3 eye-row"
@@ -788,7 +769,7 @@ canvas { max-height: 380px; }
                                                             </div>
                                                         <?php endif; ?>
 
-                                                        <!-- Attachments / Links to view_* pages -->
+                                                        <!-- Attachments -->
                                                         <?php if ($hasAnyMedia): ?>
                                                         <div class="attachments d-flex flex-wrap align-items-center gap-2 mt-2">
                                                             <span class="badge bg-light text-dark"><i class="bi bi-paperclip"></i> Images / Files</span>
@@ -913,7 +894,7 @@ canvas { max-height: 380px; }
   </div>
 </div>
 
-<!-- Printable Summary (uses CURRENT analytics state) -->
+<!-- Printable Summary -->
 <section id="printArea" class="container-fluid py-4">
   <h2 class="mb-1">Dataset Summary</h2>
   <p class="text-muted">Generated at <span id="printTime"></span></p>
@@ -962,7 +943,6 @@ const DATA_MIN = <?= $minDate ? '"'.htmlspecialchars($minDate).'"' : 'null' ?>;
 const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
 (function initUI(){
-    // Utilities
     const $  = sel => document.querySelector(sel);
     const $$ = sel => Array.from(document.querySelectorAll(sel));
     const fmt = new Intl.NumberFormat();
@@ -970,7 +950,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     const parseDate = s => s ? new Date(s + 'T00:00:00') : null;
     const fmtISO = d => d ? d.toISOString().slice(0,10) : '';
 
-    // Inputs (PATIENT FILTERS)
     const patientIdInput = $('#patientIdInput');
     const testIdInput    = $('#testIdInput');
     const locSelect      = $('#locationFilter');
@@ -990,7 +969,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     const sortDirBtn     = $('#sortDir');
     const autoExpand     = $('#autoExpand');
 
-    // Results counters + filters badge
     const resPatients = $('#resPatients');
     const resTests    = $('#resTests');
     const resEyes     = $('#resEyes');
@@ -998,7 +976,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     const filtersPill = $('#filtersPill');
     const filtersCount= $('#filtersCount');
 
-    // Print elems (for analytics snapshot)
     const printBtn   = $('#printSummaryBtn');
     const printArea  = $('#printArea');
     const printTime  = $('#printTime');
@@ -1029,7 +1006,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         };
     }
 
-    // ===== Charts (dynamic analytics) =====
     Chart.register(ChartDataLabels);
     const C = {
         brand: '#1a73e8', brandLight:'#6ea8fe',
@@ -1058,7 +1034,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         return g;
     }
 
-    // Base chart shells
     const testsChart = new Chart(document.getElementById('testsOverTime').getContext('2d'), {
         type: 'line',
         data: { labels: [], datasets: [{
@@ -1131,9 +1106,15 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         });
     };
 
-    // ===== Aggregations based on filtered rows =====
     function rowMatchesData(r, f){
-        if (f.patientId && !(r.patient_id||'').toLowerCase().includes(f.patientId)) return false;
+        // NEW: allow filter to match subject_id or patient_id
+        if (f.patientId) {
+            const needle = f.patientId;
+            const pid = (r.patient_id || '').toLowerCase();
+            const sid = (r.subject_id || '').toLowerCase();
+            if (!(pid.includes(needle) || sid.includes(needle))) return false;
+        }
+
         if (f.testId    && !(r.test_id||'').toLowerCase().includes(f.testId)) return false;
 
         if (f.location && r.location !== f.location) return false;
@@ -1157,16 +1138,13 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     function filterRows(){ const f = getFilterState(); return EYE_ROWS.filter(r => rowMatchesData(r, f)); }
 
     function aggregateForAnalytics(rows){
-        // Tests by month (unique test_id per month for last 12 months)
         const end = new Date();
         const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
         const labels=[], values=[];
-        const monthKey = (d) => d.toISOString().slice(0,7);
-
         const setsByMonth = {};
         for(let i=11;i>=0;i--){
             const d = new Date(endMonth); d.setMonth(d.getMonth()-i);
-            const ym = monthKey(d);
+            const ym = d.toISOString().slice(0,7);
             labels.push(d.toLocaleString(undefined,{month:'short',year:'numeric'}));
             setsByMonth[ym] = new Set();
         }
@@ -1176,19 +1154,16 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             const ym = dateStr.slice(0,7);
             if (setsByMonth[ym]) setsByMonth[ym].add(r.test_id);
         });
-        for(const ym of Object.keys(setsByMonth)) values.push(setsByMonth[ym].size);
+        Object.keys(setsByMonth).forEach(ym => values.push(setsByMonth[ym].size));
 
-        // Diagnosis distribution
         const diagCounts = {'normal':0,'abnormal':0,'exclude':0,'no input':0};
         rows.forEach(r=>{ if (diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
 
-        // Patients by location (unique patients per location in filtered rows)
         const locations = ['KH','CHUSJ','IWK','IVEY'];
         const uniqueByLoc = { KH:new Set(), CHUSJ:new Set(), IWK:new Set(), IVEY:new Set() };
         rows.forEach(r=>{ if (uniqueByLoc[r.location]) uniqueByLoc[r.location].add(r.patient_id); });
         const locValues = locations.map(loc => uniqueByLoc[loc].size);
 
-        // Avg OCT/VF by eye
         const eyeStats = { OD:{oct:[],vf:[]}, OS:{oct:[],vf:[]} };
         rows.forEach(r=>{
             if (!eyeStats[r.eye]) return;
@@ -1199,7 +1174,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         const avgOCT = ['OD','OS'].map(eye => avg(eyeStats[eye].oct));
         const avgVF  = ['OD','OS'].map(eye => avg(eyeStats[eye].vf));
 
-        // Totals for counters (patients/tests/eyes) under current filter
         const testsSet = new Set(rows.map(r=>r.test_id));
         const patientsSet = new Set(rows.map(r=>r.patient_id));
 
@@ -1215,33 +1189,27 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     function renderAnalytics(rows){
         const agg = aggregateForAnalytics(rows);
 
-        // Tests chart
         testsChart.data.labels = agg.tests.labels;
         testsChart.data.datasets[0].data = agg.tests.values;
         testsChart.update('none');
 
-        // Diagnosis
         const dvals = ['normal','abnormal','exclude','no input'].map(k=>agg.diagCounts[k]||0);
         diagChart.data.datasets[0].data = dvals;
         diagChart.update('none');
 
-        // Location
         locationBar.data.labels = agg.locLabels;
         locationBar.data.datasets[0].data = agg.locValues;
         locationBar.update('none');
 
-        // Averages
         avgScoresEye.data.datasets[0].data = agg.avgOCT;
         avgScoresEye.data.datasets[1].data = agg.avgVF;
         avgScoresEye.update('none');
 
-        // Update result badges (filtered totals)
         resPatients.textContent = agg.totals.patients;
         resTests.textContent    = agg.totals.tests;
         resEyes.textContent     = agg.totals.eyes;
     }
 
-    // ===== Export filtered rows to CSV =====
     function downloadCSV(filename, rows){
         const csv = rows.map(r=>r.map(v=>{
             v = (v===null||v===undefined) ? '' : String(v);
@@ -1264,14 +1232,11 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     }
     exportBtn.addEventListener('click', exportFilteredRowsCSV);
 
-    // ===== Chart toolbar CSV/PNG + reset zoom =====
     function chartToCsvData(chart){
         const type = chart.config.type;
         if (type === 'line' || type === 'bar'){
             const header = ['Label', ...chart.data.datasets.map(d=>d.label || 'Series')];
-            const rows = chart.data.labels.map((lab, i)=>{
-                return [lab, ...chart.data.datasets.map(d => d.data[i] ?? '')];
-            });
+            const rows = chart.data.labels.map((lab, i)=>[lab, ...chart.data.datasets.map(d => d.data[i] ?? '')]);
             return [header, ...rows];
         }
         if (type === 'doughnut' || type === 'pie'){
@@ -1307,7 +1272,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     }
     bindToolbar();
 
-    // ===== Filter & sort DOM list of patients/tests/eyes =====
     function rowMatchesDOM(r, f){ return rowMatchesData(r, f); }
 
     function filterDOM(autoExpandAfter=true){
@@ -1320,8 +1284,8 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         let visPatients = 0, visTests = 0, visEyes = 0;
 
         patientCards.forEach(patient => {
-            const patientId = (patient.getAttribute('data-patient-id')||'').toLowerCase();
-            const patientLocation = patient.getAttribute('data-location') || '';
+            const patientId = (patient.getAttribute('data-patient-id')||'').toLowerCase(); // now = subject_id
+            const patientSubject = (patient.getAttribute('data-subject')||'').toLowerCase();
 
             const hasPatientIdFilter = !!f.patientId;
             const hasTestIdFilter    = !!f.testId;
@@ -1344,15 +1308,15 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
                 testRows.forEach(row => {
                     const r = {
-                        patient_id: patientId,
-                        test_id: testId,
+                        patient_id: patientId,                   // used only for filtering
                         subject_id: row.getAttribute('data-subject') || '',
                         report_diagnosis: row.getAttribute('data-diagnosis') || '',
-                        location: patientLocation,
+                        location: patient.getAttribute('data-location') || '',
                         eye: row.getAttribute('data-eye') || '',
                         date_of_test: row.getAttribute('data-test-date') || testDate,
                         merci_score: row.getAttribute('data-merci'),
-                        age: row.getAttribute('data-age')
+                        age: row.getAttribute('data-age'),
+                        test_id: testId
                     };
                     const visible = rowMatchesDOM(r, f);
                     row.style.display = visible ? 'block':'none';
@@ -1377,7 +1341,10 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             });
 
             let patientIdPass = true;
-            if (hasPatientIdFilter) patientIdPass = patientId.includes(f.patientId);
+            if (hasPatientIdFilter) {
+                const needle = f.patientId;
+                patientIdPass = patientId.includes(needle) || patientSubject.includes(needle);
+            }
 
             const showPatient = anyTestVisible && patientIdPass;
             patient.style.display = showPatient ? 'block':'none';
@@ -1389,14 +1356,10 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             }
         });
 
-        // Update counters here only if analytics hasn't already overwritten them
-        if (!filterDOM.skipCounterUpdate) {
-            resPatients.textContent = visPatients;
-            resTests.textContent    = visTests;
-            resEyes.textContent     = visEyes;
-        }
+        resPatients.textContent = visPatients;
+        resTests.textContent    = visTests;
+        resEyes.textContent     = visEyes;
 
-        // Active filters badge
         let n = 0;
         const f0 = getFilterState();
         if (f0.patientId) n++;
@@ -1415,7 +1378,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         filtersCount.textContent = n;
         filterFab.style.display = n ? 'block' : 'none';
 
-        // Auto-expand first match
         if (autoExpand.checked && firstVisiblePatient && firstVisibleTestBtn && typeof bootstrap !== 'undefined') {
             const collapseId = firstVisibleTestBtn.getAttribute('data-bs-target');
             const collapseEl = document.querySelector(collapseId);
@@ -1426,12 +1388,11 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         }
     }
 
-    // ===== Sorting =====
     function sortPatients(){
-        const container = $('#patientContainer');
+        const container = document.getElementById('patientContainer');
         const items = Array.from(container.querySelectorAll('.patient-item'));
-        const key = sortBy.value;
-        const dir = sortDirBtn.getAttribute('data-dir') === 'desc' ? -1 : 1;
+        const key = document.getElementById('sortBy').value;
+        const dir = document.getElementById('sortDir').getAttribute('data-dir') === 'desc' ? -1 : 1;
 
         function val(item){
             if (key === 'subject') return (item.getAttribute('data-subject')||'').toLowerCase();
@@ -1465,7 +1426,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         sortPatients();
     });
 
-    // ===== Clear + presets =====
     function setPreset(days){
         const max = DATA_MAX ? new Date(DATA_MAX+'T00:00:00') : new Date();
         let start = null, end = max;
@@ -1501,35 +1461,28 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     clearBtn.addEventListener('click', clearFilters);
     filtersPill.addEventListener('click', ()=>{ clearFilters(); window.scrollTo({top: 0, behavior: 'smooth'}); });
 
-    // ===== Apply filters (dom + analytics) =====
     function applyFilters(doAutoExpand=true){
-        sortPatients(); // deterministic "first match"
-        // Update charts first (also updates counters)
+        sortPatients();
         const rows = filterRows();
         renderAnalytics(rows);
-
-        // Prevent double-updating counters from DOM pass
-        filterDOM.skipCounterUpdate = true;
         filterDOM(doAutoExpand);
-        filterDOM.skipCounterUpdate = false;
     }
+
+    // Initial
+    dateStartInput.value = fmtISO(defaultState.dateStart);
+    dateEndInput.value   = fmtISO(defaultState.dateEnd);
+    renderAnalytics(EYE_ROWS.slice());
+    applyFilters(true);
 
     // Debounced text inputs
     let t1, t2;
     patientIdInput.addEventListener('input', ()=>{ clearTimeout(t1); t1=setTimeout(()=>applyFilters(true), 150); });
     testIdInput.addEventListener('input',    ()=>{ clearTimeout(t2); t2=setTimeout(()=>applyFilters(true), 150); });
 
+    // Wire rest
     [locSelect, diagSelect, eyeOD, eyeOS, dateStartInput, dateEndInput, merciMinInput, merciMaxInput, ageMinInput, ageMaxInput]
         .forEach(el => el.addEventListener('change', ()=>applyFilters(true)));
 
-    // Initial
-    dateStartInput.value = fmtISO(defaultState.dateStart);
-    dateEndInput.value   = fmtISO(defaultState.dateEnd);
-    // initial analytics & DOM
-    renderAnalytics(EYE_ROWS.slice());
-    applyFilters(true);
-
-    // ===== Print analytics snapshot =====
     function preparePrint(){
         printTime.textContent = new Date().toLocaleString();
         document.getElementById('printImg-tests').src = document.getElementById('testsOverTime').toDataURL('image/png', 1.0);
@@ -1544,7 +1497,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         setTimeout(()=>{ printArea.style.display='none'; }, 400);
     });
 
-    // ===== Per-Patient Analytics Modal (respects filters) =====
+    // Patient Analytics modal
     const modalEl = document.getElementById('patientModal');
     const patientModal = new bootstrap.Modal(modalEl);
     let pmCharts = { tests:null, diag:null, avg:null };
@@ -1592,20 +1545,16 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     }
 
     function openPatientAnalytics(pid, subject){
-        $('#pmSubject').textContent = subject;
-        $('#pmId').textContent = pid;
+        document.getElementById('pmSubject').textContent = subject;
+        document.getElementById('pmId').textContent = subject; // Option A: display subject as ID
         modalEl.setAttribute('data-patient-id', pid);
 
-        const rows = filterRows().filter(r => r.patient_id.toLowerCase() === pid.toLowerCase());
+        const rows = filterRows().filter(r => (r.patient_id || '').toLowerCase() === (pid || '').toLowerCase());
         const agg = patientAggregate(rows);
 
         destroyPmCharts();
 
-        const Cc = {
-            brand: '#1a73e8', brandLight:'#6ea8fe',
-            green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d',
-            teal:'#20c997', purple:'#6f42c1'
-        };
+        const Cc = { brand: '#1a73e8', brandLight:'#6ea8fe', green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d', teal:'#20c997', purple:'#6f42c1' };
 
         pmCharts.tests = new Chart(document.getElementById('pmTests').getContext('2d'), {
             type:'line',
@@ -1631,7 +1580,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=>(v===null||isNaN(v))?'':(typeof v==='number'?v.toFixed(2):v) } } }
         });
 
-        // Wire CSV/PNG buttons inside modal
         modalEl.querySelectorAll('[data-csv], [data-download]').forEach(btn=>{
             btn.onclick = ()=>{
                 const id = btn.getAttribute('data-csv') || btn.getAttribute('data-download');
