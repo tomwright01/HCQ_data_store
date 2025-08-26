@@ -1,9 +1,11 @@
+
+
 <?php
-// form.php
+// form.php — full page with Medications support
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
-// ---------- Small helpers ----------
+/* ===== Helpers ===== */
 function respond_json($arr) {
     header('Content-Type: application/json'); echo json_encode($arr); exit;
 }
@@ -14,22 +16,20 @@ function normalize_actual_dx($v) {
     if ($v === null) return 'other';
     $v = strtolower(trim($v));
     if (in_array($v, ['ra','sle','sjogren','other'], true)) return $v;
-    // map UI variants:
-    if ($v === 'sjögren' || $v === 'sjogren\'s') return 'sjogren';
+    if ($v === 'sjögren' || $v === "sjogren's") return 'sjogren';
     return 'other';
 }
 function normalize_merci_score($v) {
-    if ($v === null || $v === '') return null; // null in DB (VARCHAR(10))
+    if ($v === null || $v === '') return null;
     $t = strtolower(trim($v));
     if ($t === 'unable') return 'unable';
     if (is_numeric($v)) {
         $n = (float)$v;
-        if ($n >= 0 && $n <= 100) return (string)(int)$n; // store as string
+        if ($n >= 0 && $n <= 100) return (string)(int)$n;
     }
     return null;
 }
 function compute_test_id($subject_id, $date_of_test) {
-    // Stable, human-safe test_id (same for both eyes if same date + subject)
     return 'T_' . substr(md5($subject_id . '|' . $date_of_test), 0, 20);
 }
 function safe_num($v, $decimals=2) {
@@ -49,28 +49,31 @@ function ensure_dir($path) {
     if (!is_dir($path)) { @mkdir($path, 0775, true); }
 }
 function save_upload($field, $destDir, $prefix, $allow) {
-    // $allow = ['ext'=>['png','jpg','jpeg','pdf'], 'mime'=>['image/png','image/jpeg','application/pdf']]
     if (!isset($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
     $name = $_FILES[$field]['name'];
     $tmp  = $_FILES[$field]['tmp_name'];
     $type = mime_content_type($tmp);
     $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-
     if (!in_array($ext, $allow['ext'], true)) return null;
     if (!in_array($type, $allow['mime'], true)) return null;
 
     ensure_dir($destDir);
     $fname = $prefix . '_' . uniqid() . '.' . $ext;
     $dest  = rtrim($destDir, '/').'/'.$fname;
-
-    if (move_uploaded_file($tmp, $dest)) {
-        return $dest; // store relative path
-    }
+    if (move_uploaded_file($tmp, $dest)) return $dest;
     return null;
 }
+function date_diff_inclusive_days(?string $start, ?string $end): ?int {
+    if (!$start || !$end) return null;
+    try {
+        $sd = new DateTime($start);
+        $ed = new DateTime($end);
+        if ($ed < $sd) return 0;
+        return $sd->diff($ed)->days + 1;
+    } catch (Throwable $e) { return null; }
+}
 
-// ---------- Inline JSON endpoint for duplicate warning ----------
-// Checks: does a row exist for (patient derived from subject_id) + date_of_test + eye?
+/* ===== Duplicate-check mini API ===== */
 if (isset($_GET['check']) && $_GET['check'] === '1') {
     $subject = trim($_GET['subject'] ?? '');
     $date    = trim($_GET['date'] ?? '');
@@ -101,12 +104,11 @@ if (isset($_GET['check']) && $_GET['check'] === '1') {
     respond_json(['ok'=>true, 'exists'=>$exists]);
 }
 
-// ---------- Handle form POST ----------
+/* ===== Handle POST ===== */
 $successMessage = '';
 $errorMessage   = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // Basic required fields
     $subject_id     = trim($_POST['subject_id'] ?? '');
     $date_of_birth  = trim($_POST['date_of_birth'] ?? '');
     $location       = $_POST['location'] ?? 'KH';
@@ -119,17 +121,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($location, ['KH','CHUSJ','IWK','IVEY'], true)) {
             throw new Exception('Invalid location.');
         }
-
         $actual_dx = normalize_actual_dx($actual_dx_ui);
 
-        // Patient ID policy (consistent with your codebase)
+        // Derive patient_id
         $patient_id = function_exists('generatePatientId')
             ? generatePatientId($subject_id)
             : ('P_' . substr(md5($subject_id), 0, 20));
 
         $conn->begin_transaction();
 
-        // Upsert patient (matches your schema exactly)
+        // Upsert patient
         $stmt = $conn->prepare("
             INSERT INTO patients (patient_id, subject_id, location, date_of_birth)
             VALUES (?, ?, ?, ?)
@@ -139,12 +140,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 date_of_birth = VALUES(date_of_birth)
         ");
         $stmt->bind_param('ssss', $patient_id, $subject_id, $location, $date_of_birth);
-        if (!$stmt->execute()) {
-            throw new Exception('Failed saving patient: '.$stmt->error);
-        }
+        if (!$stmt->execute()) throw new Exception('Failed saving patient: '.$stmt->error);
         $stmt->close();
 
-        // Collect eye blocks (OD/OS)
+        /* --- Collect eye blocks (OD/OS) --- */
         $EYES = ['OD','OS'];
         $eyePayloads = [];
         foreach ($EYES as $EYE) {
@@ -206,8 +205,74 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
         }
 
-        if (empty($eyePayloads)) {
-            throw new Exception('Please enter at least one eye with a Test Date.');
+        /* --- Collect medication rows (new table) --- */
+        $medPayloads = [];
+        if (isset($_POST['meds']) && is_array($_POST['meds'])) {
+            foreach ($_POST['meds'] as $m) {
+                $name   = trim(val($m, 'name', ''));
+                if ($name === '') continue; // ignore empty rows
+
+                $dose   = safe_num(val($m, 'dose'), 3); // allow finer precision
+                $unit   = strtolower(val($m, 'unit', 'mg'));
+                $freq   = val($m, 'freq', 'per_day'); // per_day | per_week
+                $start  = val($m, 'start_date');
+                $end    = val($m, 'end_date');
+                $months = safe_int(val($m, 'months'), 0, 1200);
+                $days   = safe_int(val($m, 'days'), 0, 100000);
+                $notes  = val($m, 'notes');
+
+                // Convert dose to mg
+                $dose_mg = null;
+                if ($dose !== null) {
+                    $mult = ($unit === 'g') ? 1000.0 : 1.0;
+                    $dose_mg = round($dose * $mult, 3);
+                }
+
+                // dosage_per_day (mg/day)
+                $dosage_per_day = null;
+                if ($dose_mg !== null) {
+                    $dosage_per_day = ($freq === 'per_week')
+                        ? round($dose_mg / 7.0, 6)
+                        : $dose_mg; // already per day
+                }
+
+                // Duration days & (possibly derive end date)
+                $duration_days = date_diff_inclusive_days($start, $end);
+                if ($duration_days === null) {
+                    if ($months !== null || $days !== null) {
+                        $months = $months ?? 0; $days = $days ?? 0;
+                        $duration_days = (int)($months * 30 + $days);
+                        if ($start && !$end) {
+                            try {
+                                $sd = new DateTime($start);
+                                $int = new DateInterval('P'.max(0,$months).'M'.max(0,$days).'D');
+                                $ed = (clone $sd)->add($int)->sub(new DateInterval('P1D')); // inclusive
+                                $end = $ed->format('Y-m-d');
+                            } catch (Throwable $e) { /* leave end null */ }
+                        }
+                    }
+                }
+
+                // Cumulative dosage (mg)
+                $cumulative = null;
+                if ($dosage_per_day !== null && $duration_days !== null) {
+                    $cumulative = round($dosage_per_day * max(0,$duration_days), 3);
+                }
+
+                $medPayloads[] = [
+                    'name' => $name,
+                    'dosage_per_day' => $dosage_per_day,
+                    'duration_days'  => $duration_days,
+                    'cumulative'     => $cumulative,
+                    'start_date'     => $start ?: null,
+                    'end_date'       => $end   ?: null,
+                    'notes'          => $notes,
+                ];
+            }
+        }
+
+        if (empty($eyePayloads) && empty($medPayloads)) {
+            throw new Exception('Enter at least one Eye test or one Medication row.');
         }
 
         // Insert each unique test (test_id, patient, date)
@@ -215,7 +280,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($eyePayloads as $p) {
             $tid = $p['test_id'];
             if (isset($seenTests[$tid])) continue;
-            // use your helper if you like: insertTest($conn,...)
             $stmt = $conn->prepare("
                 INSERT INTO tests (test_id, patient_id, location, date_of_test)
                 VALUES (?, ?, ?, ?)
@@ -241,7 +305,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // Prepare upload folder
             $upDir = 'uploads/'.$patient_id.'/'.$test_id;
-            // Save any new files (null when not provided)
             $faf_ref   = save_upload("image_faf_".strtolower($eye),   $upDir, "FAF_{$eye}",   $ALLOW_IMG);
             $oct_ref   = save_upload("image_oct_".strtolower($eye),   $upDir, "OCT_{$eye}",   $ALLOW_IMG);
             $vf_ref    = save_upload("image_vf_".strtolower($eye),    $upDir, "VF_{$eye}",    $ALLOW_PDF);
@@ -257,7 +320,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
 
             if ($existing_id) {
-                // UPDATE (COALESCE files so we don't blank them when not re-uploaded)
                 $stmt = $conn->prepare("
                     UPDATE test_eyes SET
                         age=?, report_diagnosis=?, exclusion=?, merci_score=?, merci_diagnosis=?, error_type=?,
@@ -298,7 +360,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$stmt->execute()) throw new Exception('Failed updating '.$eye.' eye: '.$stmt->error);
                 $stmt->close();
             } else {
-                // INSERT
                 $stmt = $conn->prepare("
                     INSERT INTO test_eyes
                     (test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
@@ -338,6 +399,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        /* --- Insert medications into medications table --- */
+        if (!empty($medPayloads)) {
+            $stmt = $conn->prepare("
+                INSERT INTO medications
+                (patient_id, medication_name, dosage_per_day, duration_days, cumulative_dosage, start_date, end_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            foreach ($medPayloads as $m) {
+                $dose_per_day = $m['dosage_per_day']; // mg/day
+                $dur_days     = $m['duration_days'];
+                $cum          = $m['cumulative'];
+                $start        = $m['start_date'];
+                $end          = $m['end_date'];
+                $notes        = $m['notes'];
+
+                $stmt->bind_param(
+                    'ssdiisss',
+                    $patient_id,
+                    $m['name'],
+                    $dose_per_day,
+                    $dur_days,
+                    $cum,
+                    $start,
+                    $end,
+                    $notes
+                );
+                if (!$stmt->execute()) throw new Exception('Failed inserting medication '.$m['name'].': '.$stmt->error);
+            }
+            $stmt->close();
+        }
+
         $conn->commit();
         header('Location: form.php?success=1');
         exit;
@@ -347,7 +439,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-// success flash
 if (isset($_GET['success']) && $_GET['success'] === '1') {
     $successMessage = 'Saved successfully.';
 }
@@ -376,6 +467,13 @@ input[type=file]::file-selector-button{ border:1px solid var(--border); border-r
 .section-title { display:flex; align-items:center; gap:.5rem; }
 .nav-pills .nav-link.active{ background:var(--brand); }
 .toast-container{ z-index:1080; }
+
+/* meds */
+.meds-row{ background:#fbfcff; border:1px solid var(--border); border-radius:.75rem; padding:1rem; margin-bottom: .75rem;}
+.meds-row .form-label{ margin-bottom: .25rem; }
+.meds-row .del-row{ visibility:hidden;}
+.meds-row:hover .del-row{ visibility:visible;}
+.meds-chip{ display:inline-block; padding:.25rem .6rem; border-radius:999px; border:1px solid var(--border); background:#f2f7ff; }
 </style>
 </head>
 <body>
@@ -462,6 +560,19 @@ input[type=file]::file-selector-button{ border:1px solid var(--border); border-r
             </div>
           </div>
 
+          <!-- Medications -->
+          <div class="card mb-4" id="medications">
+            <div class="card-body">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h5 class="mb-0"><i class="bi bi-capsule-pill"></i> Medications</h5>
+                <button type="button" id="addMed" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Add row</button>
+              </div>
+              <p class="help mb-3">Enter per-day or per-week dosing. We will store <code>dosage_per_day (mg/day)</code>, compute <code>duration_days</code> and <code>cumulative_dosage</code> automatically.</p>
+              <div id="medsContainer"></div>
+              <div class="small text-muted">Tip: If both <em>Start</em> and <em>End</em> dates are provided, we’ll use them. Otherwise, we’ll use the duration (months/days). One row is enough—add more if the regimen changed.</div>
+            </div>
+          </div>
+
           <div class="d-flex justify-content-between align-items-center">
             <div class="form-check">
               <input class="form-check-input" type="checkbox" id="syncDates" checked>
@@ -498,21 +609,15 @@ const $ = (s, r=document)=> r.querySelector(s);
 const $$ = (s, r=document)=> Array.from(r.querySelectorAll(s));
 const toast = id => new bootstrap.Toast(document.getElementById(id));
 
-// Live shared test-id hint
-function makeTestId(subject, dateStr){
-  if(!subject || !dateStr) return '';
-  // Keep this in sync with PHP compute_test_id
-  return 'T_' + md5(subject+'|'+dateStr).slice(0,20);
-}
-// Tiny md5 for predictability (not crypto; UI only)
+// md5 (UI hint only)
 function md5(str){ return CryptoJS.MD5(str).toString(); }
+function makeTestId(subject, dateStr){ return (!subject || !dateStr) ? '' : 'T_' + md5(subject+'|'+dateStr).slice(0,20); }
 
 function wireEye(eye){
   const root = document.getElementById(eye.toLowerCase()+'-block');
   const date = $('[data-role="date"]', root);
   const tip  = $('[data-role="testid-tip"]', root);
   const sub  = $('#subject_id');
-
   function updateTip(){
     const t = makeTestId(sub.value.trim(), date.value);
     tip.textContent = t ? `Suggested Test ID: ${t}` : 'Suggested Test ID will appear here.';
@@ -523,7 +628,7 @@ function wireEye(eye){
 
   // Dropzones
   $$('.dropzone', root).forEach(dz=>{
-    const inp = dz.nextElementSibling; // file input after dropzone
+    const inp = dz.nextElementSibling;
     dz.addEventListener('click', ()=> inp.click());
     dz.addEventListener('dragover', e=>{ e.preventDefault(); dz.classList.add('dragover'); });
     dz.addEventListener('dragleave', ()=> dz.classList.remove('dragover'));
@@ -533,6 +638,111 @@ function wireEye(eye){
     });
   });
 }
+
+/* ------- Medications UI ------- */
+let medIdx = 0;
+function medRowTemplate(i){
+  return `
+  <div class="meds-row" data-med="${i}">
+    <div class="d-flex justify-content-between align-items-center">
+      <div class="fw-semibold">Medication #${i+1}</div>
+      <button class="btn btn-sm btn-outline-danger del-row" type="button"><i class="bi bi-x-lg"></i></button>
+    </div>
+    <div class="row g-3 align-items-end mt-1">
+      <div class="col-md-4">
+        <label class="form-label">Name</label>
+        <input type="text" name="meds[${i}][name]" class="form-control" placeholder="e.g., Hydroxychloroquine">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Dose</label>
+        <div class="input-group">
+          <input type="number" step="0.001" name="meds[${i}][dose]" class="form-control" placeholder="e.g., 200">
+          <select name="meds[${i}][unit]" class="form-select" style="max-width:110px">
+            <option value="mg" selected>mg</option>
+            <option value="g">g</option>
+          </select>
+          <select name="meds[${i}][freq]" class="form-select" style="max-width:140px">
+            <option value="per_day" selected>/day</option>
+            <option value="per_week">/week</option>
+          </select>
+        </div>
+        <div class="help">Stored as mg/day.</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Notes</label>
+        <input type="text" name="meds[${i}][notes]" class="form-control" placeholder="Optional notes">
+      </div>
+
+      <div class="col-md-3">
+        <label class="form-label">Start</label>
+        <input type="date" name="meds[${i}][start_date]" class="form-control js-start">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">End</label>
+        <input type="date" name="meds[${i}][end_date]" class="form-control js-end">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Duration (months)</label>
+        <input type="number" min="0" name="meds[${i}][months]" class="form-control js-months" placeholder="e.g., 6">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Duration (days)</label>
+        <input type="number" min="0" name="meds[${i}][days]" class="form-control js-days" placeholder="e.g., 90">
+      </div>
+
+      <div class="col-12">
+        <div class="small text-muted">
+          <span class="meds-chip"><strong>Preview:</strong> <span class="js-preview">—</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+  `;
+}
+function recalcMedRow(row){
+  const dose = parseFloat($('input[name$="[dose]"]', row)?.value || '');
+  const unit = $('select[name$="[unit]"]', row)?.value || 'mg';
+  const freq = $('select[name$="[freq]"]', row)?.value || 'per_day';
+  const s = $('input.js-start', row)?.value || '';
+  const e = $('input.js-end', row)?.value || '';
+  const months = parseInt($('input.js-months', row)?.value || '0', 10) || 0;
+  const days   = parseInt($('input.js-days', row)?.value || '0', 10) || 0;
+
+  let dose_mg = isFinite(dose) ? dose * (unit === 'g' ? 1000 : 1) : NaN;
+  let per_day = (freq === 'per_week') ? (dose_mg/7) : dose_mg;
+
+  // duration
+  let dur = null;
+  if (s && e) {
+    const sd = new Date(s+'T00:00:00'), ed = new Date(e+'T00:00:00');
+    dur = (ed >= sd) ? Math.round((ed - sd)/(24*3600*1000)) + 1 : 0;
+  } else if ((months || days)) {
+    dur = (months*30 + days);
+  }
+
+  let cum = (isFinite(per_day) && dur !== null) ? (per_day * Math.max(0,dur)) : null;
+
+  const pv = $('.js-preview', row);
+  const fmt = (n)=> isFinite(n) && n !== null ? String(Math.round(n*1000)/1000) : '—';
+  pv.textContent = `dosage_per_day ≈ ${fmt(per_day)} mg/day • duration_days = ${dur??'—'} • cumulative ≈ ${fmt(cum)} mg`;
+}
+function addMedRow(){
+  const html = medRowTemplate(medIdx++);
+  $('#medsContainer').insertAdjacentHTML('beforeend', html);
+  const row = $('#medsContainer .meds-row:last-child');
+
+  // delete
+  $('.del-row', row).addEventListener('click', ()=>{ row.remove(); });
+
+  // recalc on changes
+  $$('input, select', row).forEach(el => {
+    el.addEventListener('input', ()=> recalcMedRow(row));
+    el.addEventListener('change', ()=> recalcMedRow(row));
+  });
+  recalcMedRow(row);
+}
+
+/* ------- Page wiring ------- */
 document.addEventListener('DOMContentLoaded', ()=>{
   wireEye('OD'); wireEye('OS');
 
@@ -540,9 +750,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const sync = $('#syncDates');
   const odDate = $('#od_date_of_test');
   const osDate = $('#os_date_of_test');
-  function syncNow(){
-    if (sync.checked && odDate.value) osDate.value = odDate.value;
-  }
+  function syncNow(){ if (sync.checked && odDate.value) osDate.value = odDate.value; }
   sync.addEventListener('change', syncNow);
   odDate.addEventListener('change', syncNow);
 
@@ -565,13 +773,21 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#od_date_of_test').addEventListener('change', updateDupBanner);
   $('#os_date_of_test').addEventListener('change', updateDupBanner);
 
-  // Client-side check of requireds
+  // Meds: start with one empty row
+  $('#addMed').addEventListener('click', addMedRow);
+  addMedRow();
+
+  // Client-side requireds
   $('#dataForm').addEventListener('submit', (e)=>{
     const req = ['#subject_id','#date_of_birth'];
     let ok = true;
     req.forEach(sel => { if (!$(sel).value) ok=false; });
-    // require at least one eye date
-    if (!$('#od_date_of_test').value && !$('#os_date_of_test').value) ok=false;
+    // allow submit if at least one eye date or at least one medication name
+    const hasOD = !!$('#od_date_of_test').value;
+    const hasOS = !!$('#os_date_of_test').value;
+    const hasMed = !!$('#medsContainer input[name^="meds"][name$="[name]"]') && $$('#medsContainer input[name^="meds"][name$="[name]"]').some(inp => (inp.value||'').trim() !== '');
+
+    if (!hasOD && !hasOS && !hasMed) ok = false;
 
     if (!ok) {
       e.preventDefault();
@@ -588,7 +804,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </body>
 </html>
 <?php
-// --------- Eye block HTML (server-side function) ----------
+/* --------- Eye block HTML (server-side function) ---------- */
 function eye_block_html($eye) {
     $lower = strtolower($eye);
     ob_start(); ?>
@@ -730,3 +946,4 @@ function eye_block_html($eye) {
 <?php
     return ob_get_clean();
 }
+
