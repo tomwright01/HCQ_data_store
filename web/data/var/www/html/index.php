@@ -119,16 +119,21 @@ $maxDate = $allDates ? end($allDates) : null;
 /**
  * Build a view URL for a modality given test_id & eye
  */
-function build_view_url(string $type, string $testId, string $eye): string {
+function build_view_url(string $type, string $patientId, string $eye, string $ref): string {
     $type = strtoupper($type);
-    $eye  = strtoupper($eye) === 'OS' ? 'OS' : 'OD';
-    switch ($type) {
-        case 'FAF':   return "view_faf.php?test_id=" . urlencode($testId) . "&eye=" . urlencode($eye);
-        case 'OCT':   return "view_oct.php?test_id=" . urlencode($testId) . "&eye=" . urlencode($eye);
-        case 'VF':    return "view_vf.php?test_id=" . urlencode($testId) . "&eye=" . urlencode($eye);
-        case 'MFERG': return "view_mferg.php?test_id=" . urlencode($testId) . "&eye=" . urlencode($eye);
-        default:      return "#";
-    }
+    $eye  = ($eye === 'OS') ? 'OS' : 'OD';
+    $page = match ($type) {
+        'FAF'   => 'view_faf.php',
+        'OCT'   => 'view_oct.php',
+        'VF'    => 'view_vf.php',
+        'MFERG' => 'view_mferg.php',
+        default => '#',
+    };
+    if ($page === '#') return '#';
+    return $page
+        . '?ref='        . urlencode($ref)
+        . '&patient_id=' . urlencode($patientId)
+        . '&eye='        . urlencode($eye);
 }
 ?>
 <!DOCTYPE html>
