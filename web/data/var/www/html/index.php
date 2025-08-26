@@ -224,6 +224,10 @@ canvas { max-height: 380px; }
         <a href="csv_import.php" class="btn btn-primary pill">
             <i class="bi bi-upload"></i> Import CSV
         </a>
+      <a href="export_csv.php" class="btn btn-success pill">
+          <i class="bi bi-download"></i> Export CSV
+      </a>
+
       </div>
     </div>
   </div>
