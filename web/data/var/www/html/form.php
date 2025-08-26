@@ -1,6 +1,6 @@
 <?php
-// form.php — full page with Medications support (patient_id + subject_id)
-// Inserts/updates: patients, tests, test_eyes, medications
+// form.php — full page with Medications (raw + computed fields)
+// Writes to: patients, tests, test_eyes, medications
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
@@ -22,7 +22,7 @@ function normalize_merci_score($v) {
     if ($t === 'unable') return 'unable';
     if (is_numeric($v)) {
         $n = (float)$v;
-        if ($n >= 0 && $n <= 100) return (string)(int)$n; // store as string in DB (VARCHAR(10))
+        if ($n >= 0 && $n <= 100) return (string)(int)$n; // store as string (VARCHAR(10))
     }
     return null;
 }
@@ -51,7 +51,6 @@ function save_upload($field, $destDir, $prefix, $allow) {
     $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
     if (!in_array($ext, $allow['ext'], true)) return null;
     if (!in_array($type, $allow['mime'], true)) return null;
-
     ensure_dir($destDir);
     $fname = $prefix . '_' . uniqid() . '.' . $ext;
     $dest  = rtrim($destDir, '/').'/'.$fname;
@@ -68,7 +67,7 @@ function date_diff_inclusive_days(?string $start, ?string $end): ?int {
     } catch (Throwable $e) { return null; }
 }
 
-/* ===== Duplicate-check mini API ===== */
+/* ===== Duplicate-check mini API (patient + date + eye) ===== */
 if (isset($_GET['check']) && $_GET['check'] === '1') {
     $subject = trim($_GET['subject'] ?? '');
     $date    = trim($_GET['date'] ?? '');
@@ -200,61 +199,69 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
         }
 
-        /* --- Collect medication rows (new table) --- */
+        /* --- Collect medication rows (raw + computed) --- */
         $medPayloads = [];
         if (isset($_POST['meds']) && is_array($_POST['meds'])) {
             foreach ($_POST['meds'] as $m) {
                 $name   = trim(val($m, 'name', ''));
-                if ($name === '') continue; // ignore empty rows
+                if ($name === '') continue; // ignore empty row
 
-                $dose   = safe_num(val($m, 'dose'), 3); // allow finer precision
-                $unit   = strtolower(val($m, 'unit', 'mg')); // mg|g
-                $freq   = val($m, 'freq', 'per_day');   // per_day | per_week
-                $start  = val($m, 'start_date');
-                $end    = val($m, 'end_date');
-                $months = safe_int(val($m, 'months'), 0, 1200);
-                $days   = safe_int(val($m, 'days'), 0, 100000);
+                // Raw inputs (required by schema)
+                $dose   = safe_num(val($m, 'dose'), 3);                  // numeric (may not be null if name provided)
+                $unitIn = strtolower(val($m, 'unit', 'mg'));             // 'mg' | 'g'
+                $freqIn = strtolower(val($m, 'freq', 'per_day'));        // 'per_day' | 'per_week'
+                $start  = val($m, 'start_date');                         // date or null
+                $end    = val($m, 'end_date');                           // date or null
+                $months = safe_int(val($m, 'months'), 0, 1200);          // nullable
+                $days   = safe_int(val($m, 'days'), 0, 100000);          // nullable
                 $notes  = val($m, 'notes');
 
-                // Convert to mg/day
-                $dose_mg = null;
-                if ($dose !== null) {
-                    $mult = ($unit === 'g') ? 1000.0 : 1.0;
-                    $dose_mg = round($dose * $mult, 3);
+                if ($dose === null) {
+                    throw new Exception("Medication dose is required for '{$name}'.");
                 }
-                $dosage_per_day = ($dose_mg === null) ? null : (($freq === 'per_week') ? round($dose_mg/7.0, 6) : $dose_mg);
+                $unit = in_array($unitIn, ['mg','g'], true) ? $unitIn : 'mg';
+                $freq = in_array($freqIn, ['per_day','per_week'], true) ? $freqIn : 'per_day';
+
+                // Convert to mg/day
+                $dose_mg = ($unit === 'g') ? $dose * 1000.0 : $dose;
+                $dosage_per_day = ($freq === 'per_week') ? round($dose_mg/7.0, 6) : round($dose_mg, 6);
 
                 // Duration
                 $duration_days = date_diff_inclusive_days($start, $end);
-                if ($duration_days === null) {
-                    if ($months !== null || $days !== null) {
-                        $months = $months ?? 0; $days = $days ?? 0;
-                        $duration_days = (int)($months * 30 + $days);
-                        if ($start && !$end) {
-                            try {
-                                $sd = new DateTime($start);
-                                $int = new DateInterval('P'.max(0,$months).'M'.max(0,$days).'D');
-                                $ed = (clone $sd)->add($int)->sub(new DateInterval('P1D')); // inclusive
-                                $end = $ed->format('Y-m-d');
-                            } catch (Throwable $e) {}
-                        }
+                if ($duration_days === null && ($months !== null || $days !== null)) {
+                    $months = $months ?? 0; $days = $days ?? 0;
+                    $duration_days = (int)($months * 30 + $days);
+                    if ($start && !$end) {
+                        try {
+                            $sd = new DateTime($start);
+                            $int = new DateInterval('P'.max(0,$months).'M'.max(0,$days).'D');
+                            $ed = (clone $sd)->add($int)->sub(new DateInterval('P1D')); // inclusive
+                            $end = $ed->format('Y-m-d');
+                        } catch (Throwable $e) {}
                     }
                 }
 
                 // Cumulative mg
                 $cumulative = null;
-                if ($dosage_per_day !== null && $duration_days !== null) {
+                if ($duration_days !== null) {
                     $cumulative = round($dosage_per_day * max(0,$duration_days), 3);
                 }
 
                 $medPayloads[] = [
-                    'name' => $name,
-                    'dosage_per_day' => $dosage_per_day,
-                    'duration_days'  => $duration_days,
-                    'cumulative'     => $cumulative,
-                    'start_date'     => $start ?: null,
-                    'end_date'       => $end   ?: null,
-                    'notes'          => $notes,
+                    'name'             => $name,
+                    // raw (schema NOT NULL on some)
+                    'input_value'      => $dose,     // as entered (mg or g)
+                    'input_unit'       => $unit,     // mg|g
+                    'input_freq'       => $freq,     // per_day|per_week
+                    'months_entered'   => $months,
+                    'days_entered'     => $days,
+                    // derived
+                    'dosage_per_day'   => $dosage_per_day,  // mg/day
+                    'duration_days'    => $duration_days,
+                    'cumulative'       => $cumulative,
+                    'start_date'       => $start ?: null,
+                    'end_date'         => $end   ?: null,
+                    'notes'            => $notes
                 ];
             }
         }
@@ -321,7 +328,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         updated_at = CURRENT_TIMESTAMP
                     WHERE result_id = ?
                 ");
-                // Types: i s s s s s i d d s s d s i d s s s s s i
                 $stmt->bind_param(
                     'isssssiddssssiidsssssii',
                     $p['age'],
@@ -359,7 +365,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                      faf_reference, oct_reference, vf_reference, mferg_reference)
                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 ");
-                // Types: s s i s s s s s i d d s s d s i d s s s s s
                 $stmt->bind_param(
                     'ssisssssiddssssiidssss',
                     $test_id,
@@ -391,32 +396,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        /* --- Insert medications (includes subject_id now) --- */
+        /* --- Insert medications (raw inputs + computed) --- */
         if (!empty($medPayloads)) {
             $stmt = $conn->prepare("
                 INSERT INTO medications
-                (patient_id, subject_id, medication_name, dosage_per_day, duration_days, cumulative_dosage, start_date, end_date, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (
+                  patient_id,
+                  subject_id,
+                  medication_name,
+                  input_dosage_value,
+                  input_dosage_unit,
+                  input_frequency,
+                  dosage_per_day,
+                  start_date,
+                  end_date,
+                  months_entered,
+                  days_entered,
+                  duration_days,
+                  cumulative_dosage,
+                  notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
+
             foreach ($medPayloads as $m) {
-                $dose_per_day = $m['dosage_per_day']; // mg/day
-                $dur_days     = $m['duration_days'];
-                $cum          = $m['cumulative'];
+                $input_value = $m['input_value'];        // NOT NULL by our validation
+                $input_unit  = $m['input_unit'] ?: 'mg';
+                $input_freq  = $m['input_freq'] ?: 'per_day';
+
+                $dose_per_day = $m['dosage_per_day'];    // mg/day, not null given dose+freq required
+                $dur_days     = $m['duration_days'];     // may be null
+                $cum          = $m['cumulative'];        // may be null
                 $start        = $m['start_date'];
                 $end          = $m['end_date'];
+                $months_ent   = $m['months_entered'];
+                $days_ent     = $m['days_entered'];
                 $notes        = $m['notes'];
 
-                // Types: s s s d i d s s s
+                // Types for 14 params: s s s d s s d s s i i i d s
                 $stmt->bind_param(
-                    'sssdidsss',
+                    'sssdssdssiiids',
                     $patient_id,
                     $subject_id,
                     $m['name'],
+                    $input_value,
+                    $input_unit,
+                    $input_freq,
                     $dose_per_day,
-                    $dur_days,
-                    $cum,
                     $start,
                     $end,
+                    $months_ent,
+                    $days_ent,
+                    $dur_days,
+                    $cum,
                     $notes
                 );
                 if (!$stmt->execute()) throw new Exception('Failed inserting medication '.$m['name'].': '.$stmt->error);
@@ -561,7 +593,7 @@ input[type=file]::file-selector-button{ border:1px solid var(--border); border-r
                 <h5 class="mb-0"><i class="bi bi-capsule-pill"></i> Medications</h5>
                 <button type="button" id="addMed" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Add row</button>
               </div>
-              <p class="help mb-3">Enter per-day or per-week dosing. We store <code>dosage_per_day (mg/day)</code>, and compute <code>duration_days</code> + <code>cumulative_dosage</code>.</p>
+              <p class="help mb-3">Enter per-day or per-week dosing. We store <code>dosage_per_day (mg/day)</code>, and compute <code>duration_days</code> + <code>cumulative_dosage</code>. Raw inputs are saved too.</p>
               <div id="medsContainer"></div>
               <div class="small text-muted">Provide Start/End dates or Months/Days. If both dates given, they take priority.</div>
             </div>
@@ -660,7 +692,7 @@ function medRowTemplate(i){
             <option value="per_week">/week</option>
           </select>
         </div>
-        <div class="help">Stored as mg/day.</div>
+        <div class="help">Stored as mg/day. Dose is required if a name is set.</div>
       </div>
       <div class="col-md-4">
         <label class="form-label">Notes</label>
@@ -717,7 +749,7 @@ function recalcMedRow(row){
   let cum = (isFinite(per_day) && dur !== null) ? (per_day * Math.max(0,dur)) : null;
 
   const pv = $('.js-preview', row);
-  const fmt = (n)=> isFinite(n) && n !== null ? String(Math.round(n*1000)/1000) : '—';
+  const fmt = (n)=> (isFinite(n) && n !== null) ? String(Math.round(n*1000)/1000) : '—';
   pv.textContent = `dosage_per_day ≈ ${fmt(per_day)} mg/day • duration_days = ${dur??'—'} • cumulative ≈ ${fmt(cum)} mg`;
 }
 function addMedRow(){
@@ -937,5 +969,6 @@ function eye_block_html($eye) {
 <?php
     return ob_get_clean();
 }
+
 
 
