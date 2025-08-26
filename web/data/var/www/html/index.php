@@ -702,30 +702,34 @@ canvas { max-height: 380px; }
                                         <div class="accordion-body">
                                             <?php foreach ($testEyes as $eye): ?>
                                                 <?php
-                                                    $eyeSide   = strtoupper($eye['eye']);
-                                                    $eyeLower  = strtolower($eyeSide);
-                                                    $eyeClass  = $eyeSide === 'OS' ? 'os-badge' : 'od-badge';
-                                                    $diag      = $eye['report_diagnosis'];
-                                                    $diagClass = ($diag === 'no input') ? 'no-input' : $diag;
-                                                    $medName   = safe_get($eye, 'medication_name');
-                                                    $dosage    = safe_get($eye, 'dosage');
-                                                    $dosageUnit= safe_get($eye, 'dosage_unit', 'mg');
-                                                    $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
-                                                    $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
-
-                                                    // Correct per-eye refs from test_eyes (Option A fix)
-                                                    if ($eyeSide === 'OD') {
-                                                        $fafRef   = safe_get($eye, 'faf_reference_OD');
-                                                        $octRef   = safe_get($eye, 'oct_reference_OD');
-                                                        $vfRef    = safe_get($eye, 'vf_reference_OD');
-                                                        $mfergRef = safe_get($eye, 'mferg_reference_OD');
-                                                    } else {
-                                                        $fafRef   = safe_get($eye, 'faf_reference_OS');
-                                                        $octRef   = safe_get($eye, 'oct_reference_OS');
-                                                        $vfRef    = safe_get($eye, 'vf_reference_OS');
-                                                        $mfergRef = safe_get($eye, 'mferg_reference_OS');
-                                                    }
-                                                    $hasAnyMedia = $fafRef || $octRef || $vfRef || $mfergRef;
+                                                     $eyeSide   = strtoupper($eye['eye']);            // 'OD' or 'OS'
+                                                     $eyeLower  = strtolower($eyeSide);               // 'od' or 'os'
+                                                     $eyeSuffix = ($eyeSide === 'OS') ? 'OS' : 'OD';  // schema columns use UPPERCASE suffix
+                                                     $eyeClass  = $eyeSide === 'OS' ? 'os-badge' : 'od-badge';
+                                             
+                                                     $diag      = $eye['report_diagnosis'];
+                                                     $diagClass = ($diag === 'no input') ? 'no-input' : $diag;
+                                             
+                                                     // Optional medication fields stored on test_eyes (legacy/compat view only)
+                                                     $medName    = safe_get($eye, 'medication_name');
+                                                     $dosage     = safe_get($eye, 'dosage');
+                                                     $dosageUnit = safe_get($eye, 'dosage_unit', 'mg');
+                                             
+                                                     $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
+                                                     $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
+                                             
+                                                     // ==== PRIMARY: read per-eye columns that actually exist in your schema ====
+                                                     // test_eyes.<modality>_reference_OD | test_eyes.<modality>_reference_OS
+                                                     $fafRef   = isset($eye["faf_reference_{$eyeSuffix}"])   ? $eye["faf_reference_{$eyeSuffix}"]   : null;
+                                                     $octRef   = isset($eye["oct_reference_{$eyeSuffix}"])   ? $eye["oct_reference_{$eyeSuffix}"]   : null;
+                                                     $vfRef    = isset($eye["vf_reference_{$eyeSuffix}"])    ? $eye["vf_reference_{$eyeSuffix}"]    : null;
+                                                     $mfergRef = isset($eye["mferg_reference_{$eyeSuffix}"]) ? $eye["mferg_reference_{$eyeSuffix}"] : null;
+                                             
+                                                     // ==== BACK-COMPAT: if not present above, fall back to tests table per-eye refs (legacy) ====
+                                                     if (!$fafRef)   { $tmp = "faf_reference_{$eyeLower}";   $fafRef   = isset($test[$tmp]) ? $test[$tmp] : null; }
+                                                     if (!$octRef)   { $tmp = "oct_reference_{$eyeLower}";   $octRef   = isset($test[$tmp]) ? $test[$tmp] : null; }
+                                                     if (!$vfRef)    { $tmp = "vf_reference_{$eyeLower}";    $vfRef    = isset($test[$tmp]) ? $test[$tmp] : null; }
+                                                     if (!$mfergRef) { $tmp = "mferg_reference_{$eyeLower}"; $mfergRef = isset($test[$tmp]) ? $test[$tmp] : null; }
                                                 ?>
                                                 <div class="card test-card mb-3 eye-row"
                                                      data-eye="<?= htmlspecialchars($eyeSide) ?>"
