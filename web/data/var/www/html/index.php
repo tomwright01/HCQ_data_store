@@ -732,10 +732,17 @@ canvas { max-height: 380px; }
                                                     $mfergRef = safe_get($eye, 'mferg_reference');
 
                                                     // Fallback to tests.<modality>_reference_od|_os (old schema)
-                                                    if (!$fafRef)   $fafRef   = safe_get($test, "faf_reference_{$eyeLower}");
-                                                    if (!$octRef)   $octRef   = safe_get($test, "oct_reference_{$eyeLower}");
-                                                    if (!$vfRef)    $vfRef    = safe_get($test, "vf_reference_{$eyeLower}");
-                                                    if (!$mfergRef) $mfergRef = safe_get($test, "mferg_reference_{$eyeLower}");
+                                                   if ($eyeSide === 'OD') {
+                                                       $fafRef   = safe_get($eye, 'faf_reference_OD');
+                                                       $octRef   = safe_get($eye, 'oct_reference_OD');
+                                                       $vfRef    = safe_get($eye, 'vf_reference_OD');
+                                                       $mfergRef = safe_get($eye, 'mferg_reference_OD');
+                                                   } else {
+                                                       $fafRef   = safe_get($eye, 'faf_reference_OS');
+                                                       $octRef   = safe_get($eye, 'oct_reference_OS');
+                                                       $vfRef    = safe_get($eye, 'vf_reference_OS');
+                                                       $mfergRef = safe_get($eye, 'mferg_reference_OS');
+                                                   }
 
                                                     $hasAnyMedia = $fafRef || $octRef || $vfRef || $mfergRef;
                                                 ?>
