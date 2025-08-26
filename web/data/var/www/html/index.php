@@ -613,7 +613,7 @@ canvas { max-height: 380px; }
                     <div class="card-body">
                         <div class="row mb-3">
                             <div class="col-md-6">
-                                <p><strong>Patient ID:</strong> <?= htmlspecialchars($patient['patient_id']) ?></p>
+                                <p><strong>Patient ID:</strong> <?= htmlspecialchars($patient['subject_id']) ?></p>
                                 <p><strong>Age:</strong> <?= (int)$ageYears ?> years</p>
                             </div>
                             <div class="col-md-6">
