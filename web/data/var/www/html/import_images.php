@@ -249,16 +249,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import']) && !isset($
 
 <style>
 :root{
-  --brand:#1a73e8; --teal:#00a88f; --teal-dark:#008f7a;
+  --brand:#1a73e8; --brand-2:#6ea8fe;
   --bg:#f7f8fb; --card:#ffffff; --border:rgba(0,0,0,.08); --shadow:0 8px 24px rgba(0,0,0,0.08);
 }
-body { background: var(--bg); }
-.navbar-blur { backdrop-filter: saturate(180%) blur(8px); background: rgba(255,255,255,0.85); border-bottom:1px solid var(--border); }
-.card { border:1px solid var(--border); box-shadow: var(--shadow); }
+body { background: var(--bg); color:#111827; }
+.navbar-blur { backdrop-filter: saturate(180%) blur(8px); background: rgba(255,255,255,0.9); border-bottom:1px solid var(--border); }
+.card { border:1px solid var(--border); box-shadow: var(--shadow); background: var(--card); }
 .pill { border-radius: 999px; }
-.progress-bar { background-color: var(--teal); }
-.btn-primary { background: var(--teal); border-color: var(--teal); }
-.btn-primary:hover { background: var(--teal-dark); border-color: var(--teal-dark); }
+/* Make primary buttons match index.php theme (brand blue) */
+.btn-primary { background: var(--brand); border-color: var(--brand); }
+.btn-primary:hover { background: #1462c8; border-color: #1462c8; }
+/* Progress bar in brand color */
+.progress-bar { background-color: var(--brand); }
 .badge-faf { background:#6f42c1; }
 .badge-oct { background:#1a73e8; }
 .badge-vf  { background:#20c997; }
@@ -270,7 +272,7 @@ body { background: var(--bg); }
   <div class="container-fluid">
     <a class="navbar-brand fw-semibold" href="index.php"><i class="bi bi-images me-2"></i>Import Images</a>
     <div class="d-flex align-items-center gap-2">
-      <a href="index.php" class="btn btn-outline-secondary pill"><i class="bi bi-arrow-left"></i> Back to Dashboard</a>
+      <a href="index.php" class="btn btn-outline-secondary pill"><i class="bi bi-house"></i> Back to Dashboard</a>
     </div>
   </div>
 </nav>
@@ -427,3 +429,4 @@ document.getElementById('startUpload').addEventListener('click', async () => {
 </script>
 </body>
 </html>
+
