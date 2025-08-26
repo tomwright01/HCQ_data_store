@@ -623,10 +623,12 @@ canvas { max-height: 380px; }
                                                     $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
 
                                                     // NEW: get per-eye image references from test_eyes
-                                                    $fafRef   = safe_get($eye, 'faf_reference_'   . $eyeSide);
-                                                    $octRef   = safe_get($eye, 'oct_reference_'   . $eyeSide);
-                                                    $vfRef    = safe_get($eye, 'vf_reference_'    . $eyeSide);
-                                                    $mfergRef = safe_get($eye, 'mferg_reference_' . $eyeSide);
+                                                   // In the new schema each test_eyes row already knows the eye,
+                                                   // so the reference columns are NOT suffixed with OD/OS.
+                                                   $fafRef   = safe_get($eye, 'faf_reference');
+                                                   $octRef   = safe_get($eye, 'oct_reference');
+                                                   $vfRef    = safe_get($eye, 'vf_reference');
+                                                   $mfergRef = safe_get($eye, 'mferg_reference');
 
                                                     $hasAnyMedia = $fafRef || $octRef || $vfRef || $mfergRef;
                                                 ?>
