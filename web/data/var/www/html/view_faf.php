@@ -2,52 +2,125 @@
 require_once 'includes/config.php';
 require_once 'includes/functions.php';
 
-$test_type  = 'OCT';
-$ref        = $_GET['ref'] ?? '';
-$patient_id = $_GET['patient_id'] ?? '';
+/**
+ * FAF Viewer
+ * Accepts either:
+ *   A) test_id + eye
+ *   B) ref + patient_id + eye
+ */
+$test_type  = 'FAF';
+
+$test_id    = $_GET['test_id']   ?? '';
+$ref        = $_GET['ref']       ?? '';
+$patient_id = $_GET['patient_id']?? '';
 $eye        = strtoupper($_GET['eye'] ?? '');
 
-if (!$ref || !$patient_id || !in_array($eye, ['OD','OS'], true)) {
+if (!in_array($eye, ['OD','OS'], true)) {
     http_response_code(400);
-    die("Invalid parameters. Required: ref, patient_id, eye(OD|OS).");
+    die("Invalid parameters. 'eye' must be OD or OS.");
 }
 
-$fieldName = strtolower($test_type) . '_reference'; // 'oct_reference'
-$sql = "
-    SELECT
-        te.*, t.date_of_test, t.patient_id,
-        p.subject_id, p.location, p.date_of_birth
-    FROM test_eyes te
-    JOIN tests t    ON te.test_id = t.test_id
-    JOIN patients p ON t.patient_id = p.patient_id
-    WHERE t.patient_id = ?
-      AND te.eye = ?
-      AND te.$fieldName = ?
-    LIMIT 1
-";
-$stmt = $conn->prepare($sql);
-if (!$stmt) die('Database error (prepare): ' . $conn->error);
-$stmt->bind_param("sss", $patient_id, $eye, $ref);
-$stmt->execute();
-$row = $stmt->get_result()->fetch_assoc();
-$stmt->close();
+/** Build the per-eye reference column, e.g. faf_reference_OD */
+$fieldCol = strtolower($test_type) . '_reference_' . $eye; // 'faf_reference_OD'
 
-if (!$row) {
-    http_response_code(404);
-    die("No $test_type record found for this reference/eye/patient.");
+$row = null;
+$resolvedRef = null;
+$test_date = null;
+
+/* ----------------------------
+   Mode A: test_id + eye
+----------------------------- */
+if ($test_id && !$ref && !$patient_id) {
+    $sql = "
+        SELECT
+            te.*, t.date_of_test, t.patient_id,
+            p.subject_id, p.location, p.date_of_birth
+        FROM test_eyes te
+        JOIN tests t    ON te.test_id = t.test_id
+        JOIN patients p ON t.patient_id = p.patient_id
+        WHERE te.test_id = ?
+          AND te.eye = ?
+        LIMIT 1
+    ";
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) die('Database error (prepare A): ' . $conn->error);
+    $stmt->bind_param("ss", $test_id, $eye);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$row) {
+        http_response_code(404);
+        die("No $test_type record found for test_id=".htmlspecialchars($test_id)." & eye=$eye.");
+    }
+
+    // Extract the stored ref for this eye
+    if (array_key_exists($fieldCol, $row) && !empty($row[$fieldCol])) {
+        $resolvedRef = $row[$fieldCol];
+    } else {
+        http_response_code(404);
+        die("No $test_type reference stored for $eye on this test.");
+    }
+    $patient_id = $row['patient_id'] ?? $patient_id;
+    $test_date  = $row['date_of_test'] ?? null;
+
+/* ----------------------------
+   Mode B: ref + patient_id + eye
+----------------------------- */
+} elseif ($ref && $patient_id && !$test_id) {
+    $sql = "
+        SELECT
+            te.*, t.date_of_test, t.patient_id,
+            p.subject_id, p.location, p.date_of_birth
+        FROM test_eyes te
+        JOIN tests t    ON te.test_id = t.test_id
+        JOIN patients p ON t.patient_id = p.patient_id
+        WHERE t.patient_id = ?
+          AND te.eye = ?
+          AND te.$fieldCol = ?
+        LIMIT 1
+    ";
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) die('Database error (prepare B): ' . $conn->error);
+    $stmt->bind_param("sss", $patient_id, $eye, $ref);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$row) {
+        http_response_code(404);
+        die("No $test_type record found for this reference/eye/patient.");
+    }
+
+    $resolvedRef = $ref;
+    $test_id     = $row['test_id'] ?? '';
+    $test_date   = $row['date_of_test'] ?? null;
+
+/* ----------------------------
+   Invalid parameter combo
+----------------------------- */
+} else {
+    http_response_code(400);
+    die("Invalid parameters. Use either:
+A) ?test_id=...&eye=OD|OS
+or
+B) ?ref=<filename>&patient_id=...&eye=OD|OS");
 }
 
-$image_path = getDynamicImagePath($ref);
+/** Resolve file path on disk (keeps your existing helper) */
+$image_path = getDynamicImagePath($resolvedRef);
 if (!$image_path) {
     http_response_code(404);
-    die("$test_type image not found on disk.");
+    die("$test_type file not found on disk.");
 }
 
-$test_date = $row['date_of_test'] ?? null;
-$age = (!empty($row['date_of_birth']))
-    ? date_diff(date_create($row['date_of_birth']), date_create($test_date ?: 'today'))->y
+/** Patient age at test */
+$dob = $row['date_of_birth'] ?? null;
+$age = ($dob)
+    ? date_diff(date_create($dob), date_create($test_date ?: 'today'))->y
     : 'N/A';
 
+/** Diagnostics */
 $report_diagnosis = $row['report_diagnosis'] ?? 'Not specified';
 $exclusion        = $row['exclusion'] ?? 'None';
 $merci_score      = $row['merci_score'] ?? 'N/A';
@@ -67,7 +140,7 @@ function eyeLabel($eye){ return $eye === 'OD' ? 'Right Eye' : 'Left Eye'; }
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>OCT Viewer — <?= htmlspecialchars($row['subject_id'] ?? $patient_id) ?> (<?= htmlspecialchars($eye) ?>)</title>
+<title>FAF Viewer — <?= htmlspecialchars($row['subject_id'] ?? $patient_id) ?> (<?= htmlspecialchars($eye) ?>)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
@@ -89,7 +162,7 @@ body { background: var(--bg); color: var(--text); }
   <div class="container-fluid d-flex align-items-center justify-content-between">
     <div class="d-flex align-items-center gap-3">
       <a href="index.php?search_patient_id=<?= urlencode($patient_id) ?>" class="btn btn-outline-secondary btn-sm">← Back</a>
-      <h5 class="mb-0">OCT Viewer</h5>
+      <h5 class="mb-0">FAF Viewer</h5>
       <span class="meta-pill"><?= htmlspecialchars($row['subject_id'] ?? '') ?></span>
       <span class="meta-pill"><?= htmlspecialchars($patient_id) ?></span>
       <span class="meta-pill"><?= htmlspecialchars($eye) ?> — <?= eyeLabel($eye) ?></span>
@@ -115,7 +188,7 @@ body { background: var(--bg); color: var(--text); }
                 <button id="zoomIn">+</button>
                 <input id="bright" type="range" min="0.2" max="2.5" step="0.05" value="1" title="Brightness">
               </div>
-              <img id="theImage" src="<?= htmlspecialchars($image_path) ?>" alt="OCT">
+              <img id="theImage" src="<?= htmlspecialchars($image_path) ?>" alt="FAF">
             <?php elseif ($is_pdf): ?>
               <iframe src="<?= htmlspecialchars($image_path) ?>" style="border:0;width:100%;height:80vh;background:#fff"></iframe>
             <?php else: ?>
@@ -140,7 +213,7 @@ body { background: var(--bg); color: var(--text); }
             <div class="col-6"><div class="label">Test Date</div><div><?= htmlspecialchars($test_date ?? 'Unknown') ?></div></div>
             <div class="col-6"><div class="label">Age</div><div><?= htmlspecialchars($age) ?></div></div>
             <div class="col-6"><div class="label">Location</div><div><?= htmlspecialchars($row['location'] ?? '—') ?></div></div>
-            <div class="col-12"><div class="label mt-2">Reference</div><code><?= htmlspecialchars($ref) ?></code></div>
+            <div class="col-12"><div class="label mt-2">Reference</div><code><?= htmlspecialchars($resolvedRef) ?></code></div>
           </div>
         </div>
       </div>
@@ -185,3 +258,4 @@ body { background: var(--bg); color: var(--text); }
 <?php endif; ?>
 </body>
 </html>
+
