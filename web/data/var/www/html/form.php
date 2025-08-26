@@ -199,64 +199,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
         }
 
-        /* --- Collect medication rows (raw + computed) --- */
+        /* --- Collect medication rows (raw + computed preview) --- */
         $medPayloads = [];
         if (isset($_POST['meds']) && is_array($_POST['meds'])) {
             foreach ($_POST['meds'] as $m) {
                 $name   = trim(val($m, 'name', ''));
                 if ($name === '') continue; // ignore empty row
 
-                // Raw inputs (required by schema)
-                $dose   = safe_num(val($m, 'dose'), 3);                  // numeric (may not be null if name provided)
-                $unitIn = strtolower(val($m, 'unit', 'mg'));             // 'mg' | 'g'
-                $freqIn = strtolower(val($m, 'freq', 'per_day'));        // 'per_day' | 'per_week'
-                $start  = val($m, 'start_date');                         // date or null
-                $end    = val($m, 'end_date');                           // date or null
-                $months = safe_int(val($m, 'months'), 0, 1200);          // nullable
-                $days   = safe_int(val($m, 'days'), 0, 100000);          // nullable
+                $dose   = safe_num(val($m, 'dose'), 3);               // numeric (required if name set)
+                $unitIn = strtolower(val($m, 'unit', 'mg'));          // 'mg' | 'g'
+                $freqIn = strtolower(val($m, 'freq', 'per_day'));     // 'per_day' | 'per_week'
+                $start  = val($m, 'start_date');                      // date or null
+                $end    = val($m, 'end_date');                        // date or null
+                $months = safe_int(val($m, 'months'), 0, 1200);       // nullable
+                $days   = safe_int(val($m, 'days'), 0, 100000);       // nullable
                 $notes  = val($m, 'notes');
 
                 if ($dose === null) {
                     throw new Exception("Medication dose is required for '{$name}'.");
                 }
-                $unit = in_array($unitIn, ['mg','g'], true) ? $unitIn : 'mg';
-                $freq = in_array($freqIn, ['per_day','per_week'], true) ? $freqIn : 'per_day';
 
-                // Convert to mg/day
-                $dose_mg = ($unit === 'g') ? $dose * 1000.0 : $dose;
-                $dosage_per_day = ($freq === 'per_week') ? round($dose_mg/7.0, 6) : round($dose_mg, 6);
-
-                // Duration
+                // Preview-only computations (DB has generated columns)
+                $dose_mg = ($unitIn === 'g') ? $dose * 1000.0 : $dose;
+                $dosage_per_day = ($freqIn === 'per_week') ? round($dose_mg/7.0, 6) : round($dose_mg, 6);
                 $duration_days = date_diff_inclusive_days($start, $end);
                 if ($duration_days === null && ($months !== null || $days !== null)) {
                     $months = $months ?? 0; $days = $days ?? 0;
                     $duration_days = (int)($months * 30 + $days);
-                    if ($start && !$end) {
-                        try {
-                            $sd = new DateTime($start);
-                            $int = new DateInterval('P'.max(0,$months).'M'.max(0,$days).'D');
-                            $ed = (clone $sd)->add($int)->sub(new DateInterval('P1D')); // inclusive
-                            $end = $ed->format('Y-m-d');
-                        } catch (Throwable $e) {}
-                    }
                 }
-
-                // Cumulative mg
-                $cumulative = null;
-                if ($duration_days !== null) {
-                    $cumulative = round($dosage_per_day * max(0,$duration_days), 3);
-                }
+                $cumulative = ($duration_days !== null) ? round($dosage_per_day * max(0,$duration_days), 3) : null;
 
                 $medPayloads[] = [
                     'name'             => $name,
-                    // raw (schema NOT NULL on some)
-                    'input_value'      => $dose,     // as entered (mg or g)
-                    'input_unit'       => $unit,     // mg|g
-                    'input_freq'       => $freq,     // per_day|per_week
+                    // raw inputs
+                    'input_value'      => $dose,       // as entered
+                    'input_unit'       => $unitIn,     // mg|g
+                    'input_freq'       => $freqIn,     // per_day|per_week
                     'months_entered'   => $months,
                     'days_entered'     => $days,
-                    // derived
-                    'dosage_per_day'   => $dosage_per_day,  // mg/day
+                    // derived (for UI preview only)
+                    'dosage_per_day'   => $dosage_per_day,
                     'duration_days'    => $duration_days,
                     'cumulative'       => $cumulative,
                     'start_date'       => $start ?: null,
@@ -293,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $ALLOW_IMG = ['ext'=>['png','jpg','jpeg'], 'mime'=>['image/png','image/jpeg']];
         $ALLOW_PDF = ['ext'=>['pdf'], 'mime'=>['application/pdf']];
 
-        // Upsert test_eyes per eye
+        // Upsert test_eyes per eye (with *_OD / *_OS columns)
         foreach ($eyePayloads as $p) {
             $test_id = $p['test_id'];
             $eye     = $p['eye'];
@@ -305,6 +287,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $vf_ref    = save_upload("image_vf_".strtolower($eye),    $upDir, "VF_{$eye}",    $ALLOW_PDF);
             $mferg_ref = save_upload("image_mferg_".strtolower($eye), $upDir, "MFERG_{$eye}", $ALLOW_IMG);
 
+            // Eye-specific reference column names
+            $refCols = ($eye === 'OD')
+                ? ['faf_reference_OD','oct_reference_OD','vf_reference_OD','mferg_reference_OD']
+                : ['faf_reference_OS','oct_reference_OS','vf_reference_OS','mferg_reference_OS'];
+
             // Does a row already exist for (test_id, eye)?
             $existing_id = null;
             $stmt = $conn->prepare("SELECT result_id FROM test_eyes WHERE test_id = ? AND eye = ? LIMIT 1");
@@ -315,21 +302,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt->close();
 
             if ($existing_id) {
-                // UPDATE (COALESCE files so we don't blank them when not re-uploaded)
-                $stmt = $conn->prepare("
+                // UPDATE with COALESCE on eye-specific refs
+                $setRefs = "{$refCols[0]} = COALESCE(?, {$refCols[0]}),
+                            {$refCols[1]} = COALESCE(?, {$refCols[1]}),
+                            {$refCols[2]} = COALESCE(?, {$refCols[2]}),
+                            {$refCols[3]} = COALESCE(?, {$refCols[3]})";
+
+                $sql = "
                     UPDATE test_eyes SET
-                        age=?, report_diagnosis=?, exclusion=?, merci_score=?, merci_diagnosis=?, error_type=?,
-                        faf_grade=?, oct_score=?, vf_score=?, actual_diagnosis=?, medication_name=?, dosage=?, dosage_unit=?,
-                        duration_days=?, cumulative_dosage=?, date_of_continuation=?, treatment_notes=?,
-                        faf_reference = COALESCE(?, faf_reference),
-                        oct_reference = COALESCE(?, oct_reference),
-                        vf_reference  = COALESCE(?, vf_reference),
-                        mferg_reference = COALESCE(?, mferg_reference),
+                        age=?,
+                        report_diagnosis=?,
+                        exclusion=?,
+                        merci_score=?,
+                        merci_diagnosis=?,
+                        error_type=?,
+                        faf_grade=?,
+                        oct_score=?,
+                        vf_score=?,
+                        actual_diagnosis=?,
+                        medication_name=?,
+                        dosage=?,
+                        dosage_unit=?,
+                        duration_days=?,
+                        cumulative_dosage=?,
+                        date_of_continuation=?,
+                        treatment_notes=?,
+                        $setRefs,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE result_id = ?
-                ");
+                ";
+                $stmt = $conn->prepare($sql);
+
+                // Use 's' for most to allow NULL; last is result_id (i)
+                $types = str_repeat('s', 21) . 'i';
                 $stmt->bind_param(
-                    'isssssiddssssiidsssssii',
+                    $types,
                     $p['age'],
                     $p['report_diagnosis'],
                     $p['exclusion'],
@@ -356,17 +363,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!$stmt->execute()) throw new Exception('Failed updating '.$eye.' eye: '.$stmt->error);
                 $stmt->close();
             } else {
-                // INSERT
-                $stmt = $conn->prepare("
-                    INSERT INTO test_eyes
-                    (test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
-                     faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
-                     duration_days, cumulative_dosage, date_of_continuation, treatment_notes,
-                     faf_reference, oct_reference, vf_reference, mferg_reference)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                ");
+                // INSERT with eye-specific ref columns
+                $cols = "
+                    test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
+                    faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
+                    duration_days, cumulative_dosage, date_of_continuation, treatment_notes,
+                    {$refCols[0]}, {$refCols[1]}, {$refCols[2]}, {$refCols[3]}
+                ";
+                $placeholders = implode(',', array_fill(0, 23, '?'));
+
+                $sql = "INSERT INTO test_eyes ($cols) VALUES ($placeholders)";
+                $stmt = $conn->prepare($sql);
+
+                // 23 strings keeps NULLs as NULL safely
+                $types = str_repeat('s', 23);
                 $stmt->bind_param(
-                    'ssisssssiddssssiidssss',
+                    $types,
                     $test_id,
                     $eye,
                     $p['age'],
@@ -396,8 +408,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        /* --- Insert medications (raw inputs + computed) --- */
+        /* --- Insert medications using NEW schema columns only --- */
         if (!empty($medPayloads)) {
+            // Columns that exist in your schema:
+            // patient_id, subject_id, medication_name,
+            // input_dosage_value (mg), input_dosage_period ('day'|'week'),
+            // start_date, end_date, duration_months, duration_days_manual, notes
             $stmt = $conn->prepare("
                 INSERT INTO medications
                 (
@@ -405,53 +421,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                   subject_id,
                   medication_name,
                   input_dosage_value,
-                  input_dosage_unit,
-                  input_frequency,
-                  dosage_per_day,
+                  input_dosage_period,
                   start_date,
                   end_date,
-                  months_entered,
-                  days_entered,
-                  duration_days,
-                  cumulative_dosage,
+                  duration_months,
+                  duration_days_manual,
                   notes
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             foreach ($medPayloads as $m) {
-                $input_value = $m['input_value'];        // NOT NULL by our validation
-                $input_unit  = $m['input_unit'] ?: 'mg';
-                $input_freq  = $m['input_freq'] ?: 'per_day';
+                // Convert to mg for storage
+                $input_value_mg = ($m['input_unit'] === 'g') ? ($m['input_value'] * 1000.0) : $m['input_value'];
+                // Map UI period to schema enum
+                $input_period   = ($m['input_freq'] === 'per_week') ? 'week' : 'day';
 
-                $dose_per_day = $m['dosage_per_day'];    // mg/day, not null given dose+freq required
-                $dur_days     = $m['duration_days'];     // may be null
-                $cum          = $m['cumulative'];        // may be null
                 $start        = $m['start_date'];
                 $end          = $m['end_date'];
                 $months_ent   = $m['months_entered'];
                 $days_ent     = $m['days_entered'];
                 $notes        = $m['notes'];
 
-                // Types for 14 params: s s s d s s d s s i i i d s
+                // types: s s s d s s s i i s  (10 params)
                 $stmt->bind_param(
-                    'sssdssdssiiids',
+                    'sssdsssiis',
                     $patient_id,
                     $subject_id,
                     $m['name'],
-                    $input_value,
-                    $input_unit,
-                    $input_freq,
-                    $dose_per_day,
+                    $input_value_mg,
+                    $input_period,
                     $start,
                     $end,
                     $months_ent,
                     $days_ent,
-                    $dur_days,
-                    $cum,
                     $notes
                 );
-                if (!$stmt->execute()) throw new Exception('Failed inserting medication '.$m['name'].': '.$stmt->error);
+
+                if (!$stmt->execute()) {
+                    throw new Exception('Failed inserting medication '.$m['name'].': '.$stmt->error);
+                }
             }
             $stmt->close();
         }
@@ -593,7 +602,7 @@ input[type=file]::file-selector-button{ border:1px solid var(--border); border-r
                 <h5 class="mb-0"><i class="bi bi-capsule-pill"></i> Medications</h5>
                 <button type="button" id="addMed" class="btn btn-sm btn-outline-primary"><i class="bi bi-plus"></i> Add row</button>
               </div>
-              <p class="help mb-3">Enter per-day or per-week dosing. We store <code>dosage_per_day (mg/day)</code>, and compute <code>duration_days</code> + <code>cumulative_dosage</code>. Raw inputs are saved too.</p>
+              <p class="help mb-3">Enter per-day or per-week dosing. We store <code>input_dosage_value (mg)</code> + <code>input_dosage_period</code>; the DB computes <code>dosage_per_day</code>, <code>duration_days</code>, and <code>cumulative_dosage</code>.</p>
               <div id="medsContainer"></div>
               <div class="small text-muted">Provide Start/End dates or Months/Days. If both dates given, they take priority.</div>
             </div>
@@ -692,7 +701,7 @@ function medRowTemplate(i){
             <option value="per_week">/week</option>
           </select>
         </div>
-        <div class="help">Stored as mg/day. Dose is required if a name is set.</div>
+        <div class="help">Stored as mg/day (DB computes). Dose is required if a name is set.</div>
       </div>
       <div class="col-md-4">
         <label class="form-label">Notes</label>
@@ -969,6 +978,5 @@ function eye_block_html($eye) {
 <?php
     return ob_get_clean();
 }
-
 
 
