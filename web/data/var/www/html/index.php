@@ -591,7 +591,7 @@ canvas { max-height: 380px; }
             <div class="col-lg-6 patient-item"
                  data-location="<?= htmlspecialchars($patient['location']) ?>"
                  data-subject="<?= htmlspecialchars($patient['subject_id']) ?>"
-                 data-patient-id="<?= htmlspecialchars($patient['patient_id']) ?>"
+                 data-patient-id="<?= htmlspecialchars($patient['subject_id']) ?>"
                  data-age="<?= (int)$ageYears ?>"
                  data-tests="<?= count($tests) ?>"
                  data-lasttest="<?= htmlspecialchars($lastDate ?? '') ?>">
