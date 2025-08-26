@@ -700,37 +700,41 @@ canvas { max-height: 380px; }
                                          aria-labelledby="heading-<?= htmlspecialchars($test['test_id']) ?>"
                                          data-bs-parent="#testsAccordion-<?= htmlspecialchars($patient['patient_id']) ?>">
                                         <div class="accordion-body">
+
                                             <?php foreach ($testEyes as $eye): ?>
                                                 <?php
-                                                     $eyeSide   = strtoupper($eye['eye']);            // 'OD' or 'OS'
-                                                     $eyeLower  = strtolower($eyeSide);               // 'od' or 'os'
-                                                     $eyeSuffix = ($eyeSide === 'OS') ? 'OS' : 'OD';  // schema columns use UPPERCASE suffix
-                                                     $eyeClass  = $eyeSide === 'OS' ? 'os-badge' : 'od-badge';
-                                             
-                                                     $diag      = $eye['report_diagnosis'];
-                                                     $diagClass = ($diag === 'no input') ? 'no-input' : $diag;
-                                             
-                                                     // Optional medication fields stored on test_eyes (legacy/compat view only)
-                                                     $medName    = safe_get($eye, 'medication_name');
-                                                     $dosage     = safe_get($eye, 'dosage');
-                                                     $dosageUnit = safe_get($eye, 'dosage_unit', 'mg');
-                                             
-                                                     $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
-                                                     $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
-                                             
-                                                     // ==== PRIMARY: read per-eye columns that actually exist in your schema ====
-                                                     // test_eyes.<modality>_reference_OD | test_eyes.<modality>_reference_OS
-                                                     $fafRef   = isset($eye["faf_reference_{$eyeSuffix}"])   ? $eye["faf_reference_{$eyeSuffix}"]   : null;
-                                                     $octRef   = isset($eye["oct_reference_{$eyeSuffix}"])   ? $eye["oct_reference_{$eyeSuffix}"]   : null;
-                                                     $vfRef    = isset($eye["vf_reference_{$eyeSuffix}"])    ? $eye["vf_reference_{$eyeSuffix}"]    : null;
-                                                     $mfergRef = isset($eye["mferg_reference_{$eyeSuffix}"]) ? $eye["mferg_reference_{$eyeSuffix}"] : null;
-                                             
-                                                     // ==== BACK-COMPAT: if not present above, fall back to tests table per-eye refs (legacy) ====
-                                                     if (!$fafRef)   { $tmp = "faf_reference_{$eyeLower}";   $fafRef   = isset($test[$tmp]) ? $test[$tmp] : null; }
-                                                     if (!$octRef)   { $tmp = "oct_reference_{$eyeLower}";   $octRef   = isset($test[$tmp]) ? $test[$tmp] : null; }
-                                                     if (!$vfRef)    { $tmp = "vf_reference_{$eyeLower}";    $vfRef    = isset($test[$tmp]) ? $test[$tmp] : null; }
-                                                     if (!$mfergRef) { $tmp = "mferg_reference_{$eyeLower}"; $mfergRef = isset($test[$tmp]) ? $test[$tmp] : null; }
+                                                    $eyeSide   = strtoupper($eye['eye']);            // 'OD' or 'OS'
+                                                    $eyeLower  = strtolower($eyeSide);               // 'od' or 'os'
+                                                    $eyeSuffix = ($eyeSide === 'OS') ? 'OS' : 'OD';  // UPPERCASE suffix
+                                                    $eyeClass  = $eyeSide === 'OS' ? 'os-badge' : 'od-badge';
+
+                                                    $diag      = $eye['report_diagnosis'];
+                                                    $diagClass = ($diag === 'no input') ? 'no-input' : $diag;
+
+                                                    // Optional legacy per-eye med fields on test_eyes (display only)
+                                                    $medName    = $eye['medication_name'] ?? null;
+                                                    $dosage     = $eye['dosage'] ?? null;
+                                                    $dosageUnit = $eye['dosage_unit'] ?? 'mg';
+
+                                                    $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
+                                                    $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
+
+                                                    // Preferred: per-eye refs on test_eyes
+                                                    $fafRef   = $eye["faf_reference_{$eyeSuffix}"]   ?? null;
+                                                    $octRef   = $eye["oct_reference_{$eyeSuffix}"]   ?? null;
+                                                    $vfRef    = $eye["vf_reference_{$eyeSuffix}"]    ?? null;
+                                                    $mfergRef = $eye["mferg_reference_{$eyeSuffix}"] ?? null;
+
+                                                    // Back-compat: fall back to tests table if needed
+                                                    if (empty($fafRef))   { $tmp = "faf_reference_{$eyeLower}";   $fafRef   = $test[$tmp] ?? null; }
+                                                    if (empty($octRef))   { $tmp = "oct_reference_{$eyeLower}";   $octRef   = $test[$tmp] ?? null; }
+                                                    if (empty($vfRef))    { $tmp = "vf_reference_{$eyeLower}";    $vfRef    = $test[$tmp] ?? null; }
+                                                    if (empty($mfergRef)) { $tmp = "mferg_reference_{$eyeLower}"; $mfergRef = $test[$tmp] ?? null; }
+
+                                                    // Decide once per eye whether we have any media
+                                                    $hasAnyMedia = !empty($fafRef) || !empty($octRef) || !empty($vfRef) || !empty($mfergRef);
                                                 ?>
+
                                                 <div class="card test-card mb-3 eye-row"
                                                      data-eye="<?= htmlspecialchars($eyeSide) ?>"
                                                      data-diagnosis="<?= htmlspecialchars($diag) ?>"
@@ -777,28 +781,28 @@ canvas { max-height: 380px; }
                                                         <?php if ($hasAnyMedia): ?>
                                                         <div class="attachments d-flex flex-wrap align-items-center gap-2 mt-2">
                                                             <span class="badge bg-light text-dark"><i class="bi bi-paperclip"></i> Images / Files</span>
-                                                            <?php if ($fafRef): ?>
+                                                            <?php if (!empty($fafRef)): ?>
                                                               <a class="btn btn-outline-dark btn-sm"
                                                                  href="<?= htmlspecialchars(build_view_url('FAF', $patient['patient_id'], $eyeSide, $fafRef)) ?>"
                                                                  title="FAF (<?= htmlspecialchars($fafRef) ?>)">
                                                                 <i class="bi bi-image"></i> FAF
                                                               </a>
                                                             <?php endif; ?>
-                                                            <?php if ($octRef): ?>
+                                                            <?php if (!empty($octRef)): ?>
                                                               <a class="btn btn-outline-dark btn-sm"
                                                                  href="<?= htmlspecialchars(build_view_url('OCT', $patient['patient_id'], $eyeSide, $octRef)) ?>"
                                                                  title="OCT (<?= htmlspecialchars($octRef) ?>)">
                                                                 <i class="bi bi-file-earmark-richtext"></i> OCT
                                                               </a>
                                                             <?php endif; ?>
-                                                            <?php if ($vfRef): ?>
+                                                            <?php if (!empty($vfRef)): ?>
                                                               <a class="btn btn-outline-dark btn-sm"
                                                                  href="<?= htmlspecialchars(build_view_url('VF', $patient['patient_id'], $eyeSide, $vfRef)) ?>"
                                                                  title="VF (<?= htmlspecialchars($vfRef) ?>)">
                                                                 <i class="bi bi-grid-3x3-gap"></i> VF
                                                               </a>
                                                             <?php endif; ?>
-                                                            <?php if ($mfergRef): ?>
+                                                            <?php if (!empty($mfergRef)): ?>
                                                               <a class="btn btn-outline-dark btn-sm"
                                                                  href="<?= htmlspecialchars(build_view_url('MFERG', $patient['patient_id'], $eyeSide, $mfergRef)) ?>"
                                                                  title="mfERG (<?= htmlspecialchars($mfergRef) ?>)">
@@ -817,6 +821,7 @@ canvas { max-height: 380px; }
                                                     </div>
                                                 </div>
                                             <?php endforeach; ?>
+
                                         </div>
                                     </div>
                                 </div>
@@ -1617,4 +1622,5 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 </script>
 </body>
 </html>
+
 
