@@ -14,56 +14,95 @@ if ($res = $conn->query("SELECT COUNT(*) AS c FROM tests"))    { $row = $res->fe
 if ($res = $conn->query("SELECT COUNT(*) AS c FROM test_eyes")){ $row = $res->fetch_assoc(); $totalEyes     = (int)($row['c'] ?? 0); }
 
 /* ----------------------------
+   Server-side analytics (base dataset)
+----------------------------- */
+// Patients by location (base; charts will re-compute on client for filters)
+$byLocation = ['KH' => 0, 'CHUSJ' => 0, 'IWK' => 0, 'IVEY' => 0];
+if ($res = $conn->query("SELECT location, COUNT(*) AS c FROM patients GROUP BY location")) {
+    while ($row = $res->fetch_assoc()) {
+        if (isset($byLocation[$row['location']])) $byLocation[$row['location']] = (int)$row['c'];
+    }
+}
+
+// Diagnosis distribution (base)
+$diagnoses = ['normal' => 0, 'abnormal' => 0, 'exclude' => 0, 'no input' => 0];
+if ($res = $conn->query("SELECT report_diagnosis, COUNT(*) AS c FROM test_eyes GROUP BY report_diagnosis")) {
+    while ($row = $res->fetch_assoc()) {
+        if (isset($diagnoses[$row['report_diagnosis']])) $diagnoses[$row['report_diagnosis']] = (int)$row['c'];
+    }
+}
+
+// Avg scores by eye (base)
+$avgByEye = ['OD' => ['oct' => null, 'vf' => null], 'OS' => ['oct' => null, 'vf' => null]];
+if ($res = $conn->query("SELECT eye, AVG(oct_score) AS oct_avg, AVG(vf_score) AS vf_avg FROM test_eyes GROUP BY eye")) {
+    while ($row = $res->fetch_assoc()) {
+        $eye = $row['eye'];
+        if (isset($avgByEye[$eye])) {
+            $avgByEye[$eye]['oct'] = $row['oct_avg'] !== null ? (float)$row['oct_avg'] : null;
+            $avgByEye[$eye]['vf']  = $row['vf_avg']  !== null ? (float)$row['vf_avg']  : null;
+        }
+    }
+}
+
+// Tests over last 12 months (base; charts will re-compute on client)
+$monthLabels = [];
+$countsByMonth = [];
+$now = new DateTimeImmutable('first day of this month');
+for ($i = 11; $i >= 0; $i--) {
+    $m = $now->sub(new DateInterval("P{$i}M"));
+    $k = $m->format('Y-m');
+    $monthLabels[] = $m->format('M Y');
+    $countsByMonth[$k] = 0;
+}
+if ($res = $conn->query("
+    SELECT DATE_FORMAT(date_of_test, '%Y-%m') AS ym, COUNT(*) AS c
+    FROM tests
+    WHERE date_of_test >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+    GROUP BY ym ORDER BY ym
+")) {
+    while ($row = $res->fetch_assoc()) {
+        if (isset($countsByMonth[$row['ym']])) $countsByMonth[$row['ym']] = (int)$row['c'];
+    }
+}
+$testsLast12Values = array_values($countsByMonth);
+
+/* ----------------------------
    Data for patient list
 ----------------------------- */
 $patients = getPatientsWithTests($conn);
 function safe_get($arr, $key, $default = null) { return is_array($arr) && array_key_exists($key, $arr) ? $arr[$key] : $default; }
 
 /* ----------------------------
-   Raw rows (one per eye) for CSV export/per-patient charts/analytics
+   Raw rows (one per eye) for CSV export, filters & charts
 ----------------------------- */
 $eyeRows = [];
 $sqlAll = "
 SELECT
-  te.result_id,
-  te.test_id,
-  te.eye,
-  te.age,
-  te.report_diagnosis,
-  te.merci_score,
-  te.oct_score,
-  te.vf_score,
-  te.faf_reference,
-  te.oct_reference,
-  te.vf_reference,
-  te.mferg_reference,
-  t.date_of_test,
-  t.patient_id,
-  p.subject_id,
-  p.location
+  te.result_id, te.test_id, te.eye, te.age, te.report_diagnosis, te.merci_score, te.oct_score, te.vf_score,
+  te.faf_grade, te.actual_diagnosis,
+  t.date_of_test, t.patient_id,
+  p.subject_id, p.location
 FROM test_eyes te
-JOIN tests t   ON te.test_id = t.test_id
+JOIN tests t ON te.test_id = t.test_id
 JOIN patients p ON t.patient_id = p.patient_id
 ";
 if ($res = $conn->query($sqlAll)) {
     while ($row = $res->fetch_assoc()) {
         $eyeRows[] = [
-            'result_id'         => (int)$row['result_id'],
-            'test_id'           => $row['test_id'],
-            'eye'               => $row['eye'],
-            'age'               => is_null($row['age']) ? null : (int)$row['age'],
-            'report_diagnosis'  => $row['report_diagnosis'],
-            'merci_score'       => $row['merci_score'],
-            'oct_score'         => is_null($row['oct_score']) ? null : (float)$row['oct_score'],
-            'vf_score'          => is_null($row['vf_score']) ? null : (float)$row['vf_score'],
-            'faf_reference'     => $row['faf_reference'] ?? null,
-            'oct_reference'     => $row['oct_reference'] ?? null,
-            'vf_reference'      => $row['vf_reference'] ?? null,
-            'mferg_reference'   => $row['mferg_reference'] ?? null,
-            'date_of_test'      => $row['date_of_test'],
-            'patient_id'        => $row['patient_id'],
-            'subject_id'        => $row['subject_id'],
-            'location'          => $row['location'],
+            'result_id'        => (int)$row['result_id'],
+            'test_id'          => $row['test_id'],
+            'eye'              => $row['eye'],
+            'age'              => is_null($row['age']) ? null : (int)$row['age'],
+            'report_diagnosis' => $row['report_diagnosis'],
+            'merci_score'      => $row['merci_score'],
+            'oct_score'        => is_null($row['oct_score']) ? null : (float)$row['oct_score'],
+            'vf_score'         => is_null($row['vf_score']) ? null : (float)$row['vf_score'],
+            'faf_grade'        => $row['faf_grade'],
+            'actual_diagnosis' => $row['actual_diagnosis'],
+            'date_of_test'     => $row['date_of_test'],
+            'patient_id'       => $row['patient_id'],
+            'subject_id'       => $row['subject_id'],
+            'location'         => $row['location'],
         ];
     }
 }
@@ -140,14 +179,6 @@ canvas { max-height: 380px; }
 .filter-fab { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: none; }
 .filter-fab .btn { box-shadow: var(--shadow); }
 
-/* Media links below each eye row */
-.media-links { display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.25rem; }
-.media-links .btn { --bs-btn-padding-y:.25rem; --bs-btn-padding-x:.6rem; --bs-btn-font-size:.85rem; border-radius:999px; }
-.badge-faf { background:#6f42c1; }
-.badge-oct { background:#1a73e8; }
-.badge-vf  { background:#20c997; }
-.badge-mfg { background:#ffc107; color:#111; }
-
 /* Print */
 @media print {
   body { background: #fff !important; }
@@ -184,14 +215,14 @@ canvas { max-height: 380px; }
             <label class="form-check-label" for="darkToggle"><i class="bi bi-moon-stars"></i></label>
         </div>
 
+        <a href="import_images.php" class="btn btn-outline-secondary pill">
+            <i class="bi bi-image"></i> Import Images
+        </a>
         <a href="form.php" class="btn btn-outline-primary pill">
             <i class="bi bi-file-earmark-plus"></i> Add via Form
         </a>
-        <a href="csv_import.php" class="btn btn-outline-primary pill">
+        <a href="csv_import.php" class="btn btn-primary pill">
             <i class="bi bi-upload"></i> Import CSV
-        </a>
-        <a href="import_images.php" class="btn btn-primary pill">
-            <i class="bi bi-images"></i> Import Images
         </a>
       </div>
     </div>
@@ -257,11 +288,11 @@ canvas { max-height: 380px; }
         </div>
     </div>
 
-    <!-- Analytics -->
+    <!-- Analytics (NOW dynamic — respects patient filters) -->
     <div class="row mb-3" id="analytics">
         <div class="col">
             <h2 class="section-title"><i class="bi bi-graph-up-arrow"></i> Analytics</h2>
-            <p class="text-muted">Charts dynamically reflect your filters below.</p>
+            <p class="text-muted">Charts update to reflect the current filters.</p>
         </div>
     </div>
 
@@ -330,29 +361,22 @@ canvas { max-height: 380px; }
     </div>
 
     <!-- ===================== -->
-    <!-- Patient Filters -->
+    <!-- Patient Filters (drive BOTH patients & analytics) -->
     <!-- ===================== -->
     <div class="card mb-4" id="patientFilters">
         <div class="card-body">
-            <!-- Row A: Global search + specific IDs -->
+            <!-- Row 1: identifiers + categorical -->
             <div class="row g-3 align-items-end">
-                <div class="col-12 col-lg-4">
-                    <label class="form-label">Global Search</label>
-                    <input type="text" id="globalSearch" class="form-control" placeholder="Subject / Patient / Test ID">
-                </div>
-                <div class="col-6 col-lg-4">
+                <div class="col-12 col-lg-3">
                     <label class="form-label">Patient ID</label>
                     <input type="text" id="patientIdInput" class="form-control" placeholder="e.g. P_abc123">
                 </div>
-                <div class="col-6 col-lg-4">
+                <div class="col-12 col-lg-3">
                     <label class="form-label">Test ID</label>
                     <input type="text" id="testIdInput" class="form-control" placeholder="e.g. 20240101_OS_XXXX">
                 </div>
-            </div>
 
-            <!-- Row B: Location / Diagnosis / Eye -->
-            <div class="row g-3 align-items-end mt-1">
-                <div class="col-6 col-xl-3 col-lg-4">
+                <div class="col-6 col-lg-2">
                     <label class="form-label">Location</label>
                     <select id="locationFilter" class="form-select">
                         <option value="">All</option>
@@ -363,7 +387,7 @@ canvas { max-height: 380px; }
                     </select>
                 </div>
 
-                <div class="col-6 col-xl-3 col-lg-4">
+                <div class="col-6 col-lg-2">
                     <label class="form-label">Diagnosis</label>
                     <select id="diagnosisFilter" class="form-select">
                         <option value="">All</option>
@@ -374,7 +398,7 @@ canvas { max-height: 380px; }
                     </select>
                 </div>
 
-                <div class="col-12 col-xl-6 col-lg-4">
+                <div class="col-12 col-lg-2">
                     <label class="form-label">Eye</label>
                     <div class="d-flex gap-3">
                         <div class="form-check">
@@ -389,7 +413,7 @@ canvas { max-height: 380px; }
                 </div>
             </div>
 
-            <!-- Row C (aligned): Date Range / MERCI / Age / Sort -->
+            <!-- Row 2: aligned blocks (Date range, MERCI, Age, Sort) -->
             <div class="row g-3 align-items-end mt-1">
                 <div class="col-12 col-xl-3">
                     <label class="form-label">Date range</label>
@@ -438,14 +462,15 @@ canvas { max-height: 380px; }
                 </div>
             </div>
 
-            <!-- Row D: Options/actions -->
+            <!-- Row 3: options + actions -->
             <div class="row g-3 align-items-center mt-2">
                 <div class="col-12 col-lg-3">
-                    <div class="form-check mt-2">
+                    <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="autoExpand" checked>
                         <label class="form-check-label" for="autoExpand">Auto-expand first match</label>
                     </div>
                 </div>
+
                 <div class="col-12 col-lg-9 d-flex justify-content-end gap-2">
                     <button id="exportFilteredCsv" class="btn btn-outline-success">
                         <i class="bi bi-filetype-csv"></i> Export filtered rows
@@ -542,20 +567,6 @@ canvas { max-height: 380px; }
                                             <strong><?= $testDate->format('M j, Y') ?></strong>
                                             <span class="ms-2 badge bg-primary"><?= htmlspecialchars($test['test_id']) ?></span>
                                             <span class="ms-2 badge bg-dark"><span class="eye-count"><?= count($testEyes) ?></span> eye records</span>
-                                            <?php
-                                                // quick summary badges for modalities in this test (any eye)
-                                                $hasFAF = $hasOCT = $hasVF = $hasMFERG = false;
-                                                foreach ($testEyes as $te) {
-                                                    $hasFAF   = $hasFAF   || !empty($te['faf_reference']);
-                                                    $hasOCT   = $hasOCT   || !empty($te['oct_reference']);
-                                                    $hasVF    = $hasVF    || !empty($te['vf_reference']);
-                                                    $hasMFERG = $hasMFERG || !empty($te['mferg_reference']);
-                                                }
-                                                if ($hasFAF)   echo '<span class="ms-2 badge badge-faf">FAF</span>';
-                                                if ($hasOCT)   echo '<span class="ms-2 badge badge-oct">OCT</span>';
-                                                if ($hasVF)    echo '<span class="ms-2 badge badge-vf">VF</span>';
-                                                if ($hasMFERG) echo '<span class="ms-2 badge badge-mfg">MFERG</span>';
-                                            ?>
                                         </button>
                                     </h2>
                                     <div id="collapse-<?= htmlspecialchars($test['test_id']) ?>" class="accordion-collapse collapse"
@@ -602,39 +613,9 @@ canvas { max-height: 380px; }
                                                             <div class="col-md-6">
                                                                 <p><strong>VF Score:</strong> <?= htmlspecialchars($eye['vf_score'] ?? 'N/A') ?></p>
                                                                 <p><strong>FAF Grade:</strong> <?= htmlspecialchars($eye['faf_grade'] ?? 'N/A') ?></p>
-                                                                <p><strong>Diagnosis:</strong> <?= htmlspecialchars($eye['actual_diagnosis'] ?? 'N/A') ?></p>
+                                                                <p><strong>Diagnosis:</strong> <?= htmlspecialchars($eye['actual_diagnosis']) ?></p>
                                                             </div>
                                                         </div>
-
-                                                        <?php
-                                                            // per-eye media links
-                                                            $media = [
-                                                                'FAF'   => safe_get($eye, 'faf_reference'),
-                                                                'OCT'   => safe_get($eye, 'oct_reference'),
-                                                                'VF'    => safe_get($eye, 'vf_reference'),
-                                                                'MFERG' => safe_get($eye, 'mferg_reference')
-                                                            ];
-                                                            $mediaLinks = [];
-                                                            foreach ($media as $label => $filename) {
-                                                                if (!$filename) continue;
-                                                            
-                                                                // only show the button if the file actually exists somewhere under /data/...
-                                                                $exists = getDynamicImagePath($filename);
-                                                                if (!$exists) continue;
-                                                            
-                                                                $viewer = 'view_' . strtolower($label) . '.php';
-                                                                $q = http_build_query([
-                                                                    'ref'        => $filename,
-                                                                    'patient_id' => $patient['patient_id'],
-                                                                    'eye'        => $eyeSide
-                                                                ]);
-                                                                $mediaLinks[] = '<a class="btn btn-outline-secondary" target="_blank" href="' . htmlspecialchars($viewer.'?'.$q) . '">'
-                                                                              . '<i class="bi bi-eye"></i> View ' . htmlspecialchars($label) . ' (' . htmlspecialchars($eyeSide) . ')</a>';
-                                                            }
-                                                            if (!empty($mediaLinks)) {
-                                                                echo '<div class="media-links mt-2">' . implode('', $mediaLinks) . '</div>';
-                                                            }
-                                                        ?>
 
                                                         <?php if (!empty($medName) || !empty($dosage)): ?>
                                                             <div class="alert alert-info mt-2 p-2">
@@ -729,7 +710,7 @@ canvas { max-height: 380px; }
   </div>
 </div>
 
-<!-- Printable Summary (static analytics) -->
+<!-- Printable Summary (uses CURRENT analytics state) -->
 <section id="printArea" class="container-fluid py-4">
   <h2 class="mb-1">Dataset Summary</h2>
   <p class="text-muted">Generated at <span id="printTime"></span></p>
@@ -786,26 +767,25 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     const parseDate = s => s ? new Date(s + 'T00:00:00') : null;
     const fmtISO = d => d ? d.toISOString().slice(0,10) : '';
 
-    // Inputs
-    const globalSearch  = $('#globalSearch');
-    const patientIdInput= $('#patientIdInput');
-    const testIdInput   = $('#testIdInput');
-    const locSelect     = $('#locationFilter');
-    const diagSelect    = $('#diagnosisFilter');
-    const eyeOD         = $('#eyeOD');
-    const eyeOS         = $('#eyeOS');
-    const dateStartInput= $('#dateStart');
-    const dateEndInput  = $('#dateEnd');
-    const merciMinInput = $('#merciMin');
-    const merciMaxInput = $('#merciMax');
-    const ageMinInput   = $('#ageMin');
-    const ageMaxInput   = $('#ageMax');
-    const clearBtn      = $('#clearFilters');
-    const exportBtn     = $('#exportFilteredCsv');
-    const presetBtns    = $$('[data-preset]');
-    const sortBy        = $('#sortBy');
-    const sortDirBtn    = $('#sortDir');
-    const autoExpand    = $('#autoExpand');
+    // Inputs (PATIENT FILTERS)
+    const patientIdInput = $('#patientIdInput');
+    const testIdInput    = $('#testIdInput');
+    const locSelect      = $('#locationFilter');
+    const diagSelect     = $('#diagnosisFilter');
+    const eyeOD          = $('#eyeOD');
+    const eyeOS          = $('#eyeOS');
+    const dateStartInput = $('#dateStart');
+    const dateEndInput   = $('#dateEnd');
+    const merciMinInput  = $('#merciMin');
+    const merciMaxInput  = $('#merciMax');
+    const ageMinInput    = $('#ageMin');
+    const ageMaxInput    = $('#ageMax');
+    const clearBtn       = $('#clearFilters');
+    const exportBtn      = $('#exportFilteredCsv');
+    const presetBtns     = $$('[data-preset]');
+    const sortBy         = $('#sortBy');
+    const sortDirBtn     = $('#sortDir');
+    const autoExpand     = $('#autoExpand');
 
     // Results counters + filters badge
     const resPatients = $('#resPatients');
@@ -815,12 +795,11 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     const filtersPill = $('#filtersPill');
     const filtersCount= $('#filtersCount');
 
-    // Print elems
+    // Print elems (for analytics snapshot)
     const printBtn   = $('#printSummaryBtn');
     const printArea  = $('#printArea');
     const printTime  = $('#printTime');
 
-    // Default date range
     const defaultState = {
         dateStart: DATA_MIN ? parseDate(DATA_MIN) : null,
         dateEnd:   DATA_MAX ? parseDate(DATA_MAX) : null,
@@ -831,12 +810,12 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         const eyes = new Set();
         if (eyeOD.checked) eyes.add('OD');
         if (eyeOS.checked) eyes.add('OS');
+
         return {
-            q:        (globalSearch.value || '').trim().toLowerCase(),
-            patientId:(patientIdInput.value || '').trim().toLowerCase(),
-            testId:   (testIdInput.value || '').trim().toLowerCase(),
-            location: (locSelect.value || '').trim(),
-            diagnosis:(diagSelect.value || '').trim(),
+            patientId: (patientIdInput.value || '').trim().toLowerCase(),
+            testId:    (testIdInput.value || '').trim().toLowerCase(),
+            location:  (locSelect.value || '').trim(),
+            diagnosis: (diagSelect.value || '').trim(),
             eyes,
             dateStart: parseDate(dateStartInput.value),
             dateEnd:   parseDate(dateEndInput.value),
@@ -847,7 +826,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         };
     }
 
-    // ===== Chart setup (dynamic analytics from filtered rows) =====
+    // ===== Charts (dynamic analytics) =====
     Chart.register(ChartDataLabels);
     const C = {
         brand: '#1a73e8', brandLight:'#6ea8fe',
@@ -876,7 +855,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         return g;
     }
 
-    // Chart instances
+    // Base chart shells
     const testsChart = new Chart(document.getElementById('testsOverTime').getContext('2d'), {
         type: 'line',
         data: { labels: [], datasets: [{
@@ -899,8 +878,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
     const diagChart = new Chart(document.getElementById('diagnosisPie').getContext('2d'), {
         type:'doughnut',
-        data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:[0,0,0,0],
-            backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}] },
+        data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:[0,0,0,0], backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}] },
         options:{
             responsive:true, maintainAspectRatio:false, cutout:'62%',
             plugins:{
@@ -916,15 +894,11 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     const locationBar = new Chart(document.getElementById('locationBar').getContext('2d'), {
         type:'bar',
         data:{ labels:['KH','CHUSJ','IWK','IVEY'], datasets:[{ label:'Patients', data:[0,0,0,0],
-            backgroundColor:C.teal, borderColor:C.teal, borderWidth:1, borderRadius:8, maxBarThickness:44 }] },
+            backgroundColor:C.teal, borderColor:C.teal, borderWidth:1, borderRadius:8, maxBarThickness:44 }]},
         options:{
             responsive:true, maintainAspectRatio:false,
             scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() } }},
-            plugins:{
-                legend:{ display:false },
-                datalabels:{ anchor:'end', align:'end', offset:4, color:'#333',
-                    formatter:v=> (v>=3?fmt.format(v):'') }
-            }
+            plugins:{ legend:{ display:false }, datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=> (v>=3?fmt.format(v):'') } }
         }
     });
 
@@ -934,15 +908,11 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             datasets:[
                 { label:'Avg OCT', data:[null,null], backgroundColor:C.purple, borderColor:C.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
                 { label:'Avg VF',  data:[null,null], backgroundColor:C.brand,  borderColor:C.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
-            ]
-        },
+            ]},
         options:{
             responsive:true, maintainAspectRatio:false,
-            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() }}},
-            plugins:{
-                datalabels:{ anchor:'end', align:'end', offset:4, color:'#333',
-                    formatter:v => (v===null||isNaN(v))?'':fmt.format(v) }
-            }
+            scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() } }},
+            plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v => (v===null||isNaN(v))?'':fmt.format(v) } }
         }
     });
 
@@ -958,28 +928,19 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         });
     };
 
-    // ===== Filtering helpers (rows) =====
+    // ===== Aggregations based on filtered rows =====
     function rowMatchesData(r, f){
-        // global search across subject/patient/test
-        if (f.q) {
-            const hay = ((r.subject_id||'') + ' ' + (r.patient_id||'') + ' ' + (r.test_id||'')).toLowerCase();
-            if (!hay.includes(f.q)) return false;
-        }
-        // specific text filters
         if (f.patientId && !(r.patient_id||'').toLowerCase().includes(f.patientId)) return false;
         if (f.testId    && !(r.test_id||'').toLowerCase().includes(f.testId)) return false;
 
-        // select filters
         if (f.location && r.location !== f.location) return false;
         if (f.diagnosis && r.report_diagnosis !== f.diagnosis) return false;
         if (f.eyes.size && !f.eyes.has(r.eye)) return false;
 
-        // date
         const d = r.date_of_test ? new Date(r.date_of_test + 'T00:00:00') : null;
         if (f.dateStart && d && d < f.dateStart) return false;
         if (f.dateEnd   && d && d > f.dateEnd)   return false;
 
-        // numeric ranges
         const m = toNum(r.merci_score);
         if (f.merciMin !== null) { if (m === null || m < f.merciMin) return false; }
         if (f.merciMax !== null) { if (m === null || m > f.merciMax) return false; }
@@ -992,58 +953,68 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     }
     function filterRows(){ const f = getFilterState(); return EYE_ROWS.filter(r => rowMatchesData(r, f)); }
 
-    // ===== Analytics aggregation from rows =====
-    function aggregate(rows){
-        // Tests by month: unique test_id per calendar month (last 12 months window, current month inclusive)
+    function aggregateForAnalytics(rows){
+        // Tests by month (unique test_id per month for last 12 months)
         const end = new Date();
         const endMonth = new Date(end.getFullYear(), end.getMonth(), 1);
         const labels=[], values=[];
-        const monthToSet = {};
+        const monthKey = (d) => d.toISOString().slice(0,7);
+
+        const setsByMonth = {};
         for(let i=11;i>=0;i--){
             const d = new Date(endMonth); d.setMonth(d.getMonth()-i);
-            const ym = d.toISOString().slice(0,7);
+            const ym = monthKey(d);
             labels.push(d.toLocaleString(undefined,{month:'short',year:'numeric'}));
-            monthToSet[ym] = new Set();
+            setsByMonth[ym] = new Set();
         }
         rows.forEach(r=>{
-            const ym = (r.date_of_test||'').slice(0,7);
-            if (monthToSet[ym]) monthToSet[ym].add(r.test_id);
+            const dateStr = r.date_of_test;
+            if (!dateStr) return;
+            const ym = dateStr.slice(0,7);
+            if (setsByMonth[ym]) setsByMonth[ym].add(r.test_id);
         });
-        for (const ym of Object.keys(monthToSet)) {
-            values.push(monthToSet[ym].size);
-        }
+        for(const ym of Object.keys(setsByMonth)) values.push(setsByMonth[ym].size);
 
         // Diagnosis distribution
         const diagCounts = {'normal':0,'abnormal':0,'exclude':0,'no input':0};
         rows.forEach(r=>{ if (diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
 
-        // Patients by location (unique patients per location)
-        const locs = ['KH','CHUSJ','IWK','IVEY'];
-        const locSet = { KH:new Set(), CHUSJ:new Set(), IWK:new Set(), IVEY:new Set() };
-        rows.forEach(r=>{ if (locSet[r.location]) locSet[r.location].add(r.patient_id); });
-        const locCounts = locs.map(l=> locSet[l].size);
+        // Patients by location (unique patients per location in filtered rows)
+        const locations = ['KH','CHUSJ','IWK','IVEY'];
+        const uniqueByLoc = { KH:new Set(), CHUSJ:new Set(), IWK:new Set(), IVEY:new Set() };
+        rows.forEach(r=>{ if (uniqueByLoc[r.location]) uniqueByLoc[r.location].add(r.patient_id); });
+        const locValues = locations.map(loc => uniqueByLoc[loc].size);
 
-        // Avg scores by eye
-        const buckets = { OD:{oct:[], vf:[]}, OS:{oct:[], vf:[]} };
+        // Avg OCT/VF by eye
+        const eyeStats = { OD:{oct:[],vf:[]}, OS:{oct:[],vf:[]} };
         rows.forEach(r=>{
-            if (!buckets[r.eye]) return;
-            if (r.oct_score !== null && !isNaN(r.oct_score)) buckets[r.eye].oct.push(Number(r.oct_score));
-            if (r.vf_score  !== null && !isNaN(r.vf_score))  buckets[r.eye].vf.push(Number(r.vf_score));
+            if (!eyeStats[r.eye]) return;
+            if (r.oct_score !== null && r.oct_score !== '') eyeStats[r.eye].oct.push(Number(r.oct_score));
+            if (r.vf_score  !== null && r.vf_score !== '')  eyeStats[r.eye].vf.push(Number(r.vf_score));
         });
-        const avg = a => a.length? a.reduce((x,y)=>x+y,0)/a.length : null;
-        const avgOCT = [avg(buckets.OD.oct), avg(buckets.OS.oct)];
-        const avgVF  = [avg(buckets.OD.vf),  avg(buckets.OS.vf)];
+        const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
+        const avgOCT = ['OD','OS'].map(eye => avg(eyeStats[eye].oct));
+        const avgVF  = ['OD','OS'].map(eye => avg(eyeStats[eye].vf));
 
-        return { labels, values, diagCounts, locCounts, avgOCT, avgVF };
+        // Totals for counters (patients/tests/eyes) under current filter
+        const testsSet = new Set(rows.map(r=>r.test_id));
+        const patientsSet = new Set(rows.map(r=>r.patient_id));
+
+        return {
+            tests: {labels, values},
+            diagCounts,
+            locLabels: locations, locValues,
+            avgOCT, avgVF,
+            totals: { patients: patientsSet.size, tests: testsSet.size, eyes: rows.length }
+        };
     }
 
-    function updateAnalytics(){
-        const rows = filterRows();
-        const agg = aggregate(rows);
+    function renderAnalytics(rows){
+        const agg = aggregateForAnalytics(rows);
 
-        // Tests line
-        testsChart.data.labels = agg.labels;
-        testsChart.data.datasets[0].data = agg.values;
+        // Tests chart
+        testsChart.data.labels = agg.tests.labels;
+        testsChart.data.datasets[0].data = agg.tests.values;
         testsChart.update('none');
 
         // Diagnosis
@@ -1051,14 +1022,20 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         diagChart.data.datasets[0].data = dvals;
         diagChart.update('none');
 
-        // Location bar
-        locationBar.data.datasets[0].data = agg.locCounts;
+        // Location
+        locationBar.data.labels = agg.locLabels;
+        locationBar.data.datasets[0].data = agg.locValues;
         locationBar.update('none');
 
-        // Avg OCT/VF
+        // Averages
         avgScoresEye.data.datasets[0].data = agg.avgOCT;
         avgScoresEye.data.datasets[1].data = agg.avgVF;
         avgScoresEye.update('none');
+
+        // Update result badges (filtered totals)
+        resPatients.textContent = agg.totals.patients;
+        resTests.textContent    = agg.totals.tests;
+        resEyes.textContent     = agg.totals.eyes;
     }
 
     // ===== Export filtered rows to CSV =====
@@ -1075,43 +1052,60 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     }
     function exportFilteredRowsCSV(){
         const rows = filterRows();
-        const header = ['subject_id','patient_id','test_id','date_of_test','eye','age','report_diagnosis','merci_score','oct_score','vf_score','location','faf_reference','oct_reference','vf_reference','mferg_reference'];
+        const header = ['subject_id','patient_id','test_id','date_of_test','eye','age','report_diagnosis','merci_score','oct_score','vf_score','location'];
         const data = rows.map(r => [
             r.subject_id, r.patient_id, r.test_id, r.date_of_test, r.eye,
-            r.age ?? '', r.report_diagnosis, r.merci_score ?? '', r.oct_score ?? '', r.vf_score ?? '', r.location,
-            r.faf_reference ?? '', r.oct_reference ?? '', r.vf_reference ?? '', r.mferg_reference ?? ''
+            r.age ?? '', r.report_diagnosis, r.merci_score ?? '', r.oct_score ?? '', r.vf_score ?? '', r.location
         ]);
         downloadCSV('filtered_eye_rows.csv', [header, ...data]);
     }
     exportBtn.addEventListener('click', exportFilteredRowsCSV);
 
-    // ===== Filter & sort DOM list of patients/tests/eyes =====
-    function rowMatchesDOM(r, f){
-        // mirror the data-level logic but for DOM attributes
-        if (f.q) {
-            const hay = ((r.subject_id||'') + ' ' + (r.patient_id||'') + ' ' + (r.test_id||'')).toLowerCase();
-            if (!hay.includes(f.q)) return false;
+    // ===== Chart toolbar CSV/PNG + reset zoom =====
+    function chartToCsvData(chart){
+        const type = chart.config.type;
+        if (type === 'line' || type === 'bar'){
+            const header = ['Label', ...chart.data.datasets.map(d=>d.label || 'Series')];
+            const rows = chart.data.labels.map((lab, i)=>{
+                return [lab, ...chart.data.datasets.map(d => d.data[i] ?? '')];
+            });
+            return [header, ...rows];
         }
-        if (f.patientId && !(r.patient_id||'').toLowerCase().includes(f.patientId)) return false;
-        if (f.testId    && !(r.test_id||'').toLowerCase().includes(f.testId)) return false;
-        if (f.location && r.location !== f.location) return false;
-        if (f.diagnosis && r.report_diagnosis !== f.diagnosis) return false;
-        if (f.eyes.size && !f.eyes.has(r.eye)) return false;
-
-        const d = r.date_of_test ? new Date(r.date_of_test + 'T00:00:00') : null;
-        if (f.dateStart && d && d < f.dateStart) return false;
-        if (f.dateEnd   && d && d > f.dateEnd)   return false;
-
-        const m = toNum(r.merci_score);
-        if (f.merciMin !== null) { if (m === null || m < f.merciMin) return false; }
-        if (f.merciMax !== null) { if (m === null || m > f.merciMax) return false; }
-
-        const a = toNum(r.age);
-        if (f.ageMin !== null) { if (a === null || a < f.ageMin) return false; }
-        if (f.ageMax !== null) { if (a === null || a > f.ageMax) return false; }
-
-        return true;
+        if (type === 'doughnut' || type === 'pie'){
+            const labels = chart.data.labels || [];
+            const data = chart.data.datasets[0]?.data || [];
+            const rows = labels.map((lab,i)=>[lab, data[i] ?? 0]);
+            return [['Label','Value'], ...rows];
+        }
+        return [['Info'],['Unsupported chart']];
     }
+    function bindToolbar(){
+        document.querySelectorAll('[data-csv], [data-download], [data-resetzoom]').forEach(btn=>{
+            btn.addEventListener('click', ()=>{
+                const id = btn.getAttribute('data-csv') || btn.getAttribute('data-download') || btn.getAttribute('data-resetzoom');
+                const canvas = document.getElementById(id);
+                if (!canvas) return;
+                const chart = Chart.getChart(canvas);
+                if (!chart) return;
+
+                if (btn.hasAttribute('data-download')){
+                    const link = document.createElement('a');
+                    link.href = canvas.toDataURL('image/png', 1.0);
+                    link.download = `${id}.png`;
+                    link.click();
+                } else if (btn.hasAttribute('data-csv')){
+                    const data = chartToCsvData(chart);
+                    downloadCSV(`${id}.csv`, data);
+                } else if (btn.hasAttribute('data-resetzoom')){
+                    if (chart.resetZoom) chart.resetZoom();
+                }
+            });
+        });
+    }
+    bindToolbar();
+
+    // ===== Filter & sort DOM list of patients/tests/eyes =====
+    function rowMatchesDOM(r, f){ return rowMatchesData(r, f); }
 
     function filterDOM(autoExpandAfter=true){
         const f = getFilterState();
@@ -1124,8 +1118,10 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
         patientCards.forEach(patient => {
             const patientId = (patient.getAttribute('data-patient-id')||'').toLowerCase();
-            const subjectId = (patient.getAttribute('data-subject')||'').toLowerCase();
             const patientLocation = patient.getAttribute('data-location') || '';
+
+            const hasPatientIdFilter = !!f.patientId;
+            const hasTestIdFilter    = !!f.testId;
 
             const tests = patient.querySelectorAll('.test-wrapper');
             let anyTestVisible = false;
@@ -1137,11 +1133,17 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 const testRows = tw.querySelectorAll('.eye-row');
                 let anyEyeVisible = false;
 
+                if (hasTestIdFilter && !testId.includes(f.testId)) {
+                    testRows.forEach(row=> row.style.display='none');
+                    tw.style.display = 'none';
+                    return;
+                }
+
                 testRows.forEach(row => {
                     const r = {
-                        subject_id: subjectId,
                         patient_id: patientId,
                         test_id: testId,
+                        subject_id: row.getAttribute('data-subject') || '',
                         report_diagnosis: row.getAttribute('data-diagnosis') || '',
                         location: patientLocation,
                         eye: row.getAttribute('data-eye') || '',
@@ -1171,21 +1173,10 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 }
             });
 
-            // patient-level visibility: must match global search if provided
-            let passesGlobal = true;
-            if (f.q) {
-                const hay = (subjectId + ' ' + patientId).toLowerCase();
-                passesGlobal = hay.includes(f.q);
-            }
-            // patientId filter
             let patientIdPass = true;
-<<<<<<< HEAD
-            if (hasPatientIdFilter) patientIdPass = (patientId === f.patientId);
-=======
-            if (f.patientId) patientIdPass = patientId.includes(f.patientId);
->>>>>>> c5106c18c11b893c5903fe157dc74aafcf99237f
+            if (hasPatientIdFilter) patientIdPass = patientId.includes(f.patientId);
 
-            const showPatient = anyTestVisible && passesGlobal && patientIdPass;
+            const showPatient = anyTestVisible && patientIdPass;
             patient.style.display = showPatient ? 'block':'none';
 
             if (showPatient) {
@@ -1195,15 +1186,17 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             }
         });
 
-        // Update counters
-        resPatients.textContent = visPatients;
-        resTests.textContent    = visTests;
-        resEyes.textContent     = visEyes;
+        // Update counters here only if analytics hasn't already overwritten them
+        // (renderAnalytics will set totals; we still set when analytics isn't called)
+        if (!filterDOM.skipCounterUpdate) {
+            resPatients.textContent = visPatients;
+            resTests.textContent    = visTests;
+            resEyes.textContent     = visEyes;
+        }
 
-        // Active filters badge (rough count)
+        // Active filters badge
         let n = 0;
-        const f0 = f;
-        if (f0.q) n++;
+        const f0 = getFilterState();
         if (f0.patientId) n++;
         if (f0.testId) n++;
         if (f0.location) n++;
@@ -1291,7 +1284,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     });
 
     function clearFilters(){
-        globalSearch.value = '';
         patientIdInput.value = '';
         testIdInput.value = '';
         locSelect.value = '';
@@ -1309,14 +1301,19 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
     // ===== Apply filters (dom + analytics) =====
     function applyFilters(doAutoExpand=true){
-        sortPatients(); // deterministic first match
+        sortPatients(); // deterministic "first match"
+        // Update charts first (also updates counters)
+        const rows = filterRows();
+        renderAnalytics(rows);
+
+        // Prevent double-updating counters from DOM pass
+        filterDOM.skipCounterUpdate = true;
         filterDOM(doAutoExpand);
-        updateAnalytics();
+        filterDOM.skipCounterUpdate = false;
     }
 
     // Debounced text inputs
-    let t0, t1, t2;
-    globalSearch.addEventListener('input', ()=>{ clearTimeout(t0); t0=setTimeout(()=>applyFilters(true), 150); });
+    let t1, t2;
     patientIdInput.addEventListener('input', ()=>{ clearTimeout(t1); t1=setTimeout(()=>applyFilters(true), 150); });
     testIdInput.addEventListener('input',    ()=>{ clearTimeout(t2); t2=setTimeout(()=>applyFilters(true), 150); });
 
@@ -1326,9 +1323,11 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     // Initial
     dateStartInput.value = fmtISO(defaultState.dateStart);
     dateEndInput.value   = fmtISO(defaultState.dateEnd);
+    // initial analytics & DOM
+    renderAnalytics(EYE_ROWS.slice());
     applyFilters(true);
 
-    // ===== Print analytics =====
+    // ===== Print analytics snapshot =====
     function preparePrint(){
         printTime.textContent = new Date().toLocaleString();
         document.getElementById('printImg-tests').src = document.getElementById('testsOverTime').toDataURL('image/png', 1.0);
@@ -1370,12 +1369,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         patientRows.forEach(r=>{ if (diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
 
         const eyeStats = { OD:{oct:[],vf:[]}, OS:{oct:[],vf:[]} };
-        patientRows.forEach(r=>{
-            if (eyeStats[r.eye]){
-                if(r.oct_score!==null) eyeStats[r.eye].oct.push(Number(r.oct_score));
-                if(r.vf_score !==null) eyeStats[r.eye].vf.push(Number(r.vf_score));
-            }
-        });
+        patientRows.forEach(r=>{ if (eyeStats[r.eye]){ if(r.oct_score!==null) eyeStats[r.eye].oct.push(Number(r.oct_score)); if(r.vf_score!==null) eyeStats[r.eye].vf.push(Number(r.vf_score)); }});
         const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
         const avgOD = {oct:avg(eyeStats.OD.oct), vf:avg(eyeStats.OD.vf)};
         const avgOS = {oct:avg(eyeStats.OS.oct), vf:avg(eyeStats.OS.vf)};
@@ -1400,7 +1394,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         $('#pmId').textContent = pid;
         modalEl.setAttribute('data-patient-id', pid);
 
-        const rows = filterRows().filter(r => (r.patient_id||'').toLowerCase() === pid.toLowerCase());
+        const rows = filterRows().filter(r => r.patient_id.toLowerCase() === pid.toLowerCase());
         const agg = patientAggregate(rows);
 
         destroyPmCharts();
@@ -1465,57 +1459,8 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     });
     document.getElementById('patientModal').addEventListener('hidden.bs.modal', ()=>destroyPmCharts());
 
-    // Reset zoom for tests chart
-    document.querySelectorAll('[data-resetzoom]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-            const id = btn.getAttribute('data-resetzoom');
-            if (id === 'testsOverTime' && testsChart?.resetZoom) testsChart.resetZoom();
-        });
-    });
-
-    // PNG & CSV for main charts
-    document.querySelectorAll('[data-download], [data-csv]').forEach(btn=>{
-        btn.addEventListener('click', ()=>{
-            const canvasId = btn.getAttribute('data-download') || btn.getAttribute('data-csv');
-            if (btn.hasAttribute('data-download')) {
-                const canvas = document.getElementById(canvasId);
-                if (!canvas) return;
-                const link = document.createElement('a');
-                link.href = canvas.toDataURL('image/png', 1.0);
-                link.download = `${canvasId}.png`;
-                link.click();
-            } else {
-                // build CSV from current chart data
-                if (canvasId === 'testsOverTime') {
-                    const data = [['Month','Tests']];
-                    testsChart.data.labels.forEach((lab,i)=>data.push([lab, testsChart.data.datasets[0].data[i]||0]));
-                    downloadCSV('testsOverTime.csv', data);
-                } else if (canvasId === 'diagnosisPie') {
-                    const data = [['Diagnosis','Count']];
-                    const labs = diagChart.data.labels;
-                    const vals = diagChart.data.datasets[0].data;
-                    labs.forEach((lab,i)=>data.push([lab, vals[i]||0]));
-                    downloadCSV('diagnosisPie.csv', data);
-                } else if (canvasId === 'locationBar') {
-                    const data = [['Location','Patients']];
-                    const labs = locationBar.data.labels;
-                    const vals = locationBar.data.datasets[0].data;
-                    labs.forEach((lab,i)=>data.push([lab, vals[i]||0]));
-                    downloadCSV('locationBar.csv', data);
-                } else if (canvasId === 'avgScoresEye') {
-                    const data = [['Eye','Avg OCT','Avg VF']];
-                    const labs = avgScoresEye.data.labels;
-                    const a = avgScoresEye.data.datasets[0].data, b = avgScoresEye.data.datasets[1].data;
-                    labs.forEach((lab,i)=>data.push([lab, a[i]??'', b[i]??'']));
-                    downloadCSV('avgScoresEye.csv', data);
-                }
-            }
-        });
-    });
-
 })();
 </script>
 </body>
 </html>
-
 
