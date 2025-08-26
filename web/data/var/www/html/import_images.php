@@ -5,271 +5,373 @@ require_once 'includes/functions.php';
 set_time_limit(0);
 ini_set('memory_limit', '1024M');
 
-// CORS for progressive upload
 header("Access-Control-Allow-Origin: *");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
-function json_out($ok, $msg, $extra = []) {
-    header('Content-Type: application/json; charset=utf-8');
-    echo json_encode(array_merge(['status' => $ok ? 'success' : 'error', 'message' => $msg], $extra));
-    exit;
+// ---------- helpers ----------
+
+function hasColumn(mysqli $conn, string $table, string $column): bool {
+    $sql = "SELECT 1 FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1";
+    $stmt = $conn->prepare($sql);
+    $db = DB_NAME;
+    $stmt->bind_param("sss", $db, $table, $column);
+    $stmt->execute();
+    $ok = (bool)$stmt->get_result()->fetch_row();
+    $stmt->close();
+    return $ok;
 }
 
-/**
- * Save one file named like:  920_OD_20250112.png
- * - places it in /data/<TYPE>/<filename>
- * - ensures tests & test_eyes
- * - sets the correct *_reference_OD|OS column in test_eyes
- */
-function handleOne(string $testType, array $file): array {
-    global $conn;
+function patientExists(mysqli $conn, string $patientId): bool {
+    $stmt = $conn->prepare("SELECT 1 FROM patients WHERE patient_id = ? LIMIT 1");
+    $stmt->bind_param("s", $patientId);
+    $stmt->execute();
+    $ok = (bool)$stmt->get_result()->fetch_row();
+    $stmt->close();
+    return $ok;
+}
 
-    $name = $file['name'] ?? '';
-    $tmp  = $file['tmp_name'] ?? '';
-    $err  = $file['error'] ?? UPLOAD_ERR_NO_FILE;
-    $size = $file['size'] ?? 0;
+/** Ensure a tests row exists; return test_id */
+function ensureTest(mysqli $conn, string $patientId, string $dateYmd): string {
+    // Try to find by patient + date
+    $dateSql = DateTime::createFromFormat('Ymd', $dateYmd)->format('Y-m-d');
+    $stmt = $conn->prepare("SELECT test_id FROM tests WHERE patient_id = ? AND date_of_test = ? LIMIT 1");
+    $stmt->bind_param("ss", $patientId, $dateSql);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    if ($row && !empty($row['test_id'])) return $row['test_id'];
 
-    if ($err !== UPLOAD_ERR_OK) return ['ok'=>false,'msg'=>"Upload error for $name (code $err)"];
-    if ($size > MAX_FILE_SIZE)  return ['ok'=>false,'msg'=>"$name too large"];
+    // Create a new test_id (deterministic-ish but unique)
+    $testId = $patientId . '_' . $dateYmd . '_' . substr(md5(uniqid('', true)), 0, 6);
 
-    $isMferg = strtoupper($testType) === 'MFERG';
-    $pat = $isMferg
-        ? '/^([A-Za-z0-9_-]+)_(OD|OS)_(\d{8})\.(png|pdf|exp)$/i'
-        : '/^([A-Za-z0-9_-]+)_(OD|OS)_(\d{8})\.(png|pdf)$/i';
-
-    if (!preg_match($pat, $name, $m)) {
-        return ['ok'=>false,'msg'=>"Invalid filename ($name). Expected PatientID_OD|OS_YYYYMMDD.(png|pdf" . ($isMferg?'|exp':'') . ')'];
+    // Insert minimal row; include eye if that column exists (optional)
+    $hasEyeCol = hasColumn($conn, 'tests', 'eye');
+    if ($hasEyeCol) {
+        $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test, eye) VALUES (?, ?, ?, NULL)");
+        $stmt->bind_param("sss", $testId, $patientId, $dateSql);
+    } else {
+        $stmt = $conn->prepare("INSERT INTO tests (test_id, patient_id, date_of_test) VALUES (?, ?, ?)");
+        $stmt->bind_param("sss", $testId, $patientId, $dateSql);
     }
+    $stmt->execute();
+    $stmt->close();
+    return $testId;
+}
+
+/** Ensure a test_eyes row exists for (test_id, eye) */
+function ensureTestEye(mysqli $conn, string $testId, string $eye): void {
+    // Try to find existing
+    $stmt = $conn->prepare("SELECT 1 FROM test_eyes WHERE test_id = ? AND eye = ? LIMIT 1");
+    $stmt->bind_param("ss", $testId, $eye);
+    $stmt->execute();
+    $exists = (bool)$stmt->get_result()->fetch_row();
+    $stmt->close();
+    if ($exists) return;
+
+    // Insert empty eye row
+    $stmt = $conn->prepare("INSERT INTO test_eyes (test_id, eye) VALUES (?, ?)");
+    $stmt->bind_param("ss", $testId, $eye);
+    $stmt->execute();
+    $stmt->close();
+}
+
+/** Move file to /data/<Modality>/Filename and upsert DB refs (tests + test_eyes) */
+function processImage(mysqli $conn, string $testType, string $finalName, string $patientId, string $eye, string $dateYmd): array {
+    $modality = strtoupper($testType);
+    if (!array_key_exists($modality, ALLOWED_TEST_TYPES)) {
+        return ['success' => false, 'message' => "Invalid test type"];
+    }
+
+    // Save file to correct folder
+    $dirName   = ALLOWED_TEST_TYPES[$modality];
+    $targetDir = rtrim(IMAGE_BASE_DIR, '/')."/{$dirName}/";
+    if (!is_dir($targetDir)) { @mkdir($targetDir, 0777, true); }
+    $tmp = $_FILES['image']['tmp_name'] ?? null;  // will be set by caller before call
+    if (!$tmp || !is_uploaded_file($tmp)) {
+        return ['success' => false, 'message' => "Upload failed (tmp not found)"];
+    }
+    $targetFile = $targetDir . $finalName;
+    if (file_exists($targetFile)) { @unlink($targetFile); }
+    if (!move_uploaded_file($tmp, $targetFile)) {
+        return ['success' => false, 'message' => "Failed to move file"];
+    }
+
+    // Ensure parent rows
+    $testId = ensureTest($conn, $patientId, $dateYmd);
+    ensureTestEye($conn, $testId, $eye);
+
+    // Build column names
+    $eyeLower = strtolower($eye);
+    $refColTE = strtolower($modality) . '_reference';              // test_eyes: e.g. faf_reference
+    $refColT  = strtolower($modality) . "_reference_{$eyeLower}";  // tests:    e.g. faf_reference_od
+
+    // Write into test_eyes if the column exists
+    if (hasColumn($conn, 'test_eyes', $refColTE)) {
+        $sql = "UPDATE test_eyes SET $refColTE = ? WHERE test_id = ? AND eye = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("sss", $finalName, $testId, $eye);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    // Back-compat: also write into tests.(modality_reference_od|os) if exists
+    if (hasColumn($conn, 'tests', $refColT)) {
+        $sql = "UPDATE tests SET $refColT = ? WHERE test_id = ?";
+        $stmt = $conn->prepare($sql);
+        $stmt->bind_param("ss", $finalName, $testId);
+        $stmt->execute();
+        $stmt->close();
+    }
+
+    return ['success' => true, 'message' => "$finalName processed", 'test_id' => $testId];
+}
+
+/** Validate/normalize filename (bulk path) and route to processImage */
+function handleSingleFile(mysqli $conn, string $testType, string $tmpName, string $originalName): array {
+    // Pattern: 920_OD_20250112.(png|pdf|exp) (exp only allowed for MFERG)
+    $allowExp = (strtoupper($testType) === 'MFERG');
+    $extPat   = $allowExp ? '(png|pdf|exp)' : '(png|pdf)';
+    $pattern  = '/^(\d+)_(OD|OS)_(\d{8})\.' . $extPat . '$/i';
+
+    if (!preg_match($pattern, $originalName, $m)) {
+        return ['success' => false, 'message' => "Invalid filename: use PatientID_OD|OS_YYYYMMDD.(png|pdf" . ($allowExp? '|exp':'') . ')'];
+    }
+
     $patientId = $m[1];
     $eye       = strtoupper($m[2]);
     $dateYmd   = $m[3];
+    $ext       = strtolower($m[4]);
 
-    // Patient must exist
-    if (!getPatientById($patientId)) return ['ok'=>false,'msg'=>"Patient $patientId not found"];
-
-    // Prepare destination (flat folder)
-    if (!isset(ALLOWED_TEST_TYPES[$testType])) return ['ok'=>false,'msg'=>'Invalid test type'];
-    $subdir = ALLOWED_TEST_TYPES[$testType];
-    $destDir = rtrim(IMAGE_BASE_DIR, '/').'/'.$subdir;
-    if (!is_dir($destDir) && !mkdir($destDir, 0775, true)) {
-        return ['ok'=>false,'msg'=>"Cannot create $destDir"];
+    if (!patientExists($conn, $patientId)) {
+        return ['success' => false, 'message' => "Patient $patientId not found"];
     }
 
-    $dest = $destDir . '/' . $name;
-    // Avoid accidental overwrite by auto-suffixing
-    if (file_exists($dest)) {
-        $base = pathinfo($name, PATHINFO_FILENAME);
-        $ext  = pathinfo($name, PATHINFO_EXTENSION);
-        $i = 1;
-        do {
-            $alt = $destDir . '/' . $base . "_$i." . $ext;
-            $i++;
-        } while (file_exists($alt));
-        $dest = $alt;
-        $name = basename($dest);
-    }
+    // stash tmp into $_FILES slot expected by processImage
+    $_FILES['image']['tmp_name'] = $tmpName;
 
-    if (!move_uploaded_file($tmp, $dest)) {
-        return ['ok'=>false,'msg'=>"Failed to move $file[name]"];
-    }
-
-    // DB writes
-    $conn->begin_transaction();
-    try {
-        $testId = ensureTest($conn, $patientId, $dateYmd);
-        ensureTestEye($conn, $testId, $eye);
-
-        $col = refCol($testType, $eye); // e.g., faf_reference_OD
-        $sql = "UPDATE test_eyes SET $col = ? WHERE test_id = ? AND eye = ?";
-        $stmt = $conn->prepare($sql);
-        $stmt->bind_param("sss", $name, $testId, $eye);
-        if (!$stmt->execute()) throw new RuntimeException($conn->error);
-        $stmt->close();
-
-        $conn->commit();
-        return ['ok'=>true,'msg'=>"$name saved", 'test_id'=>$testId, 'eye'=>$eye, 'file'=>$name];
-    } catch (Throwable $e) {
-        $conn->rollback();
-        // rollback file move
-        if (is_file($dest)) @unlink($dest);
-        return ['ok'=>false,'msg'=>"DB error: ".$e->getMessage()];
-    }
+    return processImage($conn, $testType, "{$patientId}_{$eye}_{$dateYmd}.{$ext}", $patientId, $eye, $dateYmd);
 }
 
-/* Progressive (AJAX/fetch) bulk upload */
+/** Handle the single-file form (construct canonical filename from fields) */
+function handleSingleForm(mysqli $conn): array {
+    $testType  = $_POST['test_type']  ?? '';
+    $patientId = trim($_POST['patient_id'] ?? '');
+    $eye       = strtoupper(trim($_POST['eye'] ?? ''));
+    $dateIso   = $_POST['test_date']  ?? '';
+    $tmpName   = $_FILES['image']['tmp_name'] ?? null;
+    $origName  = $_FILES['image']['name']     ?? null;
+
+    if (!$testType || !$patientId || !in_array($eye, ['OD','OS'], true) || !$dateIso || !$tmpName || !$origName) {
+        return ['success' => false, 'message' => 'Missing required fields'];
+    }
+    if (!patientExists($conn, $patientId)) {
+        return ['success' => false, 'message' => "Patient $patientId not found"];
+    }
+
+    // ext from original
+    $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+    $allowExp = (strtoupper($testType) === 'MFERG');
+    $okExts = $allowExp ? ['png','pdf','exp'] : ['png','pdf'];
+    if (!in_array($ext, $okExts, true)) {
+        return ['success' => false, 'message' => "Invalid extension .$ext for $testType"];
+    }
+
+    // build canonical filename PatientID_EYE_YYYYMMDD.ext
+    $dt = DateTime::createFromFormat('Y-m-d', $dateIso);
+    if (!$dt) return ['success' => false, 'message' => "Invalid date"];
+    $dateYmd = $dt->format('Ymd');
+
+    $_FILES['image']['tmp_name'] = $tmpName; // for processImage()
+
+    return processImage($conn, $testType, "{$patientId}_{$eye}_{$dateYmd}.{$ext}", $patientId, $eye, $dateYmd);
+}
+
+// ---------- AJAX bulk upload ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bulk_upload'])) {
     $testType = $_POST['test_type'] ?? '';
-    if (!isset(ALLOWED_TEST_TYPES[$testType])) json_out(false, 'Invalid test type');
-    if (!isset($_FILES['image'])) json_out(false, 'No file');
+    if (!array_key_exists(strtoupper($testType), ALLOWED_TEST_TYPES)) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid test type']);
+        exit;
+    }
+    if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+        echo json_encode(['status' => 'error', 'message' => 'Invalid file']);
+        exit;
+    }
 
-    $res = handleOne($testType, $_FILES['image']);
-    $res['ok'] ? json_out(true, $res['msg'], $res) : json_out(false, $res['msg']);
+    $res = handleSingleFile($conn, $testType, $_FILES['image']['tmp_name'], $_FILES['image']['name']);
+    echo json_encode($res['success'] ? ['status' => 'success', 'message' => $res['message']]
+                                     : ['status' => 'error',   'message' => $res['message']]);
+    exit;
 }
 
-/* Single form upload (optional UI below uses filename synthesis to reuse same logic) */
-$flash = null;
+// ---------- Single file form submit ----------
+$formMessage = null;
+$formClass   = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['import'])) {
-    try {
-        $testType  = $_POST['test_type'] ?? '';
-        $patientId = trim($_POST['patient_id'] ?? '');
-        $eye       = strtoupper($_POST['eye'] ?? '');
-        $testDate  = $_POST['test_date'] ?? '';
-
-        if (!isset(ALLOWED_TEST_TYPES[$testType])) throw new RuntimeException('Invalid test type');
-        if (!$patientId) throw new RuntimeException('Patient ID required');
-        if (!in_array($eye, ['OD','OS'], true)) throw new RuntimeException('Eye must be OD or OS');
-        if (!$testDate) throw new RuntimeException('Test date required');
-        if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) throw new RuntimeException('Upload failed');
-
-        // synthesize filename to run through same parser
-        $ext = strtolower(pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION)) ?: 'png';
-        $ymd = (new DateTime($testDate))->format('Ymd');
-        $synthetic = $patientId . '_' . $eye . '_' . $ymd . '.' . $ext;
-
-        // override the upload array's name so our handler reads it
-        $file = $_FILES['image'];
-        $file['name'] = $synthetic;
-
-        $res = handleOne($testType, $file);
-        $flash = $res['ok'] ? ['type'=>'success','text'=>$res['msg']." (Test ID: {$res['test_id']})"]
-                            : ['type'=>'danger','text'=>$res['msg']];
-    } catch (Throwable $e) {
-        $flash = ['type'=>'danger','text'=>$e->getMessage()];
+    if (!isset($_FILES['image']) || $_FILES['image']['error'] !== UPLOAD_ERR_OK) {
+        $formMessage = "Upload failed";
+        $formClass = "error";
+    } else {
+        $res = handleSingleForm($conn);
+        $formMessage = $res['message'];
+        $formClass   = $res['success'] ? "success" : "error";
     }
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Medical Image Importer</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto; background:#f7f8fb; margin:0}
-.container{max-width:1000px;margin:32px auto;background:#fff;padding:32px;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.06)}
-h1{color:#00a88f;margin:0 0 16px}
-h2{color:#00a88f;margin:24px 0 8px}
-label{display:block;font-weight:600;margin:10px 0 6px}
-input,select{width:100%;padding:10px;border:1px solid #d0d7de;border-radius:8px}
-button{padding:12px 16px;border:none;border-radius:8px;background:#00a88f;color:#fff;font-weight:700;cursor:pointer}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-.message{padding:10px;border-radius:6px;margin-bottom:12px}
-.success{background:#e6f7e6;color:#2d6a4f;border:1px solid #b7e4c7}
-.danger{background:#fde2e1;color:#842029;border:1px solid #f5c2c7}
-#file-list{list-style:none;padding:0;margin:0;max-height:240px;overflow:auto}
-#file-list li{padding:6px 0;border-bottom:1px dashed #eee}
-#file-list li .ok{color:#2d6a4f;font-weight:600}
-#file-list li .err{color:#842029;font-weight:600}
-.progress{height:12px;background:#eee;border-radius:6px;overflow:hidden;margin-top:8px}
-.progress>div{height:100%;width:0;background:#00a88f;transition:width .3s}
-</style>
+    <meta charset="UTF-8">
+    <title>Medical Image Importer</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f0f4f8; }
+        .container { max-width: 1000px; margin: 40px auto; background: white; padding: 40px;
+                     border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #00a88f; margin-bottom: 30px; font-size: 32px; }
+        h2 { color: #00a88f; margin-top: 0; font-size: 24px; }
+        .form-section { margin-bottom: 50px; padding-bottom: 20px; border-bottom: 1px solid #e0e0e0; }
+        label { display: block; font-weight: 600; margin: 15px 0 5px; font-size: 15px; }
+        select, input[type="text"], input[type="date"], input[type="file"] {
+            width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px;
+            font-size: 16px; margin-bottom: 15px; transition: 0.3s;
+        }
+        select:focus, input:focus { outline: none; border-color: #00a88f; box-shadow: 0 0 5px rgba(0,168,143,0.5); }
+        button { width: 100%; padding: 14px; background: #00a88f; color: white; border: none;
+                 border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer;
+                 transition: background 0.3s, transform 0.2s; }
+        button:hover { background: #008f7a; transform: translateY(-1px); }
+        .progress { font-weight: bold; margin: 15px 0; font-size: 15px; }
+        .progress-bar-container { width: 100%; background: #e0e0e0; height: 14px; border-radius: 7px; margin: 10px 0; }
+        .progress-bar { height: 14px; background: #00a88f; width: 0%; border-radius: 7px; transition: width 0.3s; }
+        ul#file-list { list-style: none; padding: 0; font-size: 14px; max-height: 250px; overflow-y: auto; }
+        #file-list li.success { color: green; }
+        #file-list li.error { color: red; }
+        .message { text-align: center; padding: 12px; border-radius: 5px; margin-bottom: 20px; font-size: 16px; }
+        .success { background: #e6f7e6; color: #3c763d; border: 1px solid #d6e9c6; }
+        .error { background: #f2dede; color: #a94442; border: 1px solid #ebccd1; }
+        .back-link { display: inline-block; margin-top: 25px; color: #00a88f; text-decoration: none;
+                     font-weight: bold; font-size: 16px; transition: 0.3s; }
+        .back-link:hover { text-decoration: underline; color: #008f7a; }
+    </style>
 </head>
 <body>
 <div class="container">
     <h1>Medical Image Importer</h1>
 
-    <?php if ($flash): ?>
-      <div class="message <?= htmlspecialchars($flash['type']) ?>"><?= htmlspecialchars($flash['text']) ?></div>
+    <?php if ($formMessage): ?>
+        <div class="message <?= htmlspecialchars($formClass) ?>">
+            <?= htmlspecialchars($formMessage) ?>
+        </div>
     <?php endif; ?>
 
-    <div class="row">
-      <section>
+    <!-- Single File Upload -->
+    <div class="form-section">
         <h2>Single File Upload</h2>
-        <form method="POST" enctype="multipart/form-data" class="vstack gap-2">
-          <label>Test Type</label>
-          <select name="test_type" required>
-            <option value="">Select…</option>
-            <?php foreach (ALLOWED_TEST_TYPES as $t => $d): ?>
-              <option value="<?= htmlspecialchars($t) ?>"><?= htmlspecialchars($t) ?></option>
-            <?php endforeach; ?>
-          </select>
+        <form method="POST" enctype="multipart/form-data">
+            <label>Test Type:</label>
+            <select name="test_type" required>
+                <option value="">Select Test Type</option>
+                <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                    <option value="<?= htmlspecialchars($type) ?>"><?= htmlspecialchars($type) ?></option>
+                <?php endforeach; ?>
+            </select>
 
-          <label>Patient ID</label>
-          <input type="text" name="patient_id" placeholder="e.g. 920" required>
+            <label>Patient ID:</label>
+            <input type="text" name="patient_id" required>
 
-          <label>Eye</label>
-          <select name="eye" required>
-            <option value="OD">Right (OD)</option>
-            <option value="OS">Left (OS)</option>
-          </select>
+            <label>Test Date:</label>
+            <input type="date" name="test_date" required>
 
-          <label>Test Date</label>
-          <input type="date" name="test_date" required>
+            <label>Eye:</label>
+            <select name="eye" required>
+                <option value="OD">Right Eye (OD)</option>
+                <option value="OS">Left Eye (OS)</option>
+            </select>
 
-          <label>File (PNG/PDF; MFERG also .exp)</label>
-          <input type="file" name="image" accept="image/png,.pdf,.exp" required>
+            <label>File (PNG/PDF<?php /* mention EXP visually */ ?>, and EXP for mfERG):</label>
+            <input type="file" name="image" accept=".png,.pdf,.exp" required>
 
-          <button type="submit" name="import">Upload</button>
-          <p class="small">Bulk upload uses filenames like <code>920_OD_20250112.png</code>.</p>
+            <button type="submit" name="import">Upload File</button>
         </form>
-      </section>
+        <p style="margin-top:8px;color:#666;font-size:14px">
+            Bulk mode requires filenames like <code>PatientID_OD_YYYYMMDD.png</code> (use <code>.exp</code> only for MFERG).
+        </p>
+    </div>
 
-      <section>
-        <h2>Bulk Folder Upload</h2>
-        <label>Test Type</label>
+    <!-- Folder Upload -->
+    <div class="form-section">
+        <h2>Bulk Folder Upload (Progressive)</h2>
+        <label>Test Type:</label>
         <select id="test_type">
-          <?php foreach (ALLOWED_TEST_TYPES as $t => $d): ?>
-            <option value="<?= htmlspecialchars($t) ?>"><?= htmlspecialchars($t) ?></option>
-          <?php endforeach; ?>
+            <?php foreach (ALLOWED_TEST_TYPES as $type => $dir): ?>
+                <option value="<?= htmlspecialchars($type) ?>"><?= htmlspecialchars($type) ?></option>
+            <?php endforeach; ?>
         </select>
 
-        <label>Select Folder</label>
+        <label>Select Folder:</label>
         <input type="file" id="bulk_files" webkitdirectory multiple>
+        <button id="startUpload">Start Upload</button>
 
-        <button id="startUpload" style="margin-top:10px">Start Upload</button>
-
-        <div id="progressText" style="margin-top:10px;color:#6b7280">No files uploaded yet</div>
-        <div class="progress"><div id="bar"></div></div>
-
+        <div id="progress" class="progress">No files uploaded yet</div>
+        <div class="progress-bar-container"><div class="progress-bar" id="progress-bar"></div></div>
         <ul id="file-list"></ul>
-      </section>
     </div>
+
+    <a href="index.php" class="back-link">← Return Home</a>
 </div>
 
 <script>
 document.getElementById('startUpload').addEventListener('click', async () => {
-  const files = document.getElementById('bulk_files').files;
-  if (!files.length) { alert('Please select a folder'); return; }
-  const testType = document.getElementById('test_type').value;
-  const list = document.getElementById('file-list');
-  const bar = document.getElementById('bar');
-  const txt = document.getElementById('progressText');
+    const files = document.getElementById('bulk_files').files;
+    if (files.length === 0) { alert('Please select a folder'); return; }
 
-  list.innerHTML = '';
-  let ok=0, err=0;
+    const test_type = document.getElementById('test_type').value;
+    const fileList = document.getElementById('file-list');
+    const progress = document.getElementById('progress');
+    const progressBar = document.getElementById('progress-bar');
 
-  for (let i=0;i<files.length;i++) {
-    const f = files[i];
-    const li = document.createElement('li');
-    li.textContent = f.webkitRelativePath + ' — ';
-    const badge = document.createElement('span');
-    li.appendChild(badge);
-    list.appendChild(li);
+    fileList.innerHTML = '';
+    let successCount = 0, errorCount = 0;
 
-    const fd = new FormData();
-    fd.append('bulk_upload','1');
-    fd.append('test_type', testType);
-    fd.append('image', f, f.name);
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const li = document.createElement('li');
+        li.textContent = file.webkitRelativePath;
+        fileList.appendChild(li);
 
-    try {
-      const resp = await fetch('import_images.php', { method:'POST', body: fd });
-      const j = await resp.json();
-      if (j.status === 'success') {
-        ok++; badge.textContent = 'OK'; badge.className='ok';
-      } else {
-        err++; badge.textContent = 'ERR: ' + (j.message||'Error'); badge.className='err';
-      }
-    } catch(e) {
-      err++; badge.textContent = 'ERR: network'; badge.className='err';
+        const formData = new FormData();
+        formData.append('bulk_upload', '1');
+        formData.append('test_type', test_type);
+        formData.append('image', file, file.name);
+
+        try {
+            const response = await fetch('import_images.php', { method: 'POST', body: formData });
+            const result = await response.json();
+            if (result.status === 'success') {
+                li.classList.add('success');
+                successCount++;
+            } else {
+                li.classList.add('error');
+                li.textContent += ' - ' + result.message;
+                errorCount++;
+            }
+        } catch (err) {
+            li.classList.add('error');
+            li.textContent += ' - network error';
+            errorCount++;
+        }
+
+        const percentage = Math.round(((i+1)/files.length)*100);
+        progress.innerText = `Processed ${i+1}/${files.length} | Success: ${successCount}, Errors: ${errorCount}`;
+        progressBar.style.width = percentage + '%';
     }
 
-    const pct = Math.round(((i+1)/files.length)*100);
-    bar.style.width = pct+'%';
-    txt.textContent = `Processed ${i+1}/${files.length} — ${ok} success, ${err} errors`;
-  }
+    progress.innerText = `Upload finished! Success: ${successCount}, Errors: ${errorCount}`;
 });
 </script>
 </body>
 </html>
+
 
