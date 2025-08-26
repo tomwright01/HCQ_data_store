@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/includes/config.php';
-require_once __DIR__ . '/includes/functions.php';
+require_once 'config.php';
+require_once 'functions.php';
 
 set_time_limit(0);
 ini_set('memory_limit', '1024M');
