@@ -21,5 +21,8 @@ COPY data/var/www/html/ /var/www/html
 COPY data/anonymiseHVF.sh /usr/local/bin/
 COPY data/usr/local/Resources /usr/local/Resources
 
+# Fix to ensure linux line endings not windows
+RUN sed -i 's/\r$//' /usr/local/bin/anonymiseHVF.sh
+RUN sed -i 's/\r$//' /usr/local/bin/pdftk
 
 USER nobody
