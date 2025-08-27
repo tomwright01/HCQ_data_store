@@ -1,610 +1,217 @@
 <?php
-require_once 'includes/config.php';
-require_once 'includes/functions.php';
+require_once __DIR__ . '/includes/config.php';
+require_once __DIR__ . '/includes/functions.php';
 
-// Get parameters from URL
-$ref = $_GET['ref'] ?? '';
+$test_type  = 'VF';
+$ref        = $_GET['ref'] ?? '';
 $patient_id = $_GET['patient_id'] ?? '';
-$eye = $_GET['eye'] ?? '';
-$test_type = 'VF'; // Hardcoded for VF viewer
+$eye        = strtoupper($_GET['eye'] ?? '');
 
-// Validate parameters
-if (empty($ref) || empty($patient_id) || !in_array($eye, ['OD', 'OS'])) {
-    die("Invalid parameters. Please provide valid reference, patient ID, and eye (OD/OS).");
+if (!$ref || !$patient_id || !in_array($eye, ['OD','OS'], true)) {
+    http_response_code(400);
+    die("Invalid parameters. Required: ref, patient_id, eye(OD|OS).");
 }
 
-// Get patient data
-$patient = getPatientById($patient_id);
-if (!$patient) {
-    die("Patient not found.");
-}
+$fieldName = strtolower($test_type) . '_reference_' . $eye; // e.g., vf_reference_OD
 
-// Get test data containing this image reference
-$fieldName = strtolower($test_type) . '_reference_' . strtolower($eye);
-$sql = "SELECT * FROM tests WHERE patient_id = ? AND $fieldName = ?";
+$sql = "
+    SELECT te.*, t.date_of_test, t.patient_id,
+           p.subject_id, p.location, p.date_of_birth
+    FROM test_eyes te
+    JOIN tests t    ON te.test_id = t.test_id
+    JOIN patients p ON t.patient_id = p.patient_id
+    WHERE t.patient_id = ?
+      AND te.eye = ?
+      AND te.$fieldName = ?
+    LIMIT 1
+";
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("ss", $patient_id, $ref);
+if (!$stmt) die('Database error (prepare): ' . $conn->error);
+$stmt->bind_param("sss", $patient_id, $eye, $ref);
 $stmt->execute();
-$test = $stmt->get_result()->fetch_assoc();
+$row = $stmt->get_result()->fetch_assoc();
+$stmt->close();
 
-if (!$test) {
-    die("Test data not found for this VF report.");
-}
+if (!$row) { http_response_code(404); die("No $test_type record found for this reference/eye/patient."); }
 
-// Get PDF path using the config function
 $pdf_path = getDynamicImagePath($ref);
-if (!$pdf_path) {
-    die("VF report not found in the system.");
-}
+if (!$pdf_path) { http_response_code(404); die("$test_type file not found on disk."); }
 
-// Calculate patient age
-$age = !empty($patient['date_of_birth']) ? 
-    date_diff(date_create($patient['date_of_birth']), date_create('today'))->y : 'N/A';
+$test_date = $row['date_of_test'] ?? null;
+$age = (!empty($row['date_of_birth']) && $test_date)
+    ? date_diff(date_create($row['date_of_birth']), date_create($test_date))->y
+    : 'N/A';
 
-// Get all diagnostic data directly from database
-$merci_score = $test['merci_score'] ?? 'N/A';
-$report_diagnosis = $test['report_diagnosis'] ?? 'Not specified';
-$exclusion = $test['exclusion'] ?? 'None';
-$merci_diagnosis = $test['merci_diagnosis'] ?? 'Not specified';
-$error_type = $test['error_type'] ?? 'N/A';
-$faf_grade = $test['faf_grade'] ?? 'N/A';
-$oct_score = $test['oct_score'] ?? 'N/A';
-$vf_score = $test['vf_score'] ?? 'N/A';
-$test_date = $test['date_of_test'] ?? 'Unknown';
+$report_diagnosis = $row['report_diagnosis'] ?? 'Not specified';
+$exclusion        = $row['exclusion'] ?? 'None';
+$merci_score      = $row['merci_score'] ?? 'N/A';
+$merci_diagnosis  = $row['merci_diagnosis'] ?? 'Not specified';
+$error_type       = $row['error_type'] ?? 'N/A';
+$faf_grade        = $row['faf_grade'] ?? 'N/A';
+$oct_score        = $row['oct_score'] ?? 'N/A';
+$vf_score         = $row['vf_score'] ?? 'N/A';
+
+function eyeLabel($eye){ return $eye === 'OD' ? 'Right Eye' : 'Left Eye'; }
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VF Viewer - Patient <?= htmlspecialchars($patient_id) ?></title>
-    <style>
-        :root {
-            --primary-color: #00a88f;
-            --primary-dark: #008774;
-            --text-color: #333;
-            --bg-color: #fff;
-            --light-bg: #f5f5f5;
-            --border-color: #e0e0e0;
-            --meta-bg: #f0f0f0;
-            --card-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        
-        body {
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 0;
-            background-color: var(--light-bg);
-            color: var(--text-color);
-        }
-        
-        .container {
-            display: flex;
-            height: 100vh;
-        }
-        
-        .pdf-section {
-            flex: 1;
-            padding: 20px;
-            background-color: #f0f0f0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            position: relative;
-        }
-        
-        .pdf-controls {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.7);
-            padding: 10px;
-            border-radius: 5px;
-            z-index: 10;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        
-        .control-group {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        
-        .control-btn {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            width: 30px;
-            height: 30px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
-        .control-btn:hover {
-            background: var(--primary-dark);
-        }
-        
-        .zoom-controls {
-            display: flex;
-            gap: 5px;
-        }
-        
-        .pdf-wrapper {
-            width: 100%;
-            height: 100%;
-            overflow: auto;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        .pdf-container {
-            background-color: white;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-        }
-        
-        .pdf-container embed {
-            width: 100%;
-            height: 100%;
-        }
-        
-        .info-section {
-            flex: 1;
-            padding: 30px;
-            background-color: var(--bg-color);
-            overflow-y: auto;
-        }
-        
-        .patient-header {
-            border-bottom: 2px solid var(--primary-color);
-            padding-bottom: 15px;
-            margin-bottom: 20px;
-        }
-        
-        .patient-header h1 {
-            color: var(--primary-color);
-            margin: 0;
-            display: flex;
-            align-items: center;
-        }
-        
-        .patient-meta {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-top: 15px;
-        }
-        
-        .meta-item {
-            background-color: var(--meta-bg);
-            padding: 8px 15px;
-            border-radius: 20px;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-        }
-        
-        .meta-item i {
-            margin-right: 8px;
-            color: var(--primary-color);
-        }
-        
-        .score-card {
-            background-color: var(--light-bg);
-            border-radius: 10px;
-            padding: 25px;
-            margin: 25px 0;
-            box-shadow: var(--card-shadow);
-        }
-        
-        .score-value {
-            font-size: 72px;
-            font-weight: bold;
-            color: var(--primary-color);
-            text-align: center;
-            margin: 20px 0;
-            line-height: 1;
-        }
-        
-        .score-label {
-            text-align: center;
-            font-size: 18px;
-            color: #666;
-            margin-bottom: 20px;
-        }
-        
-        .progress-container {
-            width: 100%;
-            background-color: var(--border-color);
-            border-radius: 5px;
-            margin: 20px 0;
-            height: 25px;
-        }
-        
-        .progress-bar {
-            height: 100%;
-            background-color: var(--primary-color);
-            border-radius: 5px;
-            width: <?= $merci_score !== 'N/A' ? ($merci_score / 100 * 100) : 0 ?>%;
-            transition: width 0.3s ease;
-            position: relative;
-        }
-        
-        .progress-marker {
-            position: absolute;
-            right: -8px;
-            top: -5px;
-            background-color: #333;
-            color: white;
-            width: 16px;
-            height: 16px;
-            border-radius: 50%;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .diagnostic-card {
-            background-color: var(--light-bg);
-            border-radius: 10px;
-            padding: 25px;
-            margin: 25px 0;
-            box-shadow: var(--card-shadow);
-        }
-        
-        .diagnostic-card h2 {
-            color: var(--primary-color);
-            margin-top: 0;
-            margin-bottom: 20px;
-        }
-        
-        .detail-row {
-            display: flex;
-            margin-bottom: 12px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--border-color);
-        }
-        
-        .detail-label {
-            font-weight: bold;
-            width: 180px;
-            color: #666;
-            flex-shrink: 0;
-        }
-        
-        .detail-value {
-            flex: 1;
-        }
-        
-        .back-button {
-            display: inline-flex;
-            align-items: center;
-            padding: 12px 25px;
-            margin-top: 25px;
-            background-color: var(--primary-color);
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-            font-size: 16px;
-        }
-        
-        .back-button:hover {
-            background-color: var(--primary-dark);
-        }
-        
-        .eye-indicator {
-            display: inline-flex;
-            align-items: center;
-            padding: 5px 15px;
-            background-color: var(--primary-color);
-            color: white;
-            border-radius: 20px;
-            font-size: 14px;
-            margin-left: 15px;
-            text-transform: uppercase;
-        }
-        
-        .severity-scale {
-            display: flex;
-            justify-content: space-between;
-            margin-top: 15px;
-            font-size: 12px;
-            color: #666;
-        }
-        
-        .scale-item {
-            text-align: center;
-            flex: 1;
-        }
-        
-        .fullscreen-btn {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(0, 168, 143, 0.7);
-            color: white;
-            border: none;
-            border-radius: 4px;
-            padding: 8px 12px;
-            cursor: pointer;
-            font-size: 14px;
-            z-index: 10;
-        }
-        
-        .fullscreen-btn:hover {
-            background: rgba(0, 168, 143, 0.9);
-        }
-        
-        .pdf-section.fullscreen {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            z-index: 1000;
-        }
-        
-        .pdf-section.fullscreen .pdf-wrapper {
-            width: 100%;
-            height: 100%;
-        }
-        
-        .pdf-section.fullscreen .fullscreen-btn {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-        }
-        
-        @media (max-width: 768px) {
-            .container {
-                flex-direction: column;
-                height: auto;
-            }
-            
-            .pdf-section {
-                height: 50vh;
-            }
-            
-            .pdf-controls {
-                top: 10px;
-                right: 10px;
-                padding: 5px;
-            }
-        }
-    </style>
+<meta charset="utf-8">
+<title>VF Viewer — <?= htmlspecialchars($row['subject_id'] ?? $patient_id) ?> (<?= htmlspecialchars($eye) ?>)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body { background:#f7f8fb }
+.header { border-bottom:1px solid #e5e7eb; background:#fff; }
+.viewer-card, .info-card { background:#fff; border:1px solid #e5e7eb; }
+.stage { position:relative; background:#000; min-height:60vh; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.controls { position:absolute; top:1rem; right:1rem; display:flex; gap:.5rem; background:rgba(0,0,0,.55); padding:.5rem; border-radius:.5rem; color:#fff }
+.controls .btn { --bs-btn-padding-y:.25rem; --bs-btn-padding-x:.5rem; --bs-btn-font-size:.85rem; color:#fff; border-color:rgba(255,255,255,.4); }
+.controls .btn:hover { background:rgba(255,255,255,.12); }
+.meta-pill { background:#eef2ff; color:#1e40af; border-radius:999px; padding:.25rem .6rem; font-size:.85rem; font-weight:600; }
+.label { color:#6b7280; }
+iframe.pdf { border:0;width:100%;height:80vh;background:#fff }
+.fullscreen { position:fixed; inset:0; z-index:1050; }
+</style>
 </head>
 <body>
-    <div class="container">
-        <!-- PDF Section with Controls -->
-        <div class="pdf-section" id="pdf-section">
-            <div class="pdf-controls">
-                <div class="control-group zoom-controls">
-                    <button class="control-btn zoom-out">-</button>
-                    <button class="control-btn zoom-reset">100%</button>
-                    <button class="control-btn zoom-in">+</button>
-                </div>
-                <div class="control-group">
-                    <button class="control-btn" id="download-btn">↓</button>
-                </div>
-            </div>
-            
-            <div class="pdf-wrapper">
-                <div class="pdf-container" style="width: 100%; height: 80vh;">
-                    <embed 
-                        src="<?= htmlspecialchars($pdf_path) ?>#toolbar=0&navpanes=0&scrollbar=0&zoom=100" 
-                        type="application/pdf"
-                        style="width: 100%; height: 100%;"
-                    >
-                </div>
-            </div>
-            <button class="fullscreen-btn" id="fullscreen-btn">Fullscreen</button>
-            
-            <div class="eye-indicator">
-                <?= $eye ?> (<?= $eye == 'OD' ? 'Right Eye' : 'Left Eye' ?>)
-            </div>
+<header class="header py-2">
+  <div class="container-fluid d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-3">
+      <a href="index.php?search_patient_id=<?= urlencode($patient_id) ?>" class="btn btn-outline-secondary btn-sm">← Back</a>
+      <h5 class="mb-0">VF Viewer</h5>
+      <span class="meta-pill"><?= htmlspecialchars($row['subject_id'] ?? '') ?></span>
+      <span class="meta-pill"><?= htmlspecialchars($patient_id) ?></span>
+      <span class="meta-pill"><?= htmlspecialchars($eye) ?> — <?= eyeLabel($eye) ?></span>
+    </div>
+    <div class="d-flex gap-2">
+      <a class="btn btn-primary btn-sm" target="_blank" href="<?= htmlspecialchars($pdf_path) ?>">Open Original</a>
+      <button id="btnDownload" class="btn btn-outline-primary btn-sm">Download</button>
+    </div>
+  </div>
+</header>
+
+<div class="container-fluid py-3">
+  <div class="row g-3">
+    <div class="col-xl-7">
+      <div class="card viewer-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <strong class="me-2">Report</strong>
+          <small class="text-muted"><?= htmlspecialchars(basename(parse_url($pdf_path, PHP_URL_PATH))) ?></small>
         </div>
-        
-        <!-- Information Section -->
-        <div class="info-section">
-            <div class="patient-header">
-                <h1>
-                    Patient <?= htmlspecialchars($patient_id) ?>
-                    <span class="eye-indicator">
-                        <?= $eye ?> (<?= $eye == 'OD' ? 'Right Eye' : 'Left Eye' ?>)
-                    </span>
-                </h1>
-                <div class="patient-meta">
-                    <div class="meta-item">
-                        <i>👤</i> <?= $age ?> years
-                    </div>
-                    <?php if (!empty($patient['subject_id'])): ?>
-                        <div class="meta-item">
-                            <i>🆔</i> <?= htmlspecialchars($patient['subject_id']) ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
+        <div class="card-body p-0">
+          <div class="stage" id="stage">
+            <div class="controls">
+              <button id="zoomOut"  class="btn btn-outline-light btn-sm">-</button>
+              <button id="zoom100" class="btn btn-outline-light btn-sm">100%</button>
+              <button id="zoomFit" class="btn btn-outline-light btn-sm">Fit</button>
+              <button id="zoomIn"   class="btn btn-outline-light btn-sm">+</button>
+              <button id="btnFull"  class="btn btn-outline-light btn-sm">⤢</button>
             </div>
-            
-            <div class="score-card">
-                <h2>MERCI Score</h2>
-                <div class="score-value"><?= $merci_score !== 'N/A' ? htmlspecialchars($merci_score) : 'N/A' ?></div>
-                <div class="score-label">out of 100</div>
-                
-                <div class="progress-container">
-                    <div class="progress-bar">
-                        <?php if ($merci_score !== 'N/A'): ?>
-                            <div class="progress-marker"><?= $merci_score ?></div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-                
-                <div class="severity-scale">
-                    <div class="scale-item">0-20 </div>
-                    <div class="scale-item">21-40 </div>
-                    <div class="scale-item">41-60 </div>
-                    <div class="scale-item">61-80 </div>
-                    <div class="scale-item">81-100 </div>
-                </div>
-            </div>
-            
-            <div class="diagnostic-card">
-                <h2>Diagnostic Information</h2>
-                
-                <div class="detail-row">
-                    <div class="detail-label">Test Date:</div>
-                    <div class="detail-value"><?= htmlspecialchars($test_date) ?></div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">Report Diagnosis:</div>
-                    <div class="detail-value"><?= htmlspecialchars($report_diagnosis) ?></div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">MERCI Diagnosis:</div>
-                    <div class="detail-value"><?= htmlspecialchars($merci_diagnosis) ?></div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">Exclusion:</div>
-                    <div class="detail-value"><?= htmlspecialchars($exclusion) ?></div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">Error Type:</div>
-                    <div class="detail-value"><?= htmlspecialchars($error_type) ?></div>
-                </div>
-                
-                <div class="detail-row">
-                    <div class="detail-label">FAF Grade:</div>
-                    <div class="detail-value"><?= htmlspecialchars($faf_grade) ?></div>
-                </div>
-                
-                <?php if ($oct_score !== 'N/A'): ?>
-                    <div class="detail-row">
-                        <div class="detail-label">OCT Score:</div>
-                        <div class="detail-value"><?= htmlspecialchars($oct_score) ?></div>
-                    </div>
-                <?php endif; ?>
-                
-                <?php if ($vf_score !== 'N/A'): ?>
-                    <div class="detail-row">
-                        <div class="detail-label">VF Score:</div>
-                        <div class="detail-value"><?= htmlspecialchars($vf_score) ?></div>
-                    </div>
-                <?php endif; ?>
-                
-                <div class="detail-row">
-                    <div class="detail-label">Report Reference:</div>
-                    <div class="detail-value"><?= htmlspecialchars($ref) ?></div>
-                </div>
-            </div>
-            
-            <a href="index.php?search_patient_id=<?= $patient_id ?>" class="back-button">
-                ← Back to Patient Record
-            </a>
+            <iframe id="pdfFrame" class="pdf" src=""></iframe>
+          </div>
         </div>
+      </div>
     </div>
 
-    <script>
-        // PDF Zoom Controls
-        const pdfContainer = document.getElementById('pdf-container');
-        const vfPdf = document.getElementById('vf-pdf');
-        const pdfSection = document.getElementById('pdf-section');
-        const fullscreenBtn = document.getElementById('fullscreen-btn');
-        const pdfWrapper = document.querySelector('.pdf-wrapper');
-        let currentZoom = 1;
-        
-        // Zoom functionality
-        document.querySelector('.zoom-in').addEventListener('click', () => {
-            currentZoom = Math.min(currentZoom + 0.1, 3);
-            updateZoom();
-        });
-        
-        document.querySelector('.zoom-out').addEventListener('click', () => {
-            currentZoom = Math.max(currentZoom - 0.1, 0.5);
-            updateZoom();
-        });
-        
-        document.querySelector('.zoom-reset').addEventListener('click', () => {
-            currentZoom = 1;
-            updateZoom();
-        });
-        
-        function updateZoom() {
-            pdfContainer.style.transform = `scale(${currentZoom})`;
-            pdfContainer.style.width = `${100 / currentZoom}%`;
-            pdfContainer.style.height = `${100 / currentZoom}%`;
-        }
-        
-        // Download functionality
-        document.getElementById('download-btn').addEventListener('click', () => {
-            const a = document.createElement('a');
-            a.href = "<?= htmlspecialchars($pdf_path) ?>";
-            a.download = "VF_Report_<?= htmlspecialchars($patient_id) ?>_<?= $eye ?>_<?= htmlspecialchars($test_date) ?>.pdf";
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        });
-        
-        // Fullscreen functionality
-        fullscreenBtn.addEventListener('click', () => {
-            if (!document.fullscreenElement) {
-                pdfSection.classList.add('fullscreen');
-                if (pdfSection.requestFullscreen) {
-                    pdfSection.requestFullscreen();
-                } else if (pdfSection.webkitRequestFullscreen) {
-                    pdfSection.webkitRequestFullscreen();
-                } else if (pdfSection.msRequestFullscreen) {
-                    pdfSection.msRequestFullscreen();
-                }
-            } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                } else if (document.webkitExitFullscreen) {
-                    document.webkitExitFullscreen();
-                } else if (document.msExitFullscreen) {
-                    document.msExitFullscreen();
-                }
-            }
-        });
-        
-        document.addEventListener('fullscreenchange', () => {
-            if (!document.fullscreenElement) {
-                pdfSection.classList.remove('fullscreen');
-                // Reset to normal view when exiting fullscreen
-                pdfContainer.style.transform = `scale(${currentZoom})`;
-            }
-        });
-        
-        // Keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.key === '+') {
-                currentZoom = Math.min(currentZoom + 0.1, 3);
-                updateZoom();
-            } else if (e.key === '-') {
-                currentZoom = Math.max(currentZoom - 0.1, 0.5);
-                updateZoom();
-            } else if (e.key === '0') {
-                currentZoom = 1;
-                updateZoom();
-            } else if (e.key === 'f') {
-                fullscreenBtn.click();
-            } else if (e.key === 'd') {
-                document.getElementById('download-btn').click();
-            }
-        });
-    </script>
+    <div class="col-xl-5">
+      <div class="card info-card mb-3">
+        <div class="card-body">
+          <h5 class="mb-3">Patient & Test</h5>
+          <div class="row g-3">
+            <div class="col-6"><div class="label">Subject</div><div><?= htmlspecialchars($row['subject_id'] ?? '—') ?></div></div>
+            <div class="col-6"><div class="label">Patient ID</div><div><?= htmlspecialchars($patient_id) ?></div></div>
+            <div class="col-6"><div class="label">Eye</div><div><?= htmlspecialchars($eye) ?> (<?= eyeLabel($eye) ?>)</div></div>
+            <div class="col-6"><div class="label">Test Date</div><div><?= htmlspecialchars($test_date ?? 'Unknown') ?></div></div>
+            <div class="col-6"><div class="label">Age</div><div><?= htmlspecialchars($age) ?></div></div>
+            <div class="col-6"><div class="label">Location</div><div><?= htmlspecialchars($row['location'] ?? '—') ?></div></div>
+            <div class="col-12"><div class="label mt-2">Reference</div><code><?= htmlspecialchars($ref) ?></code></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card info-card">
+        <div class="card-body">
+          <h5 class="mb-3">Diagnostics</h5>
+          <div class="row g-3">
+            <div class="col-6"><div class="label">Report Diagnosis</div><div><?= htmlspecialchars($report_diagnosis) ?></div></div>
+            <div class="col-6"><div class="label">Exclusion</div><div><?= htmlspecialchars($exclusion) ?></div></div>
+            <div class="col-6"><div class="label">MERCI Score</div><div><?= htmlspecialchars($merci_score) ?></div></div>
+            <div class="col-6"><div class="label">MERCI Diagnosis</div><div><?= htmlspecialchars($merci_diagnosis) ?></div></div>
+            <div class="col-6"><div class="label">Error Type</div><div><?= htmlspecialchars($error_type) ?></div></div>
+            <div class="col-6"><div class="label">FAF Grade</div><div><?= htmlspecialchars($faf_grade) ?></div></div>
+            <div class="col-6"><div class="label">OCT Score</div><div><?= htmlspecialchars($oct_score) ?></div></div>
+            <div class="col-6"><div class="label">VF Score</div><div><?= htmlspecialchars($vf_score) ?></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const frame = document.getElementById('pdfFrame');
+  const stage = document.getElementById('stage');
+  const btnIn  = document.getElementById('zoomIn');
+  const btnOut = document.getElementById('zoomOut');
+  const btn100 = document.getElementById('zoom100');
+  const btnFit = document.getElementById('zoomFit');
+  const btnFull= document.getElementById('btnFull');
+  const btnDl  = document.getElementById('btnDownload');
+
+  const baseUrl = "<?= htmlspecialchars($pdf_path, ENT_QUOTES) ?>";
+  let currentZoom = 100;      // 50–300 typical
+  let fitMode = false;
+
+  function srcWithParams() {
+    if (fitMode) return baseUrl + "#toolbar=0&navpanes=0&scrollbar=0&view=FitH&zoom=fit";
+    return baseUrl + "#toolbar=0&navpanes=0&scrollbar=0&zoom=" + Math.round(currentZoom);
+  }
+
+  function load() { frame.src = srcWithParams(); }
+  function zoom(delta) { fitMode = false; currentZoom = Math.min(400, Math.max(25, currentZoom + delta)); load(); }
+  function zoomTo(val){ fitMode = false; currentZoom = val; load(); }
+  function fit(){ fitMode = true; load(); }
+
+  btnIn.addEventListener('click', () => zoom(10));
+  btnOut.addEventListener('click', () => zoom(-10));
+  btn100.addEventListener('click', () => zoomTo(100));
+  btnFit.addEventListener('click', fit);
+
+  btnFull.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      stage.classList.add('fullscreen');
+      stage.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) stage.classList.remove('fullscreen');
+  });
+
+  btnDl.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = baseUrl;
+    a.download = "VF_<?= htmlspecialchars($patient_id) ?>_<?= htmlspecialchars($eye) ?>_<?= htmlspecialchars($test_date ?? 'date') ?>.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '+') zoom(10);
+    else if (e.key === '-') zoom(-10);
+    else if (e.key === '0') zoomTo(100);
+    else if (e.key.toLowerCase() === 'f') btnFull.click();
+    else if (e.key.toLowerCase() === 'd') btnDl.click();
+  });
+
+  load();
+})();
+</script>
 </body>
 </html>
