@@ -715,15 +715,14 @@ canvas { max-height: 380px; }
 
                                             <?php foreach ($testEyes as $eye): ?>
                                                 <?php
-                                                    $eyeSide   = strtoupper($eye['eye']);            // 'OD' or 'OS'
-                                                    $eyeLower  = strtolower($eyeSide);               // 'od' or 'os'
-                                                    $eyeSuffix = ($eyeSide === 'OS') ? 'OS' : 'OD';  // UPPERCASE suffix
+                                                    $eyeSide   = strtoupper($eye['eye']);
+                                                    $eyeLower  = strtolower($eyeSide);
+                                                    $eyeSuffix = ($eyeSide === 'OS') ? 'OS' : 'OD';
                                                     $eyeClass  = $eyeSide === 'OS' ? 'os-badge' : 'od-badge';
 
                                                     $diag      = $eye['report_diagnosis'];
                                                     $diagClass = ($diag === 'no input') ? 'no-input' : $diag;
 
-                                                    // Optional legacy per-eye med fields on test_eyes (display only)
                                                     $medName    = $eye['medication_name'] ?? null;
                                                     $dosage     = $eye['dosage'] ?? null;
                                                     $dosageUnit = $eye['dosage_unit'] ?? 'mg';
@@ -731,13 +730,11 @@ canvas { max-height: 380px; }
                                                     $merciVal  = is_numeric($eye['merci_score']) ? (float)$eye['merci_score'] : null;
                                                     $ageAtTest = isset($eye['age']) ? (int)$eye['age'] : null;
 
-                                                    // Preferred: per-eye refs on test_eyes
                                                     $fafRef   = $eye["faf_reference_{$eyeSuffix}"]   ?? null;
                                                     $octRef   = $eye["oct_reference_{$eyeSuffix}"]   ?? null;
                                                     $vfRef    = $eye["vf_reference_{$eyeSuffix}"]    ?? null;
                                                     $mfergRef = $eye["mferg_reference_{$eyeSuffix}"] ?? null;
 
-                                                    // Back-compat: fall back to tests table if needed
                                                     if (empty($fafRef))   { $tmp = "faf_reference_{$eyeLower}";   $fafRef   = $test[$tmp] ?? null; }
                                                     if (empty($octRef))   { $tmp = "oct_reference_{$eyeLower}";   $octRef   = $test[$tmp] ?? null; }
                                                     if (empty($vfRef))    { $tmp = "vf_reference_{$eyeLower}";    $vfRef    = $test[$tmp] ?? null; }
@@ -1028,7 +1025,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
     // Register plugins
     Chart.register(ChartDataLabels);
-    // CRITICAL FIX: disable datalabels by default to prevent doubled/overlapping numbers
+    // Default: datalabels off; we enable per-chart where needed
     Chart.defaults.set('plugins.datalabels', { display: false });
     const C = {
         brand: '#1a73e8', brandLight:'#6ea8fe',
@@ -1047,6 +1044,9 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     Chart.register(shadowPlugin);
 
     function gridColor(){ return getComputedStyle(document.body).getPropertyValue('--grid'); }
+    function labelFg(){ return document.body.classList.contains('dark') ? '#e5e7eb' : '#111827'; }
+    function labelBg(){ return document.body.classList.contains('dark') ? 'rgba(21,26,44,0.9)' : 'rgba(255,255,255,0.9)'; }
+
     function lineGradientFor(chart){
         const {ctx, chartArea} = chart;
         if (!chartArea) return C.brandLight;
@@ -1057,7 +1057,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         return g;
     }
 
-    // Line chart: datalabels disabled (default), so values won't double up
+    // Line chart (with readable labels): values shown once, pill-style, spaced
     const testsChart = new Chart(document.getElementById('testsOverTime').getContext('2d'), {
         type: 'line',
         data: { labels: [], datasets: [{
@@ -1074,7 +1074,21 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 legend:{ display:false },
                 tooltip:{ callbacks:{ label:ctx=>` ${ctx.parsed.y} tests`} },
                 zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} },
-                datalabels: { display: false }
+                datalabels:{
+                    display: (ctx)=> {
+                        const v = ctx.dataset.data[ctx.dataIndex];
+                        // show only non-zero & every point (change to modulo to thin out if needed)
+                        return v !== 0 && v != null;
+                    },
+                    anchor:'end',
+                    align:'top',
+                    offset: 6,
+                    padding: {top:2,right:4,bottom:2,left:4},
+                    backgroundColor: ()=>labelBg(),
+                    borderRadius: 6,
+                    color: ()=>labelFg(),
+                    formatter: (v)=> fmt.format(v)
+                }
             }
         }
     });
@@ -1095,7 +1109,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         }
     });
 
-    // Bars: enable datalabels only here, with clean alignment to avoid collisions
+    // Bars: enable datalabels with clean alignment
     const locationBar = new Chart(document.getElementById('locationBar').getContext('2d'), {
         type:'bar',
         data:{ labels:['KH','CHUSJ','IWK','IVEY'], datasets:[{ label:'Patients', data:[0,0,0,0],
@@ -1106,8 +1120,9 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             plugins:{
                 legend:{ display:false },
                 datalabels:{
-                    anchor:'end', align:'end', offset:6, color:'#333',
-                    clip:false, formatter:v=> (v>=3?fmt.format(v):'')
+                    anchor:'end', align:'end', offset:6, color:()=>labelFg(),
+                    backgroundColor:()=>labelBg(), borderRadius:6, padding:{top:2,right:4,bottom:2,left:4},
+                    clip:false, formatter:v=> (v>=1?fmt.format(v):'')
                 }
             }
         }
@@ -1125,7 +1140,8 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() } }},
             plugins:{
                 datalabels:{
-                    anchor:'end', align:'end', offset:6, color:'#333',
+                    anchor:'end', align:'end', offset:6, color:()=>labelFg(),
+                    backgroundColor:()=>labelBg(), borderRadius:6, padding:{top:2,right:4,bottom:2,left:4},
                     formatter:v => (v===null||isNaN(v))?'':fmt.format(Math.round(v*100)/100)
                 }
             }
@@ -1321,7 +1337,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         let visPatients = 0, visTests = 0, visEyes = 0;
 
         patientCards.forEach(patient => {
-            const patientId = (patient.getAttribute('data-patient-id')||'').toLowerCase(); // now = subject_id
+            const patientId = (patient.getAttribute('data-patient-id')||'').toLowerCase();
             const patientSubject = (patient.getAttribute('data-subject')||'').toLowerCase();
 
             const hasPatientIdFilter = !!f.patientId;
@@ -1598,7 +1614,19 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             data:{ labels: agg.labels, datasets:[{ label:'Tests', data: agg.values, borderColor: Cc.brand,
                 backgroundColor:(ctx)=>{ const ch=ctx.chart; const g=ch.ctx.createLinearGradient(0,ch.chartArea.top,0,ch.chartArea.bottom); g.addColorStop(0,'rgba(26,115,232,0.35)'); g.addColorStop(1,'rgba(26,115,232,0.05)'); return g; },
                 tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
-            options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, datalabels:{display:false} }, scales:{ x:{ grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} } }
+            options:{ responsive:true, maintainAspectRatio:false,
+                plugins:{
+                    legend:{display:false},
+                    datalabels:{
+                        display:(ctx)=>ctx.dataset.data[ctx.dataIndex] != null && ctx.dataset.data[ctx.dataIndex] !== 0,
+                        anchor:'end', align:'top', offset:6,
+                        padding:{top:2,right:4,bottom:2,left:4},
+                        backgroundColor:()=>labelBg(), borderRadius:6, color:()=>labelFg(),
+                        formatter:v=>fmt.format(v)
+                    }
+                },
+                scales:{ x:{ grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }
+            }
         });
 
         const diagVals = ['normal','abnormal','exclude','no input'].map(k=>agg.diagCounts[k]||0);
@@ -1614,7 +1642,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 { label:'Avg OCT', data:[agg.avgOD.oct, agg.avgOS.oct], backgroundColor:Cc.purple, borderColor:Cc.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
                 { label:'Avg VF',  data:[agg.avgOD.vf,  agg.avgOS.vf],  backgroundColor:Cc.brand,  borderColor:Cc.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
             ]},
-            options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:6, color:'#333', formatter:v=>(v===null||isNaN(v))?'':(typeof v==='number'?v.toFixed(2):v) } } }
+            options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:6, color:()=>labelFg(), backgroundColor:()=>labelBg(), borderRadius:6, padding:{top:2,right:4,bottom:2,left:4}, formatter:v=>(v===null||isNaN(v))?'':(typeof v==='number'?v.toFixed(2):v) } } }
         });
 
         modalEl.querySelectorAll('[data-csv], [data-download]').forEach(btn=>{
@@ -1650,6 +1678,3 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 </script>
 </body>
 </html>
-
-
-
