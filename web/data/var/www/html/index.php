@@ -195,6 +195,11 @@ function build_view_url(string $type, string $patientId, string $eye, string $re
     --border:rgba(0,0,0,.08);
     --shadow: 0 8px 24px rgba(0,0,0,0.09);
     --chart-grad: radial-gradient(1200px 400px at 10% 0%, rgba(26,115,232,.06), transparent 60%);
+    /* KPI palette */
+    --kpi1a:#7c3aed; --kpi1b:#4f46e5;
+    --kpi2a:#059669; --kpi2b:#10b981;
+    --kpi3a:#0ea5e9; --kpi3b:#2563eb;
+    --kpi4a:#f59e0b; --kpi4b:#d97706;
 }
 body.dark{
     --bg:#0f1220;
@@ -211,32 +216,39 @@ body { background: var(--bg); color: var(--text); }
 body.dark .navbar-blur { background-color: rgba(21,26,44,0.85); }
 
 .card { background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); }
-.patient-card { transition: all 0.3s ease; margin-bottom: 20px; }
-.patient-card:hover { transform: translateY(-1px); }
-.test-card { border-left: 4px solid var(--brand); margin-bottom: 15px; }
-.eye-badge { font-size: 0.8rem; margin-right: 5px; }
-.os-badge { background-color: #6f42c1; }
-.od-badge { background-color: #20c997; }
 .section-title { display:flex; align-items:center; gap:.5rem; }
-.card-gradient { background: linear-gradient(135deg, var(--brand-2) 0%, var(--brand) 100%); color:#fff; }
-.sticky-actions { position: sticky; top: 80px; z-index: 10; }
 .pill { border-radius: 999px; }
 .chart-card { background-image: var(--chart-grad); }
 .chart-toolbar { display:flex; gap:.5rem; justify-content:flex-end; margin-bottom:.5rem; }
 .chart-toolbar .btn { --bs-btn-padding-y: .25rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .85rem; }
 canvas { max-height: 380px; }
 
-.results-badge { font-weight:600; }
-.filter-fab { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: none; }
-.filter-fab .btn { box-shadow: var(--shadow); }
+/* KPI cards (unified palette) */
+.card-kpi{ color:#fff; }
+.card-kpi .card-title{ color:#fff; opacity:.9; }
+.kpi-1{ background: linear-gradient(135deg, var(--kpi1a), var(--kpi1b)); }
+.kpi-2{ background: linear-gradient(135deg, var(--kpi2a), var(--kpi2b)); }
+.kpi-3{ background: linear-gradient(135deg, var(--kpi3a), var(--kpi3b)); }
+.kpi-4{ background: linear-gradient(135deg, var(--kpi4a), var(--kpi4b)); }
 
-.attachments { border-top: 1px dashed var(--border); margin-top: .5rem; padding-top: .5rem; }
-.attachments .btn { --bs-btn-padding-y: .2rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .82rem; }
+.patient-card { transition: all 0.3s ease; margin-bottom: 20px; }
+.patient-card:hover { transform: translateY(-1px); }
+.test-card { border-left: 4px solid var(--brand); margin-bottom: 15px; }
+.eye-badge { font-size: 0.8rem; margin-right: 5px; }
+.os-badge { background-color: #6f42c1; }
+.od-badge { background-color: #20c997; }
 
 .diagnosis-badge.normal { background-color: #198754 !important; }
 .diagnosis-badge.abnormal { background-color: #dc3545 !important; }
 .diagnosis-badge.exclude { background-color: #6c757d !important; }
 .diagnosis-badge["no input"], .diagnosis-badge.no-input { background-color: #ffc107 !important; }
+
+.attachments { border-top: 1px dashed var(--border); margin-top: .5rem; padding-top: .5rem; }
+.attachments .btn { --bs-btn-padding-y: .2rem; --bs-btn-padding-x: .5rem; --bs-btn-font-size: .82rem; }
+
+.results-badge { font-weight:600; }
+.filter-fab { position: fixed; right: 18px; bottom: 18px; z-index: 1000; display: none; }
+.filter-fab .btn { box-shadow: var(--shadow); }
 
 .med-chip { display:inline-flex; align-items:center; gap:.35rem; padding:.25rem .6rem; border:1px solid var(--border);
   border-radius:999px; background:rgba(26,115,232,.06); font-weight:600; margin:.2rem .3rem .2rem 0; }
@@ -308,10 +320,10 @@ canvas { max-height: 380px; }
         </div>
     </div>
 
-    <!-- KPI Cards -->
+    <!-- KPI Cards (unified colors) -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
-            <div class="card card-gradient h-100">
+            <div class="card card-kpi kpi-1 h-100">
                 <div class="card-body">
                     <h5 class="card-title"><i class="bi bi-person-vcard"></i> Patients</h5>
                     <p class="card-text display-6 mb-0"><?= number_format($totalPatients) ?></p>
@@ -319,7 +331,7 @@ canvas { max-height: 380px; }
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-white bg-success h-100">
+            <div class="card card-kpi kpi-2 h-100">
                 <div class="card-body">
                     <h5 class="card-title"><i class="bi bi-clipboard2-pulse"></i> Total Tests</h5>
                     <p class="card-text display-6 mb-0"><?= number_format($totalTests) ?></p>
@@ -327,7 +339,7 @@ canvas { max-height: 380px; }
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-white bg-info h-100">
+            <div class="card card-kpi kpi-3 h-100">
                 <div class="card-body">
                     <h5 class="card-title"><i class="bi bi-eye"></i> Eye Records</h5>
                     <p class="card-text display-6 mb-0"><?= number_format($totalEyes) ?></p>
@@ -335,7 +347,7 @@ canvas { max-height: 380px; }
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-white bg-warning h-100">
+            <div class="card card-kpi kpi-4 h-100">
                 <div class="card-body">
                     <h5 class="card-title"><i class="bi bi-hospital"></i> Locations</h5>
                     <p class="card-text mb-0">KH, CHUSJ, IWK, IVEY</p>
@@ -731,7 +743,6 @@ canvas { max-height: 380px; }
                                                     if (empty($vfRef))    { $tmp = "vf_reference_{$eyeLower}";    $vfRef    = $test[$tmp] ?? null; }
                                                     if (empty($mfergRef)) { $tmp = "mferg_reference_{$eyeLower}"; $mfergRef = $test[$tmp] ?? null; }
 
-                                                    // Decide once per eye whether we have any media
                                                     $hasAnyMedia = !empty($fafRef) || !empty($octRef) || !empty($vfRef) || !empty($mfergRef);
                                                 ?>
 
@@ -1015,7 +1026,10 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         };
     }
 
+    // Register plugins
     Chart.register(ChartDataLabels);
+    // CRITICAL FIX: disable datalabels by default to prevent doubled/overlapping numbers
+    Chart.defaults.set('plugins.datalabels', { display: false });
     const C = {
         brand: '#1a73e8', brandLight:'#6ea8fe',
         green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d',
@@ -1043,6 +1057,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         return g;
     }
 
+    // Line chart: datalabels disabled (default), so values won't double up
     const testsChart = new Chart(document.getElementById('testsOverTime').getContext('2d'), {
         type: 'line',
         data: { labels: [], datasets: [{
@@ -1058,11 +1073,13 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             plugins:{
                 legend:{ display:false },
                 tooltip:{ callbacks:{ label:ctx=>` ${ctx.parsed.y} tests`} },
-                zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} }
+                zoom:{ zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' }, pan:{enabled:true, mode:'x'} },
+                datalabels: { display: false }
             }
         }
     });
 
+    // Pie: show percents >= 6%
     const diagChart = new Chart(document.getElementById('diagnosisPie').getContext('2d'), {
         type:'doughnut',
         data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:[0,0,0,0], backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}] },
@@ -1078,6 +1095,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         }
     });
 
+    // Bars: enable datalabels only here, with clean alignment to avoid collisions
     const locationBar = new Chart(document.getElementById('locationBar').getContext('2d'), {
         type:'bar',
         data:{ labels:['KH','CHUSJ','IWK','IVEY'], datasets:[{ label:'Patients', data:[0,0,0,0],
@@ -1085,7 +1103,13 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         options:{
             responsive:true, maintainAspectRatio:false,
             scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() } }},
-            plugins:{ legend:{ display:false }, datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=> (v>=3?fmt.format(v):'') } }
+            plugins:{
+                legend:{ display:false },
+                datalabels:{
+                    anchor:'end', align:'end', offset:6, color:'#333',
+                    clip:false, formatter:v=> (v>=3?fmt.format(v):'')
+                }
+            }
         }
     });
 
@@ -1099,7 +1123,12 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         options:{
             responsive:true, maintainAspectRatio:false,
             scales:{ x:{ grid:{ display:false }}, y:{ beginAtZero:true, grid:{ color:gridColor() } }},
-            plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v => (v===null||isNaN(v))?'':fmt.format(v) } }
+            plugins:{
+                datalabels:{
+                    anchor:'end', align:'end', offset:6, color:'#333',
+                    formatter:v => (v===null||isNaN(v))?'':fmt.format(Math.round(v*100)/100)
+                }
+            }
         }
     });
 
@@ -1116,7 +1145,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     };
 
     function rowMatchesData(r, f){
-        // NEW: allow filter to match subject_id or patient_id
         if (f.patientId) {
             const needle = f.patientId;
             const pid = (r.patient_id || '').toLowerCase();
@@ -1317,7 +1345,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
                 testRows.forEach(row => {
                     const r = {
-                        patient_id: patientId,                   // used only for filtering
+                        patient_id: patientId,
                         subject_id: row.getAttribute('data-subject') || '',
                         report_diagnosis: row.getAttribute('data-diagnosis') || '',
                         location: patient.getAttribute('data-location') || '',
@@ -1570,7 +1598,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             data:{ labels: agg.labels, datasets:[{ label:'Tests', data: agg.values, borderColor: Cc.brand,
                 backgroundColor:(ctx)=>{ const ch=ctx.chart; const g=ch.ctx.createLinearGradient(0,ch.chartArea.top,0,ch.chartArea.bottom); g.addColorStop(0,'rgba(26,115,232,0.35)'); g.addColorStop(1,'rgba(26,115,232,0.05)'); return g; },
                 tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
-            options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false} }, scales:{ x:{ grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} } }
+            options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, datalabels:{display:false} }, scales:{ x:{ grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} } }
         });
 
         const diagVals = ['normal','abnormal','exclude','no input'].map(k=>agg.diagCounts[k]||0);
@@ -1586,7 +1614,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 { label:'Avg OCT', data:[agg.avgOD.oct, agg.avgOS.oct], backgroundColor:Cc.purple, borderColor:Cc.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
                 { label:'Avg VF',  data:[agg.avgOD.vf,  agg.avgOS.vf],  backgroundColor:Cc.brand,  borderColor:Cc.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
             ]},
-            options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:4, color:'#333', formatter:v=>(v===null||isNaN(v))?'':(typeof v==='number'?v.toFixed(2):v) } } }
+            options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:6, color:'#333', formatter:v=>(v===null||isNaN(v))?'':(typeof v==='number'?v.toFixed(2):v) } } }
         });
 
         modalEl.querySelectorAll('[data-csv], [data-download]').forEach(btn=>{
@@ -1622,5 +1650,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 </script>
 </body>
 </html>
+
 
 
