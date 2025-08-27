@@ -1,16 +1,23 @@
 <?php
 // form.php — two-mode data entry (Full Entry + Medications Only)
-// Works with your updated includes/functions.php (with resolve_patient_id/insertMedication)
-// Writes to: patients, tests, test_eyes, medications (via insertMedication)
-// ---------------------------------------------------------------
+// Now stores per-eye uploads exactly like import_images.php:
+//   IMAGE_BASE_DIR/<ModalityDir>/<PATIENT>_<EYE>_<YYYYMMDD>.<ext>
+// and writes refs into test_eyes.<modality>_reference_OD|OS
+// (with optional VF anonymization hook via VF_ANON_SCRIPT)
+
+// ======================================================================
+// BOOTSTRAP
+// ======================================================================
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
+
 require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/functions.php';
 
-
-/* ===== Helpers ===== */
+// ======================================================================
+/* Helpers (unchanged style unless noted) */
+// ======================================================================
 function respond_json($arr) { header('Content-Type: application/json'); echo json_encode($arr); exit; }
 function val($arr, $key, $default=null) { return isset($arr[$key]) && $arr[$key] !== '' ? $arr[$key] : $default; }
 function normalize_actual_dx($v) {
@@ -26,7 +33,7 @@ function normalize_merci_score($v) {
     if ($t === 'unable') return 'unable';
     if (is_numeric($v)) {
         $n = (float)$v;
-        if ($n >= 0 && $n <= 100) return (string)(int)$n; // keep as string
+        if ($n >= 0 && $n <= 100) return (string)(int)$n;
     }
     return null;
 }
@@ -46,21 +53,6 @@ function safe_int($v, $min=null, $max=null) {
     if ($max !== null && $n > $max) return $max;
     return $n;
 }
-function ensure_dir($path) { if (!is_dir($path)) { @mkdir($path, 0775, true); } }
-function save_upload($field, $destDir, $prefix, $allow) {
-    if (!isset($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
-    $name = $_FILES[$field]['name'];
-    $tmp  = $_FILES[$field]['tmp_name'];
-    $type = mime_content_type($tmp);
-    $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
-    if (!in_array($ext, $allow['ext'], true)) return null;
-    if (!in_array($type, $allow['mime'], true)) return null;
-    ensure_dir($destDir);
-    $fname = $prefix . '_' . uniqid('', true) . '.' . $ext;
-    $dest  = rtrim($destDir, '/').'/'.$fname;
-    if (move_uploaded_file($tmp, $dest)) return $dest;
-    return null;
-}
 function date_diff_inclusive_days(?string $start, ?string $end): ?int {
     if (!$start || !$end) return null;
     try {
@@ -71,7 +63,123 @@ function date_diff_inclusive_days(?string $start, ?string $end): ?int {
     } catch (Throwable $e) { return null; }
 }
 
-/* ===== Duplicate-check mini API (patient + date + eye) ===== */
+// ----- schema helpers like import_images.php -----
+function hasColumn(mysqli $conn, string $table, string $column): bool {
+    $sql = "SELECT 1 FROM information_schema.COLUMNS 
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ? LIMIT 1";
+    $stmt = $conn->prepare($sql);
+    $db = DB_NAME;
+    $stmt->bind_param("sss", $db, $table, $column);
+    $stmt->execute();
+    $ok = (bool)$stmt->get_result()->fetch_row();
+    $stmt->close();
+    return $ok;
+}
+function ensureTestEye(mysqli $conn, string $test_id, string $eye): void {
+    $stmt = $conn->prepare("SELECT 1 FROM test_eyes WHERE test_id = ? AND eye = ? LIMIT 1");
+    $stmt->bind_param("ss", $test_id, $eye);
+    $stmt->execute();
+    $exists = (bool)$stmt->get_result()->fetch_row();
+    $stmt->close();
+    if ($exists) return;
+    $stmt = $conn->prepare("INSERT INTO test_eyes (test_id, eye) VALUES (?, ?)");
+    $stmt->bind_param("ss", $test_id, $eye);
+    $stmt->execute();
+    $stmt->close();
+}
+
+/**
+ * Store one modality upload exactly like import_images.php:
+ * - Saves to IMAGE_BASE_DIR/<ModalityDir>/<PATIENT>_<EYE>_<YYYYMMDD>.<ext>
+ * - Writes test_eyes.<modality>_reference_OD|OS (and legacy fallbacks)
+ * - Optionally runs VF anonymization if VF_ANON_SCRIPT is defined (VF PDFs)
+ * - Returns stored filename, or null if no file present
+ */
+function store_modality_upload_like_import(
+    mysqli $conn,
+    string $field,
+    string $modality,          // 'FAF'|'OCT'|'VF'|'MFERG'
+    string $patient_id,
+    string $eye,               // 'OD'|'OS'
+    string $date_of_test,      // 'YYYY-MM-DD'
+    string $test_id
+): ?string {
+    if (!isset($_FILES[$field]) || $_FILES[$field]['error'] !== UPLOAD_ERR_OK) return null;
+    $modality = strtoupper($modality);
+    if (!defined('ALLOWED_TEST_TYPES') || !is_array(ALLOWED_TEST_TYPES) || !array_key_exists($modality, ALLOWED_TEST_TYPES)) {
+        return null;
+    }
+
+    $name = $_FILES[$field]['name'];
+    $tmp  = $_FILES[$field]['tmp_name'];
+    $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
+
+    // Accept matrix (you said OCT and MFERG are PDFs now)
+    $okExts = [
+        'FAF'   => ['png','jpg','jpeg','webp'],
+        'OCT'   => ['pdf'],
+        'VF'    => ['pdf'],
+        'MFERG' => ['pdf'],
+    ];
+    if (!in_array($ext, $okExts[$modality] ?? [], true)) return null;
+
+    $dirName   = ALLOWED_TEST_TYPES[$modality];
+    $targetDir = rtrim(IMAGE_BASE_DIR, '/')."/{$dirName}/";
+    if (!is_dir($targetDir)) { @mkdir($targetDir, 0777, true); }
+
+    $dateYmd   = (new DateTime($date_of_test))->format('Ymd');
+    $finalName = "{$patient_id}_{$eye}_{$dateYmd}.{$ext}";
+    $dest      = $targetDir . $finalName;
+
+    if (is_file($dest)) @unlink($dest);
+    if (!move_uploaded_file($tmp, $dest)) return null;
+
+    // Optional: run VF anonymization
+    if ($modality === 'VF' && $ext === 'pdf' && defined('VF_ANON_SCRIPT') && is_file(VF_ANON_SCRIPT)) {
+        // Script contract you shared: script <input> <outputDir>
+        $cmd = escapeshellcmd(VF_ANON_SCRIPT) . ' ' . escapeshellarg($dest) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
+        @exec($cmd, $out, $code);
+        // Your script writes masked file to the same output dir with same filename, so no rename needed.
+    }
+
+    // Ensure test_eyes exists
+    ensureTestEye($conn, $test_id, $eye);
+
+    // Write DB references like import_images.php
+    $modLower = strtolower($modality);     // faf|oct|vf|mferg
+    $eyeUpper = ($eye === 'OS') ? 'OS' : 'OD';
+    $eyeLower = strtolower($eye);
+
+    // Preferred test_eyes.<modality>_reference_OD|OS
+    $tePerEye = "{$modLower}_reference_{$eyeUpper}";
+    if (hasColumn($conn, 'test_eyes', $tePerEye)) {
+        $stmt = $conn->prepare("UPDATE test_eyes SET $tePerEye = ? WHERE test_id = ? AND eye = ?");
+        $stmt->bind_param("sss", $finalName, $test_id, $eye);
+        $stmt->execute(); $stmt->close();
+    } else {
+        // Very old single-column fallback
+        $teSingle = "{$modLower}_reference";
+        if (hasColumn($conn, 'test_eyes', $teSingle)) {
+            $stmt = $conn->prepare("UPDATE test_eyes SET $teSingle = ? WHERE test_id = ? AND eye = ?");
+            $stmt->bind_param("sss", $finalName, $test_id, $eye);
+            $stmt->execute(); $stmt->close();
+        }
+    }
+
+    // Back-compat: tests.<modality>_reference_od|os if present
+    $tPerEye = "{$modLower}_reference_{$eyeLower}";
+    if (hasColumn($conn, 'tests', $tPerEye)) {
+        $stmt = $conn->prepare("UPDATE tests SET $tPerEye = ? WHERE test_id = ?");
+        $stmt->bind_param("ss", $finalName, $test_id);
+        $stmt->execute(); $stmt->close();
+    }
+
+    return $finalName;
+}
+
+// ======================================================================
+// Duplicate-check mini API (patient + date + eye)
+// ======================================================================
 if (isset($_GET['check']) && $_GET['check'] === '1') {
     $subject = trim($_GET['subject'] ?? '');
     $date    = trim($_GET['date'] ?? '');
@@ -102,18 +210,20 @@ if (isset($_GET['check']) && $_GET['check'] === '1') {
     respond_json(['ok'=>true, 'exists'=>$exists]);
 }
 
-/* ===== Handle POST ===== */
+// ======================================================================
+// POST handling
+// ======================================================================
 $successMessage = '';
 $errorMessage   = '';
-$activeTab      = 'full'; // default
+$activeTab      = 'full';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $mode = $_POST['mode'] ?? 'full'; // "full" | "meds"
+    $mode = $_POST['mode'] ?? 'full';
     $activeTab = ($mode === 'meds') ? 'meds' : 'full';
 
     try {
         if ($mode === 'full') {
-            // ----- FULL ENTRY (Patient + Eyes + Optional Medications) -----
+            // ===== FULL ENTRY =====
             $subject_id     = trim($_POST['subject_id'] ?? '');
             $date_of_birth  = trim($_POST['date_of_birth'] ?? '');
             $location       = $_POST['location'] ?? 'KH';
@@ -147,7 +257,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$stmt->execute()) throw new Exception('Failed saving patient: '.$stmt->error);
             $stmt->close();
 
-            /* --- Collect eye blocks (OD/OS) --- */
+            // Collect eye blocks (OD/OS) — MEDICATION FIELDS REMOVED (as requested)
             $EYES = ['OD','OS'];
             $eyePayloads = [];
             foreach ($EYES as $EYE) {
@@ -174,15 +284,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $oct_score         = safe_num(val($block, 'oct_score'));
                 $vf_score          = safe_num(val($block, 'vf_score'));
 
-                // Optional per-eye medication info (legacy columns on test_eyes)
-                $medication_name   = val($block, 'medication_name');
-                $dosage            = safe_num(val($block, 'dosage'));
-                $dosage_unit       = val($block, 'dosage_unit', 'mg');
-                $duration_days     = safe_int(val($block, 'duration_days'), 0, 32767);
-                $cumulative_dosage = safe_num(val($block, 'cumulative_dosage'));
-                $date_of_cont      = val($block, 'date_of_continuation');
-                $treatment_notes   = val($block, 'treatment_notes');
-
                 $override_test_id  = trim(val($block, 'test_id'));
                 $test_id           = $override_test_id !== '' ? $override_test_id : compute_test_id($subject_id, $date_of_test);
 
@@ -199,27 +300,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'faf_grade' => $faf_grade,
                     'oct_score' => $oct_score,
                     'vf_score'  => $vf_score,
-                    'actual_diagnosis' => $actual_dx,
-                    'medication_name' => $medication_name,
-                    'dosage' => $dosage,
-                    'dosage_unit' => $dosage_unit,
-                    'duration_days' => $duration_days,
-                    'cumulative_dosage' => $cumulative_dosage,
-                    'date_of_continuation' => $date_of_cont,
-                    'treatment_notes' => $treatment_notes,
+                    'actual_diagnosis' => $actual_dx
                 ];
             }
 
-            /* --- Collect medication rows (UI -> DB via insertMedication) --- */
+            // Collect "Medications" (global section) -> insertMedication()
             $medPayloads = [];
             if (isset($_POST['meds']) && is_array($_POST['meds'])) {
                 foreach ($_POST['meds'] as $m) {
                     $name   = trim(val($m, 'name', ''));
                     if ($name === '') continue;
 
-                    $dose_val   = safe_num(val($m, 'dose'), 3);  // numeric
-                    $unit_in    = strtolower(val($m, 'unit', 'mg'));   // mg|g
-                    $freq_in    = strtolower(val($m, 'freq', 'per_day')); // per_day|per_week
+                    $dose_val   = safe_num(val($m, 'dose'), 3);
+                    $unit_in    = strtolower(val($m, 'unit', 'mg'));
+                    $freq_in    = strtolower(val($m, 'freq', 'per_day'));
                     $start      = val($m, 'start_date');
                     $end        = val($m, 'end_date');
                     $months     = safe_int(val($m, 'months'), 0, 1200);
@@ -228,7 +322,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     if ($dose_val === null) throw new Exception("Medication dose is required for '{$name}'.");
 
-                    // Store raw inputs for insertMedication (it will write subject_id + input_* safely)
                     $input_value_mg = ($unit_in === 'g') ? $dose_val * 1000.0 : $dose_val;
                     $period = ($freq_in === 'per_week') ? 'week' : 'day';
 
@@ -249,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 throw new Exception('Enter at least one Eye test or one Medication row.');
             }
 
-            // Insert tests first
+            // Insert tests (unique per test_id)
             $seenTests = [];
             foreach ($eyePayloads as $p) {
                 $tid = $p['test_id'];
@@ -268,138 +361,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $seenTests[$tid] = true;
             }
 
-            // Allowed uploads
-            $ALLOW_IMG = ['ext'=>['png','jpg','jpeg'], 'mime'=>['image/png','image/jpeg']];
-            $ALLOW_PDF = ['ext'=>['pdf'], 'mime'=>['application/pdf']];
-
-            // Upsert test_eyes per eye, with eye-specific reference columns
+            // For each eye: ensure row, store uploads like import_images.php, then update metadata
             foreach ($eyePayloads as $p) {
                 $test_id = $p['test_id'];
                 $eye     = $p['eye'];
 
-                $upDir = 'uploads/'.$patient_id.'/'.$test_id;
-                $faf_ref   = save_upload("image_faf_".strtolower($eye),   $upDir, "FAF_{$eye}",   $ALLOW_IMG);
-                $oct_ref   = save_upload("image_oct_".strtolower($eye),   $upDir, "OCT_{$eye}",   $ALLOW_IMG);
-                $vf_ref    = save_upload("image_vf_".strtolower($eye),    $upDir, "VF_{$eye}",    $ALLOW_PDF);
-                $mferg_ref = save_upload("image_mferg_".strtolower($eye), $upDir, "MFERG_{$eye}", $ALLOW_IMG);
+                // ensure row exists (so updates below always succeed)
+                ensureTestEye($conn, $test_id, $eye);
 
-                $refCols = ($eye === 'OD')
-                    ? ['faf_reference_OD','oct_reference_OD','vf_reference_OD','mferg_reference_OD']
-                    : ['faf_reference_OS','oct_reference_OS','vf_reference_OS','mferg_reference_OS'];
+                // store files EXACTLY like import_images.php (and write DB refs)
+                // field names match UI below: image_faf_od, image_oct_od, image_vf_od, image_mferg_od
+                $lowerEye = strtolower($eye);
+                // FAF (images)
+                store_modality_upload_like_import($conn, "image_faf_{$lowerEye}",   'FAF',   $patient_id, $eye, $p['date_of_test'], $test_id);
+                // OCT (PDF)
+                store_modality_upload_like_import($conn, "image_oct_{$lowerEye}",   'OCT',   $patient_id, $eye, $p['date_of_test'], $test_id);
+                // VF (PDF + optional anonymization)
+                store_modality_upload_like_import($conn, "image_vf_{$lowerEye}",    'VF',    $patient_id, $eye, $p['date_of_test'], $test_id);
+                // MFERG (PDF)
+                store_modality_upload_like_import($conn, "image_mferg_{$lowerEye}", 'MFERG', $patient_id, $eye, $p['date_of_test'], $test_id);
 
-                // existing row?
-                $existing_id = null;
-                $stmt = $conn->prepare("SELECT result_id FROM test_eyes WHERE test_id = ? AND eye = ? LIMIT 1");
-                $stmt->bind_param('ss', $test_id, $eye);
-                $stmt->execute();
-                $stmt->bind_result($rid);
-                if ($stmt->fetch()) $existing_id = (int)$rid;
+                // update metadata (no ref columns here; helper already wrote refs)
+                $sql = "
+                    UPDATE test_eyes SET
+                        age=?, report_diagnosis=?, exclusion=?, merci_score=?, merci_diagnosis=?, error_type=?,
+                        faf_grade=?, oct_score=?, vf_score=?, actual_diagnosis=?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE test_id = ? AND eye = ?
+                ";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param(
+                    'ssssssssssss',
+                    $p['age'],
+                    $p['report_diagnosis'],
+                    $p['exclusion'],
+                    $p['merci_score'],
+                    $p['merci_diagnosis'],
+                    $p['error_type'],
+                    $p['faf_grade'],
+                    $p['oct_score'],
+                    $p['vf_score'],
+                    $p['actual_diagnosis'],
+                    $test_id,
+                    $eye
+                );
+                if (!$stmt->execute()) throw new Exception('Failed updating '.$eye.' eye: '.$stmt->error);
                 $stmt->close();
-
-                if ($existing_id) {
-                    $setRefs = "{$refCols[0]} = COALESCE(?, {$refCols[0]}),
-                                {$refCols[1]} = COALESCE(?, {$refCols[1]}),
-                                {$refCols[2]} = COALESCE(?, {$refCols[2]}),
-                                {$refCols[3]} = COALESCE(?, {$refCols[3]})";
-
-                    $sql = "
-                        UPDATE test_eyes SET
-                            age=?, report_diagnosis=?, exclusion=?, merci_score=?, merci_diagnosis=?, error_type=?,
-                            faf_grade=?, oct_score=?, vf_score=?, actual_diagnosis=?,
-                            medication_name=?, dosage=?, dosage_unit=?, duration_days=?, cumulative_dosage=?, date_of_continuation=?, treatment_notes=?,
-                            $setRefs,
-                            updated_at = CURRENT_TIMESTAMP
-                        WHERE result_id = ?
-                    ";
-                    $stmt = $conn->prepare($sql);
-                    $types = str_repeat('s', 21) . 'i';
-                    $stmt->bind_param(
-                        $types,
-                        $p['age'],
-                        $p['report_diagnosis'],
-                        $p['exclusion'],
-                        $p['merci_score'],
-                        $p['merci_diagnosis'],
-                        $p['error_type'],
-                        $p['faf_grade'],
-                        $p['oct_score'],
-                        $p['vf_score'],
-                        $p['actual_diagnosis'],
-                        $p['medication_name'],
-                        $p['dosage'],
-                        $p['dosage_unit'],
-                        $p['duration_days'],
-                        $p['cumulative_dosage'],
-                        $p['date_of_continuation'],
-                        $p['treatment_notes'],
-                        $faf_ref,
-                        $oct_ref,
-                        $vf_ref,
-                        $mferg_ref,
-                        $existing_id
-                    );
-                    if (!$stmt->execute()) throw new Exception('Failed updating '.$eye.' eye: '.$stmt->error);
-                    $stmt->close();
-                } else {
-                    $cols = "
-                        test_id, eye, age, report_diagnosis, exclusion, merci_score, merci_diagnosis, error_type,
-                        faf_grade, oct_score, vf_score, actual_diagnosis, medication_name, dosage, dosage_unit,
-                        duration_days, cumulative_dosage, date_of_continuation, treatment_notes,
-                        {$refCols[0]}, {$refCols[1]}, {$refCols[2]}, {$refCols[3]}
-                    ";
-                    $placeholders = implode(',', array_fill(0, 23, '?'));
-                    $sql = "INSERT INTO test_eyes ($cols) VALUES ($placeholders)";
-                    $stmt = $conn->prepare($sql);
-                    $types = str_repeat('s', 23);
-                    $stmt->bind_param(
-                        $types,
-                        $test_id,
-                        $eye,
-                        $p['age'],
-                        $p['report_diagnosis'],
-                        $p['exclusion'],
-                        $p['merci_score'],
-                        $p['merci_diagnosis'],
-                        $p['error_type'],
-                        $p['faf_grade'],
-                        $p['oct_score'],
-                        $p['vf_score'],
-                        $p['actual_diagnosis'],
-                        $p['medication_name'],
-                        $p['dosage'],
-                        $p['dosage_unit'],
-                        $p['duration_days'],
-                        $p['cumulative_dosage'],
-                        $p['date_of_continuation'],
-                        $p['treatment_notes'],
-                        $faf_ref,
-                        $oct_ref,
-                        $vf_ref,
-                        $mferg_ref
-                    );
-                    if (!$stmt->execute()) throw new Exception('Failed inserting '.$eye.' eye: '.$stmt->error);
-                    $stmt->close();
-                }
             }
 
-            // Insert medications via NEW logic (safe against generated cols)
+            // Insert medications (global) via insertMedication()
             if (!empty($medPayloads)) {
                 foreach ($medPayloads as $m) {
                     insertMedication(
                         $conn,
-                        $subject_id,                // can be subject or patient id; resolver handles both
+                        $subject_id,                // resolver handles subject->patient mapping
                         $m['name'],
-                        null,                       // dosage_per_day (ignored if generated)
-                        null,                       // duration_days (computed in DB, pass null)
-                        null,                       // cumulative_dosage (computed in DB, pass null)
+                        null,                       // dosage_per_day (computed in DB)
+                        null,                       // duration_days (computed)
+                        null,                       // cumulative_dosage (computed)
                         $m['start'],
                         $m['end'],
                         $m['notes'],
-                        $m['input_value_mg'],       // input_dosage_value (mg)
-                        'mg',                       // input_dosage_unit stored as mg baseline
+                        $m['input_value_mg'],       // input mg
+                        'mg',
                         $m['period'],               // 'day'|'week'
-                        $m['months'],               // duration_months (optional)
-                        $m['days']                  // duration_days_manual (optional)
+                        $m['months'],
+                        $m['days']
                     );
                 }
             }
@@ -409,11 +436,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $activeTab = 'full';
 
         } else {
-            // ----- MEDICATIONS ONLY -----
+            // ===== MEDICATIONS ONLY =====
             $patient_or_subject = trim($_POST['m_patient_or_subject'] ?? '');
             if ($patient_or_subject === '') throw new Exception('Patient or Subject ID is required.');
 
-            // multiple med rows
             $rows = $_POST['meds2'] ?? [];
             if (!is_array($rows) || empty($rows)) throw new Exception('Add at least one medication row.');
 
@@ -427,8 +453,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $dose = safe_num(val($row,'dose'), 3);
                 if ($dose === null) throw new Exception("Dose is required for '{$name}'.");
 
-                $unit  = strtolower(val($row,'unit','mg')); // mg|g
-                $freq  = strtolower(val($row,'freq','per_day')); // per_day|per_week
+                $unit  = strtolower(val($row,'unit','mg'));
+                $freq  = strtolower(val($row,'freq','per_day'));
                 $start = val($row,'start_date');
                 $end   = val($row,'end_date');
                 $months= safe_int(val($row,'months'), 0, 1200);
@@ -442,17 +468,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $conn,
                     $patient_or_subject,
                     $name,
-                    null,            // dosage_per_day (ignored if generated)
-                    null,            // duration_days (computed in DB)
-                    null,            // cumulative_dosage (computed in DB)
+                    null, null, null,    // computed/generated
                     $start ?: null,
                     $end   ?: null,
                     $notes,
                     $input_value_mg,
-                    'mg',            // we pass normalized mg
-                    $period,         // 'day'|'week'
-                    $months,         // optional months
-                    $days            // optional manual days
+                    'mg',
+                    $period,
+                    $months,
+                    $days
                 );
                 $inserted++;
             }
@@ -461,15 +485,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $successMessage = "Added {$inserted} medication(s) for ".htmlspecialchars($patient_or_subject).".";
             $activeTab = 'meds';
         }
-
     } catch (Throwable $e) {
-        if ($conn && $conn->errno === 0) { /* ignore */ }
-        @$conn->rollback();
+        @ $conn->rollback();
         $errorMessage = $e->getMessage();
     }
 }
 
-/* ===== UI pieces ===== */
+// ======================================================================
+// UI pieces
+// ======================================================================
 function eye_block_html($eye) {
     $lower = strtolower($eye);
     ob_start(); ?>
@@ -548,52 +572,21 @@ function eye_block_html($eye) {
         <label class="form-label">VF Score</label>
         <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[vf_score]" placeholder="e.g., 2.40">
       </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Medication Name (optional)</label>
-        <input type="text" class="form-control" name="eye_data_<?php echo $eye; ?>[medication_name]" placeholder="e.g., Hydroxychloroquine">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Dosage</label>
-        <div class="input-group">
-          <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[dosage]" placeholder="e.g., 200">
-          <select class="form-select" name="eye_data_<?php echo $eye; ?>[dosage_unit]" style="max-width:110px">
-            <option value="mg" selected>mg</option>
-            <option value="g">g</option>
-          </select>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Duration (days)</label>
-        <input type="number" min="0" class="form-control" name="eye_data_<?php echo $eye; ?>[duration_days]" placeholder="e.g., 90">
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Cumulative Dosage</label>
-        <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[cumulative_dosage]" placeholder="e.g., 1800">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Date of Continuation</label>
-        <input type="date" class="form-control" name="eye_data_<?php echo $eye; ?>[date_of_continuation]">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Treatment Notes</label>
-        <input type="text" class="form-control" name="eye_data_<?php echo $eye; ?>[treatment_notes]" placeholder="Optional notes">
-      </div>
     </div>
 
     <hr class="my-4">
 
+    <!-- Uploads (names match server: image_faf_od|os etc.) -->
     <div class="row g-3">
       <div class="col-md-3">
-        <label class="form-label">FAF Image (PNG/JPG)</label>
+        <label class="form-label">FAF Image (PNG/JPG/WEBP)</label>
         <div class="dropzone"><i class="bi bi-cloud-arrow-up"></i> Drop file or click</div>
-        <input type="file" class="form-control mt-2" name="image_faf_<?php echo strtolower($eye); ?>" accept="image/png,image/jpeg" hidden>
+        <input type="file" class="form-control mt-2" name="image_faf_<?php echo strtolower($eye); ?>" accept="image/png,image/jpeg,image/webp" hidden>
       </div>
       <div class="col-md-3">
-        <label class="form-label">OCT Image (PNG/JPG)</label>
+        <label class="form-label">OCT Report (PDF)</label>
         <div class="dropzone"><i class="bi bi-cloud-arrow-up"></i> Drop file or click</div>
-        <input type="file" class="form-control mt-2" name="image_oct_<?php echo strtolower($eye); ?>" accept="image/png,image/jpeg" hidden>
+        <input type="file" class="form-control mt-2" name="image_oct_<?php echo strtolower($eye); ?>" accept="application/pdf" hidden>
       </div>
       <div class="col-md-3">
         <label class="form-label">VF Report (PDF)</label>
@@ -601,9 +594,9 @@ function eye_block_html($eye) {
         <input type="file" class="form-control mt-2" name="image_vf_<?php echo strtolower($eye); ?>" accept="application/pdf" hidden>
       </div>
       <div class="col-md-3">
-        <label class="form-label">MFERG Image (PNG/JPG)</label>
+        <label class="form-label">mfERG Report (PDF)</label>
         <div class="dropzone"><i class="bi bi-cloud-arrow-up"></i> Drop file or click</div>
-        <input type="file" class="form-control mt-2" name="image_mferg_<?php echo strtolower($eye); ?>" accept="image/png,image/jpeg" hidden>
+        <input type="file" class="form-control mt-2" name="image_mferg_<?php echo strtolower($eye); ?>" accept="application/pdf" hidden>
       </div>
     </div>
   </div>
@@ -735,7 +728,7 @@ input[type=file]::file-selector-button{ border:1px solid var(--border); border-r
                 <div class="tab-pane fade" id="os-pane"><?php echo eye_block_html('OS'); ?></div>
               </div>
 
-              <!-- Medications (optional in Full Entry) -->
+              <!-- Medications (global; per-eye med fields removed) -->
               <div class="card mb-4" id="medications">
                 <div class="card-body">
                   <div class="d-flex justify-content-between align-items-center mb-2">
@@ -847,7 +840,7 @@ function wireEye(eye){
   });
 }
 
-// ===== Full Entry — Medications block (same visual as old) =====
+// ===== Full Entry — Medications block (global) =====
 let medIdx = 0;
 function medRowTemplate(i){
   return `
@@ -938,7 +931,7 @@ function addMedRow(){
   $('#medsContainer').insertAdjacentHTML('beforeend', html);
   const row = $('#medsContainer .meds-row:last-child');
   $('.del-row', row).addEventListener('click', ()=>{ row.remove(); });
-  $$('input, select', row).forEach(el => {
+  $$('#medsContainer .meds-row:last-child input, #medsContainer .meds-row:last-child select').forEach(el => {
     el.addEventListener('input', ()=> recalcMedRow(row));
     el.addEventListener('change', ()=> recalcMedRow(row));
   });
@@ -1036,7 +1029,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   $('#od_date_of_test')?.addEventListener('change', updateDupBanner);
   $('#os_date_of_test')?.addEventListener('change', updateDupBanner);
 
-  // Full Entry meds
+  // Full Entry meds (global)
   $('#addMed')?.addEventListener('click', addMedRow);
   addMedRow();
 
@@ -1054,10 +1047,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const hasOS = !!$('#os_date_of_test')?.value;
     const medNames = $$('#medsContainer input[name^="meds"][name$="[name]"]');
     const hasMed = medNames.length && medNames.some(inp => (inp.value||'').trim() !== '');
-
     if (!hasOD && !hasOS && !hasMed) ok = false;
+
     if (!ok) { e.preventDefault(); toast('toastWarn').show(); }
-    else { /* let server validate more */ }
   });
 
   $('#medsOnlyForm')?.addEventListener('submit', (e)=>{
@@ -1068,10 +1060,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (!hasMed) ok = false;
     if (!ok) { e.preventDefault(); toast('toastWarn').show(); }
   });
-
-  // Dropzone wiring already in wireEye()
 });
 </script>
 </body>
 </html>
-
