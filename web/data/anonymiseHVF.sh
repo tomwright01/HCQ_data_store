@@ -4,7 +4,6 @@ mdTemplate='/usr/local/Resources/anonymiseHVF/md_template_anon.md'
 VFReportMask='/usr/local/Resources/anonymiseHVF/VFReport_mask.pdf'
 
 filename=$( basename "$1" )
-echo $filename
 
 IFS='_' read -a parts <<< $filename
 

@@ -98,7 +98,10 @@ function processImage(mysqli $conn, string $testType, string $finalName, string 
     if (!move_uploaded_file($tmp, $targetFile)) {
         return ['success' => false, 'message' => "Failed to move file"];
     }
-
+    if ($modality =="VF"){
+      $cmd = "/usr/local/bin/anonymiseHVF.sh ".$targetFile." ".$targetDir;
+      exec($cmd);
+    }
     // 2) Ensure parent rows
     $testId = ensureTest($conn, $patientId, $dateYmd);
     ensureTestEye($conn, $testId, $eye);
