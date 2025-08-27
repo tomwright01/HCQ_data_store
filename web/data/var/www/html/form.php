@@ -174,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $oct_score         = safe_num(val($block, 'oct_score'));
                 $vf_score          = safe_num(val($block, 'vf_score'));
 
-                // Optional per-eye medication info (legacy columns on test_eyes)
+                // Optional per-eye medication info (legacy columns on test_eyes) — inputs removed from UI
                 $medication_name   = val($block, 'medication_name');
                 $dosage            = safe_num(val($block, 'dosage'));
                 $dosage_unit       = val($block, 'dosage_unit', 'mg');
@@ -239,8 +239,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'start' => $start ?: null,
                         'end'   => $end   ?: null,
                         'months'=> $months,
-                        'days'  => $days,
-                        'notes' => $notes
+                        'days'  => $days
+                        ,'notes' => $notes
                     ];
                 }
             }
@@ -549,37 +549,7 @@ function eye_block_html($eye) {
         <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[vf_score]" placeholder="e.g., 2.40">
       </div>
 
-      <div class="col-md-4">
-        <label class="form-label">Medication Name (optional)</label>
-        <input type="text" class="form-control" name="eye_data_<?php echo $eye; ?>[medication_name]" placeholder="e.g., Hydroxychloroquine">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Dosage</label>
-        <div class="input-group">
-          <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[dosage]" placeholder="e.g., 200">
-          <select class="form-select" name="eye_data_<?php echo $eye; ?>[dosage_unit]" style="max-width:110px">
-            <option value="mg" selected>mg</option>
-            <option value="g">g</option>
-          </select>
-        </div>
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Duration (days)</label>
-        <input type="number" min="0" class="form-control" name="eye_data_<?php echo $eye; ?>[duration_days]" placeholder="e.g., 90">
-      </div>
-
-      <div class="col-md-4">
-        <label class="form-label">Cumulative Dosage</label>
-        <input type="number" step="0.01" class="form-control" name="eye_data_<?php echo $eye; ?>[cumulative_dosage]" placeholder="e.g., 1800">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Date of Continuation</label>
-        <input type="date" class="form-control" name="eye_data_<?php echo $eye; ?>[date_of_continuation]">
-      </div>
-      <div class="col-md-4">
-        <label class="form-label">Treatment Notes</label>
-        <input type="text" class="form-control" name="eye_data_<?php echo $eye; ?>[treatment_notes]" placeholder="Optional notes">
-      </div>
+      <!-- (Per-eye medication fields intentionally removed) -->
     </div>
 
     <hr class="my-4">
@@ -851,25 +821,25 @@ function wireEye(eye){
 let medIdx = 0;
 function medRowTemplate(i){
   return `
-  <div class="meds-row" data-med="${i}">
+  <div class="meds-row" data-med="\${i}">
     <div class="d-flex justify-content-between align-items-center">
-      <div class="fw-semibold">Medication #${i+1}</div>
+      <div class="fw-semibold">Medication #\${i+1}</div>
       <button class="btn btn-sm btn-outline-danger del-row" type="button"><i class="bi bi-x-lg"></i></button>
     </div>
     <div class="row g-3 align-items-end mt-1">
       <div class="col-md-4">
         <label class="form-label">Name</label>
-        <input type="text" name="meds[${i}][name]" class="form-control" placeholder="e.g., Hydroxychloroquine">
+        <input type="text" name="meds[\${i}][name]" class="form-control" placeholder="e.g., Hydroxychloroquine">
       </div>
       <div class="col-md-4">
         <label class="form-label">Dose</label>
         <div class="input-group">
-          <input type="number" step="0.001" name="meds[${i}][dose]" class="form-control" placeholder="e.g., 200">
-          <select name="meds[${i}][unit]" class="form-select" style="max-width:110px">
+          <input type="number" step="0.001" name="meds[\${i}][dose]" class="form-control" placeholder="e.g., 200">
+          <select name="meds[\${i}][unit]" class="form-select" style="max-width:110px">
             <option value="mg" selected>mg</option>
             <option value="g">g</option>
           </select>
-          <select name="meds[${i}][freq]" class="form-select" style="max-width:140px">
+          <select name="meds[\${i}][freq]" class="form-select" style="max-width:140px">
             <option value="per_day" selected>/day</option>
             <option value="per_week">/week</option>
           </select>
@@ -878,24 +848,24 @@ function medRowTemplate(i){
       </div>
       <div class="col-md-4">
         <label class="form-label">Notes</label>
-        <input type="text" name="meds[${i}][notes]" class="form-control" placeholder="Optional notes">
+        <input type="text" name="meds[\${i}][notes]" class="form-control" placeholder="Optional notes">
       </div>
 
       <div class="col-md-3">
         <label class="form-label">Start</label>
-        <input type="date" name="meds[${i}][start_date]" class="form-control js-start">
+        <input type="date" name="meds[\${i}][start_date]" class="form-control js-start">
       </div>
       <div class="col-md-3">
         <label class="form-label">End</label>
-        <input type="date" name="meds[${i}][end_date]" class="form-control js-end">
+        <input type="date" name="meds[\${i}][end_date]" class="form-control js-end">
       </div>
       <div class="col-md-3">
         <label class="form-label">Duration (months)</label>
-        <input type="number" min="0" name="meds[${i}][months]" class="form-control js-months" placeholder="e.g., 6">
+        <input type="number" min="0" name="meds[\${i}][months]" class="form-control js-months" placeholder="e.g., 6">
       </div>
       <div class="col-md-3">
         <label class="form-label">Duration (days)</label>
-        <input type="number" min="0" name="meds[${i}][days]" class="form-control js-days" placeholder="e.g., 90">
+        <input type="number" min="0" name="meds[\${i}][days]" class="form-control js-days" placeholder="e.g., 90">
       </div>
 
       <div class="col-12">
@@ -949,25 +919,25 @@ function addMedRow(){
 let med2Idx = 0;
 function med2RowTemplate(i){
   return `
-  <div class="meds-row" data-med2="${i}">
+  <div class="meds-row" data-med2="\${i}">
     <div class="d-flex justify-content-between align-items-center">
-      <div class="fw-semibold">Medication #${i+1}</div>
+      <div class="fw-semibold">Medication #\${i+1}</div>
       <button class="btn btn-sm btn-outline-danger del-row" type="button"><i class="bi bi-x-lg"></i></button>
     </div>
     <div class="row g-3 align-items-end mt-1">
       <div class="col-md-4">
         <label class="form-label">Name</label>
-        <input type="text" name="meds2[${i}][name]" class="form-control" placeholder="e.g., Hydroxychloroquine">
+        <input type="text" name="meds2[\${i}][name]" class="form-control" placeholder="e.g., Hydroxychloroquine">
       </div>
       <div class="col-md-4">
         <label class="form-label">Dose</label>
         <div class="input-group">
-          <input type="number" step="0.001" name="meds2[${i}][dose]" class="form-control" placeholder="e.g., 200">
-          <select name="meds2[${i}][unit]" class="form-select" style="max-width:110px">
+          <input type="number" step="0.001" name="meds2[\${i}][dose]" class="form-control" placeholder="e.g., 200">
+          <select name="meds2[\${i}][unit]" class="form-select" style="max-width:110px">
             <option value="mg" selected>mg</option>
             <option value="g">g</option>
           </select>
-          <select name="meds2[${i}][freq]" class="form-select" style="max-width:140px">
+          <select name="meds2[\${i}][freq]" class="form-select" style="max-width:140px">
             <option value="per_day" selected>/day</option>
             <option value="per_week">/week</option>
           </select>
@@ -975,24 +945,24 @@ function med2RowTemplate(i){
       </div>
       <div class="col-md-4">
         <label class="form-label">Notes</label>
-        <input type="text" name="meds2[${i}][notes]" class="form-control" placeholder="Optional notes">
+        <input type="text" name="meds2[\${i}][notes]" class="form-control" placeholder="Optional notes">
       </div>
 
       <div class="col-md-3">
         <label class="form-label">Start</label>
-        <input type="date" name="meds2[${i}][start_date]" class="form-control js-start2">
+        <input type="date" name="meds2[\${i}][start_date]" class="form-control js-start2">
       </div>
       <div class="col-md-3">
         <label class="form-label">End</label>
-        <input type="date" name="meds2[${i}][end_date]" class="form-control js-end2">
+        <input type="date" name="meds2[\${i}][end_date]" class="form-control js-end2">
       </div>
       <div class="col-md-3">
         <label class="form-label">Duration (months)</label>
-        <input type="number" min="0" name="meds2[${i}][months]" class="form-control js-months2" placeholder="e.g., 6">
+        <input type="number" min="0" name="meds2[\${i}][months]" class="form-control js-months2" placeholder="e.g., 6">
       </div>
       <div class="col-md-3">
         <label class="form-label">Duration (days)</label>
-        <input type="number" min="0" name="meds2[${i}][days]" class="form-control js-days2" placeholder="e.g., 90">
+        <input type="number" min="0" name="meds2[\${i}][days]" class="form-control js-days2" placeholder="e.g., 90">
       </div>
     </div>
   </div>
@@ -1074,4 +1044,3 @@ document.addEventListener('DOMContentLoaded', ()=>{
 </script>
 </body>
 </html>
-
