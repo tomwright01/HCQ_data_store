@@ -1164,9 +1164,30 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             if (setsByMonth[ym]) setsByMonth[ym].add(r.test_id);
         });
         Object.keys(setsByMonth).forEach(ym => values.push(setsByMonth[ym].size));
-
+       // Collapse per eye → per test (one diagnosis per test)
+        const diagPriority = {'no input':0,'exclude':1,'normal':2,'abnormal':3};
+        const diagByTest = {};
+        rows.forEach(r=>{
+          const d = r.report_diagnosis || 'no input';
+          const t = r.test_id;
+          if (!diagByTest[t] || diagPriority[d] > diagPriority[diagByTest[t]]) {
+            diagByTest[t] = d;
+          }
+        });
+         // Collapse per eye → per test (one diagnosis per test)
+      const diagPriority = {'no input':0,'exclude':1,'normal':2,'abnormal':3};
+        const diagByTest = {};
+        rows.forEach(r=>{
+          const d = r.report_diagnosis || 'no input';
+          const t = r.test_id;
+          if (!diagByTest[t] || diagPriority[d] > diagPriority[diagByTest[t]]) {
+            diagByTest[t] = d;
+          }
+        });
         const diagCounts = {'normal':0,'abnormal':0,'exclude':0,'no input':0};
-        rows.forEach(r=>{ if (diagCounts.hasOwnProperty(r.report_diagnosis)) diagCounts[r.report_diagnosis]++; });
+        Object.values(diagByTest).forEach(d => { if (diagCounts[d] !== undefined) diagCounts[d]++; });
+         
+
 
         const locations = ['KH','CHUSJ','IWK','IVEY'];
         const uniqueByLoc = { KH:new Set(), CHUSJ:new Set(), IWK:new Set(), IVEY:new Set() };
