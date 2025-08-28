@@ -3,7 +3,7 @@
 // Now stores per-eye uploads exactly like import_images.php:
 //   IMAGE_BASE_DIR/<ModalityDir>/<PATIENT>_<EYE>_<YYYYMMDD>.<ext>
 // and writes refs into test_eyes.<modality>_reference_OD|OS
-// (with optional VF anonymization hook via VF_ANON_SCRIPT)
+// === NEW: Apply the SAME anonymisation script to VF, OCT, and mfERG PDFs ===
 
 // ======================================================================
 // BOOTSTRAP
@@ -16,7 +16,12 @@ require_once __DIR__ . '/includes/config.php';
 require_once __DIR__ . '/includes/functions.php';
 
 // ======================================================================
-/* Helpers (unchanged style unless noted) */
+// Anonymisation config (same script for VF/OCT/mfERG PDFs)
+// ======================================================================
+$ANON_SCRIPT = '/usr/local/bin/anonymiseHVF.sh'; // <-- change path if needed
+
+// ======================================================================
+// Helpers
 // ======================================================================
 function respond_json($arr) { header('Content-Type: application/json'); echo json_encode($arr); exit; }
 function val($arr, $key, $default=null) { return isset($arr[$key]) && $arr[$key] !== '' ? $arr[$key] : $default; }
@@ -92,7 +97,7 @@ function ensureTestEye(mysqli $conn, string $test_id, string $eye): void {
  * Store one modality upload exactly like import_images.php:
  * - Saves to IMAGE_BASE_DIR/<ModalityDir>/<PATIENT>_<EYE>_<YYYYMMDD>.<ext>
  * - Writes test_eyes.<modality>_reference_OD|OS (and legacy fallbacks)
- * - Optionally runs VF anonymization if VF_ANON_SCRIPT is defined (VF PDFs)
+ * - Runs the SAME anonymisation script for VF/OCT/mfERG PDFs
  * - Returns stored filename, or null if no file present
  */
 function store_modality_upload_like_import(
@@ -114,7 +119,7 @@ function store_modality_upload_like_import(
     $tmp  = $_FILES[$field]['tmp_name'];
     $ext  = strtolower(pathinfo($name, PATHINFO_EXTENSION));
 
-    // Accept matrix (you said OCT and MFERG are PDFs now)
+    // Accept matrix
     $okExts = [
         'FAF'   => ['png','jpg','jpeg','webp'],
         'OCT'   => ['pdf'],
@@ -134,12 +139,17 @@ function store_modality_upload_like_import(
     if (is_file($dest)) @unlink($dest);
     if (!move_uploaded_file($tmp, $dest)) return null;
 
-    // Optional: run VF anonymization
-    if ($modality === 'VF' && $ext === 'pdf' && defined('VF_ANON_SCRIPT') && is_file(VF_ANON_SCRIPT)) {
-        // Script contract you shared: script <input> <outputDir>
-        $cmd = escapeshellcmd(VF_ANON_SCRIPT) . ' ' . escapeshellarg($dest) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
-        @exec($cmd, $out, $code);
-        // Your script writes masked file to the same output dir with same filename, so no rename needed.
+    // === NEW: run same anonymisation script for VF, OCT, mfERG PDFs ===
+    if ($ext === 'pdf' && in_array($modality, ['VF','OCT','MFERG'], true)) {
+        // prefer $ANON_SCRIPT; fall back to VF_ANON_SCRIPT for back-compat
+        $script = $GLOBALS['ANON_SCRIPT'] ?? null;
+        if (!$script && defined('VF_ANON_SCRIPT')) $script = VF_ANON_SCRIPT;
+        if ($script && is_file($script)) {
+            // contract: script <input_pdf> <output_dir>
+            $cmd = escapeshellcmd($script) . ' ' . escapeshellarg($dest) . ' ' . escapeshellarg($targetDir) . ' 2>&1';
+            @exec($cmd, $out, $code);
+            // Not fatal on non-zero exit; file is still indexed so you can diagnose.
+        }
     }
 
     // Ensure test_eyes exists
@@ -257,7 +267,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$stmt->execute()) throw new Exception('Failed saving patient: '.$stmt->error);
             $stmt->close();
 
-            // Collect eye blocks (OD/OS) — MEDICATION FIELDS REMOVED (as requested)
+            // Collect eye blocks (OD/OS)
             $EYES = ['OD','OS'];
             $eyePayloads = [];
             foreach ($EYES as $EYE) {
@@ -304,7 +314,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ];
             }
 
-            // Collect "Medications" (global section) -> insertMedication()
+            // Collect "Medications" (global section)
             $medPayloads = [];
             if (isset($_POST['meds']) && is_array($_POST['meds'])) {
                 foreach ($_POST['meds'] as $m) {
@@ -374,11 +384,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $lowerEye = strtolower($eye);
                 // FAF (images)
                 store_modality_upload_like_import($conn, "image_faf_{$lowerEye}",   'FAF',   $patient_id, $eye, $p['date_of_test'], $test_id);
-                // OCT (PDF)
+                // OCT (PDF -> anonymise)
                 store_modality_upload_like_import($conn, "image_oct_{$lowerEye}",   'OCT',   $patient_id, $eye, $p['date_of_test'], $test_id);
-                // VF (PDF + optional anonymization)
+                // VF (PDF -> anonymise)
                 store_modality_upload_like_import($conn, "image_vf_{$lowerEye}",    'VF',    $patient_id, $eye, $p['date_of_test'], $test_id);
-                // MFERG (PDF)
+                // MFERG (PDF -> anonymise)
                 store_modality_upload_like_import($conn, "image_mferg_{$lowerEye}", 'MFERG', $patient_id, $eye, $p['date_of_test'], $test_id);
 
                 // update metadata (no ref columns here; helper already wrote refs)
