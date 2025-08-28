@@ -1165,7 +1165,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             const needle = f.patientId;
             const pid = (r.patient_id || '').toLowerCase();
             const sid = (r.subject_id || '').toLowerCase();
-            if (!(pid.includes(needle) || sid.includes(needle))) return false;
+            if (!(pid === needle || sid === needle)) return false;
         }
 
         if (f.testId    && !(r.test_id||'').toLowerCase().includes(f.testId)) return false;
