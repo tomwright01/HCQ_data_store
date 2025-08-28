@@ -1396,7 +1396,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
             let patientIdPass = true;
             if (hasPatientIdFilter) {
                 const needle = f.patientId;
-                patientIdPass = patientId.includes(needle) || patientSubject.includes(needle);
+                patientIdPass = (patientId === needle) || (patientSubject === needle);
             }
 
             const showPatient = anyTestVisible && patientIdPass;
