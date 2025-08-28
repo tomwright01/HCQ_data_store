@@ -201,6 +201,22 @@ function build_view_url(string $type, string $patientId, string $eye, string $re
     --kpi3a:#0ea5e9; --kpi3b:#2563eb;
     --kpi4a:#f59e0b; --kpi4b:#d97706;
 }
+/* Palette variants */
+body[data-palette="clinic"]{
+    --brand:#0ea5e9; --brand-2:#38bdf8;
+    --kpi1a:#0284c7; --kpi1b:#0ea5e9;
+    --kpi2a:#059669; --kpi2b:#10b981;
+    --kpi3a:#22c55e; --kpi3b:#16a34a;
+    --kpi4a:#f59e0b; --kpi4b:#d97706;
+}
+body[data-palette="contrast"]{
+    --brand:#0f766e; --brand-2:#14b8a6;
+    --kpi1a:#1f2937; --kpi1b:#111827;
+    --kpi2a:#dc2626; --kpi2b:#ef4444;
+    --kpi3a:#3730a3; --kpi3b:#4f46e5;
+    --kpi4a:#9333ea; --kpi4b:#a855f7;
+}
+
 body.dark{
     --bg:#0f1220;
     --card:#151a2c;
@@ -285,9 +301,22 @@ canvas { max-height: 380px; }
       </ul>
 
       <div class="d-flex align-items-center gap-2 gap-lg-3">
+        <!-- Dark mode -->
         <div class="form-check form-switch mb-0">
             <input class="form-check-input" type="checkbox" id="darkToggle">
             <label class="form-check-label" for="darkToggle"><i class="bi bi-moon-stars"></i></label>
+        </div>
+
+        <!-- Palette selector -->
+        <div class="dropdown">
+          <button class="btn btn-outline-secondary pill dropdown-toggle" data-bs-toggle="dropdown">
+            <i class="bi bi-palette"></i> Colors
+          </button>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item palette-opt" data-palette="clinic" href="#">Clinic</a></li>
+            <li><a class="dropdown-item palette-opt" data-palette="research" href="#">Research (default)</a></li>
+            <li><a class="dropdown-item palette-opt" data-palette="contrast" href="#">High contrast</a></li>
+          </ul>
         </div>
 
         <a href="import_images.php" class="btn btn-outline-secondary pill">
@@ -320,7 +349,7 @@ canvas { max-height: 380px; }
         </div>
     </div>
 
-    <!-- KPI Cards (unified colors) -->
+    <!-- KPI Cards -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
             <div class="card card-kpi kpi-1 h-100">
@@ -446,6 +475,7 @@ canvas { max-height: 380px; }
                 <div class="col-12 col-lg-3">
                     <label class="form-label">Patient/Subject ID</label>
                     <input type="text" id="patientIdInput" class="form-control" placeholder="e.g. SUBJ001">
+                    <div class="form-text">Exact match (e.g. enter <code>12</code> to get only ID 12)</div>
                 </div>
                 <div class="col-12 col-lg-3">
                     <label class="form-label">Test ID</label>
@@ -951,6 +981,22 @@ canvas { max-height: 380px; }
         if (window._recolorCharts) window._recolorCharts();
     });
 })();
+
+// ===== Palette switcher =====
+(function paletteInit(){
+  const key='palette';
+  const saved = localStorage.getItem(key) || 'research';
+  document.body.setAttribute('data-palette', saved);
+  document.querySelectorAll('.palette-opt').forEach(el=>{
+    el.addEventListener('click', (e)=>{
+      e.preventDefault();
+      const val = el.getAttribute('data-palette') || 'research';
+      document.body.setAttribute('data-palette', val);
+      localStorage.setItem(key, val);
+      if (window._recolorCharts) window._recolorCharts();
+    });
+  });
+})();
 </script>
 
 <script>
@@ -1057,7 +1103,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         return g;
     }
 
-    // Line chart (with readable labels): values shown once, pill-style, spaced
+    // Line chart
     const testsChart = new Chart(document.getElementById('testsOverTime').getContext('2d'), {
         type: 'line',
         data: { labels: [], datasets: [{
@@ -1077,7 +1123,6 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 datalabels:{
                     display: (ctx)=> {
                         const v = ctx.dataset.data[ctx.dataIndex];
-                        // show only non-zero & every point (change to modulo to thin out if needed)
                         return v !== 0 && v != null;
                     },
                     anchor:'end',
@@ -1093,7 +1138,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         }
     });
 
-    // Pie: show percents >= 6%
+    // Pie
     const diagChart = new Chart(document.getElementById('diagnosisPie').getContext('2d'), {
         type:'doughnut',
         data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:[0,0,0,0], backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}] },
@@ -1109,7 +1154,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         }
     });
 
-    // Bars: enable datalabels with clean alignment
+    // Bars
     const locationBar = new Chart(document.getElementById('locationBar').getContext('2d'), {
         type:'bar',
         data:{ labels:['KH','CHUSJ','IWK','IVEY'], datasets:[{ label:'Patients', data:[0,0,0,0],
@@ -1160,7 +1205,9 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         });
     };
 
+    // ---- FILTERING ----
     function rowMatchesData(r, f){
+        // EXACT match on patient/subject ID (case-insensitive)
         if (f.patientId) {
             const needle = f.patientId;
             const pid = (r.patient_id || '').toLowerCase();
@@ -1221,7 +1268,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         rows.forEach(r=>{
             if (!eyeStats[r.eye]) return;
             if (r.oct_score !== null && r.oct_score !== '') eyeStats[r.eye].oct.push(Number(r.oct_score));
-            if (r.vf_score  !== null && r.vf_score !== '')  eyeStats[r.eye].vf.push(Number(r.vf_score));
+            if (r.vf_score  !== null && r.vf_score !== '') eyeStats[r.eye].vf.push(Number(r.vf_score));
         });
         const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
         const avgOCT = ['OD','OS'].map(eye => avg(eyeStats[eye].oct));
@@ -1393,6 +1440,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 }
             });
 
+            // EXACT match on the patient/subject ID at the card level
             let patientIdPass = true;
             if (hasPatientIdFilter) {
                 const needle = f.patientId;
@@ -1529,8 +1577,12 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
     // Debounced text inputs
     let t1, t2;
-    patientIdInput.addEventListener('input', ()=>{ clearTimeout(t1); t1=setTimeout(()=>applyFilters(true), 150); });
-    testIdInput.addEventListener('input',    ()=>{ clearTimeout(t2); t2=setTimeout(()=>applyFilters(true), 150); });
+    patientIdInput.addEventListener('input', ()=>{
+        clearTimeout(t1); t1=setTimeout(()=>applyFilters(true), 150);
+    });
+    testIdInput.addEventListener('input',    ()=>{
+        clearTimeout(t2); t2=setTimeout(()=>applyFilters(true), 150);
+    });
 
     // Wire rest
     [locSelect, diagSelect, eyeOD, eyeOS, dateStartInput, dateEndInput, merciMinInput, merciMaxInput, ageMinInput, ageMaxInput]
