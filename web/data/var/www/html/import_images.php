@@ -13,6 +13,11 @@ header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type");
 
 /* =========================
+   config for anonymisation
+   ========================= */
+$ANON_SCRIPT = '/usr/local/bin/anonymiseHVF.sh'; // same script for VF/OCT/mfERG PDFs
+
+/* =========================
    helpers (UNCHANGED LOGIC)
    ========================= */
 
@@ -79,6 +84,8 @@ function ensureTestEye(mysqli $conn, string $testId, string $eye): void {
  * - Optionally backfills tests.<modality>_reference_od|os if columns exist
  */
 function processImage(mysqli $conn, string $testType, string $finalName, string $patientId, string $eye, string $dateYmd): array {
+    global $ANON_SCRIPT;
+
     $modality = strtoupper($testType);
     if (!defined('ALLOWED_TEST_TYPES') || !is_array(ALLOWED_TEST_TYPES) || !array_key_exists($modality, ALLOWED_TEST_TYPES)) {
         return ['success' => false, 'message' => "Invalid test type"];
@@ -98,10 +105,22 @@ function processImage(mysqli $conn, string $testType, string $finalName, string 
     if (!move_uploaded_file($tmp, $targetFile)) {
         return ['success' => false, 'message' => "Failed to move file"];
     }
-    if ($modality =="VF"){
-      $cmd = "/usr/local/bin/anonymiseHVF.sh ".$targetFile." ".$targetDir;
-      exec($cmd);
+
+    // 1.a) SAME anonymisation logic for VF, OCT, mfERG — only for PDFs
+    $ext = strtolower(pathinfo($finalName, PATHINFO_EXTENSION));
+    if ($ext === 'pdf' && in_array($modality, ['VF','OCT','MFERG'], true)) {
+        // run: anonymiseHVF.sh <input_pdf> <output_dir>
+        $cmd = $ANON_SCRIPT . ' ' . escapeshellarg($targetFile) . ' ' . escapeshellarg($targetDir);
+        $out = []; $code = 0;
+        @exec($cmd . ' 2>&1', $out, $code);
+        // note: your bash script copies masked_final.pdf back to "$2/$filename", overwriting $targetFile.
+        // we keep storing $finalName as the DB reference (points at the anonymised output after the script finishes).
+        if ($code !== 0) {
+            // not fatal; continue to index the file so you can diagnose
+            // You can log $out if you have a logger
+        }
     }
+
     // 2) Ensure parent rows
     $testId = ensureTest($conn, $patientId, $dateYmd);
     ensureTestEye($conn, $testId, $eye);
@@ -424,7 +443,6 @@ document.getElementById('startUpload').addEventListener('click', async () => {
   fileList.innerHTML = '';
   let successCount = 0, errorCount = 0;
 
-  // helper to make li with bootstrap styles
   function addItem(path, ok, msg){
     const li = document.createElement('li');
     li.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -466,3 +484,4 @@ document.getElementById('startUpload').addEventListener('click', async () => {
 </script>
 </body>
 </html>
+
