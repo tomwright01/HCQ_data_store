@@ -195,28 +195,15 @@ function build_view_url(string $type, string $patientId, string $eye, string $re
     --border:rgba(0,0,0,.08);
     --shadow: 0 8px 24px rgba(0,0,0,0.09);
     --chart-grad: radial-gradient(1200px 400px at 10% 0%, rgba(26,115,232,.06), transparent 60%);
-    /* KPI palette */
+
+    /* KPI palette (default scheme = clinic) */
     --kpi1a:#7c3aed; --kpi1b:#4f46e5;
     --kpi2a:#059669; --kpi2b:#10b981;
     --kpi3a:#0ea5e9; --kpi3b:#2563eb;
     --kpi4a:#f59e0b; --kpi4b:#d97706;
 }
-/* Palette variants */
-body[data-palette="clinic"]{
-    --brand:#0ea5e9; --brand-2:#38bdf8;
-    --kpi1a:#0284c7; --kpi1b:#0ea5e9;
-    --kpi2a:#059669; --kpi2b:#10b981;
-    --kpi3a:#22c55e; --kpi3b:#16a34a;
-    --kpi4a:#f59e0b; --kpi4b:#d97706;
-}
-body[data-palette="contrast"]{
-    --brand:#0f766e; --brand-2:#14b8a6;
-    --kpi1a:#1f2937; --kpi1b:#111827;
-    --kpi2a:#dc2626; --kpi2b:#ef4444;
-    --kpi3a:#3730a3; --kpi3b:#4f46e5;
-    --kpi4a:#9333ea; --kpi4b:#a855f7;
-}
 
+/* ===== Dark mode ===== */
 body.dark{
     --bg:#0f1220;
     --card:#151a2c;
@@ -227,6 +214,33 @@ body.dark{
     --shadow: 0 12px 28px rgba(0,0,0,0.45);
     --chart-grad: radial-gradient(1200px 400px at 10% 0%, rgba(110,168,254,.12), transparent 60%);
 }
+
+/* ===== Color schemes (persisted) ===== */
+/* Clinic (default) */
+body[data-scheme="clinic"]{
+    --brand:#1a73e8; --brand-2:#6ea8fe;
+    --kpi1a:#7c3aed; --kpi1b:#4f46e5;
+    --kpi2a:#059669; --kpi2b:#10b981;
+    --kpi3a:#0ea5e9; --kpi3b:#2563eb;
+    --kpi4a:#f59e0b; --kpi4b:#d97706;
+}
+/* Research (greens & teals) */
+body[data-scheme="research"]{
+    --brand:#0ea5e9; --brand-2:#67e8f9;
+    --kpi1a:#047857; --kpi1b:#10b981;
+    --kpi2a:#0284c7; --kpi2b:#38bdf8;
+    --kpi3a:#7c3aed; --kpi3b:#a78bfa;
+    --kpi4a:#f59e0b; --kpi4b:#fde047;
+}
+/* High contrast (accessibility) */
+body[data-scheme="hc"]{
+    --brand:#111827; --brand-2:#4b5563;
+    --kpi1a:#0ea5e9; --kpi1b:#2563eb;
+    --kpi2a:#16a34a; --kpi2b:#22c55e;
+    --kpi3a:#e11d48; --kpi3b:#ef4444;
+    --kpi4a:#f59e0b; --kpi4b:#f97316;
+}
+
 body { background: var(--bg); color: var(--text); }
 .navbar-blur { backdrop-filter: saturate(180%) blur(8px); background-color: rgba(255,255,255,0.85); border-bottom: 1px solid var(--border); }
 body.dark .navbar-blur { background-color: rgba(21,26,44,0.85); }
@@ -282,7 +296,7 @@ canvas { max-height: 380px; }
 #printArea { display:none; }
 </style>
 </head>
-<body>
+<body data-scheme="clinic">
 
 <!-- Nav -->
 <nav class="navbar navbar-expand-lg navbar-light navbar-blur sticky-top py-2">
@@ -301,22 +315,22 @@ canvas { max-height: 380px; }
       </ul>
 
       <div class="d-flex align-items-center gap-2 gap-lg-3">
-        <!-- Dark mode -->
-        <div class="form-check form-switch mb-0">
-            <input class="form-check-input" type="checkbox" id="darkToggle">
-            <label class="form-check-label" for="darkToggle"><i class="bi bi-moon-stars"></i></label>
-        </div>
-
-        <!-- Palette selector -->
-        <div class="dropdown">
-          <button class="btn btn-outline-secondary pill dropdown-toggle" data-bs-toggle="dropdown">
-            <i class="bi bi-palette"></i> Colors
-          </button>
-          <ul class="dropdown-menu dropdown-menu-end">
-            <li><a class="dropdown-item palette-opt" data-palette="clinic" href="#">Clinic</a></li>
-            <li><a class="dropdown-item palette-opt" data-palette="research" href="#">Research (default)</a></li>
-            <li><a class="dropdown-item palette-opt" data-palette="contrast" href="#">High contrast</a></li>
-          </ul>
+        <!-- Theme toggles -->
+        <div class="d-flex align-items-center gap-2">
+          <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="darkToggle">
+              <label class="form-check-label" for="darkToggle" title="Dark mode">
+                <i class="bi bi-moon-stars"></i>
+              </label>
+          </div>
+          <div class="d-flex align-items-center gap-1">
+            <label for="schemeSelect" class="text-muted small mb-0">Scheme</label>
+            <select id="schemeSelect" class="form-select form-select-sm" style="width:auto">
+              <option value="clinic">Clinic</option>
+              <option value="research">Research</option>
+              <option value="hc">High-contrast</option>
+            </select>
+          </div>
         </div>
 
         <a href="import_images.php" class="btn btn-outline-secondary pill">
@@ -349,7 +363,7 @@ canvas { max-height: 380px; }
         </div>
     </div>
 
-    <!-- KPI Cards -->
+    <!-- KPI Cards (unified colors) -->
     <div class="row g-3 mb-4">
         <div class="col-md-3">
             <div class="card card-kpi kpi-1 h-100">
@@ -475,7 +489,6 @@ canvas { max-height: 380px; }
                 <div class="col-12 col-lg-3">
                     <label class="form-label">Patient/Subject ID</label>
                     <input type="text" id="patientIdInput" class="form-control" placeholder="e.g. SUBJ001">
-                    <div class="form-text">Exact match (e.g. enter <code>12</code> to get only ID 12)</div>
                 </div>
                 <div class="col-12 col-lg-3">
                     <label class="form-label">Test ID</label>
@@ -969,33 +982,37 @@ canvas { max-height: 380px; }
 <!-- Scripts -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-// ===== Theme (dark mode) =====
+// ===== Theme (dark mode) & scheme =====
 (function themeInit(){
     const toggle = document.getElementById('darkToggle');
-    const saved = localStorage.getItem('theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
-    if (saved === 'dark') document.body.classList.add('dark');
+    const schemeSelect = document.getElementById('schemeSelect');
+
+    const savedTheme  = localStorage.getItem('theme')  || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light');
+    const savedScheme = localStorage.getItem('scheme') || 'clinic';
+
+    if (savedTheme === 'dark') document.body.classList.add('dark');
+    document.body.setAttribute('data-scheme', savedScheme);
+
     toggle.checked = document.body.classList.contains('dark');
+    schemeSelect.value = savedScheme;
+
+    function recolorChartsNow(){
+        if (window._applySchemeToCharts) window._applySchemeToCharts();
+        if (window._recolorCharts) window._recolorCharts();
+    }
+
     toggle.addEventListener('change', () => {
         document.body.classList.toggle('dark', toggle.checked);
         localStorage.setItem('theme', toggle.checked ? 'dark' : 'light');
-        if (window._recolorCharts) window._recolorCharts();
+        recolorChartsNow();
     });
-})();
 
-// ===== Palette switcher =====
-(function paletteInit(){
-  const key='palette';
-  const saved = localStorage.getItem(key) || 'research';
-  document.body.setAttribute('data-palette', saved);
-  document.querySelectorAll('.palette-opt').forEach(el=>{
-    el.addEventListener('click', (e)=>{
-      e.preventDefault();
-      const val = el.getAttribute('data-palette') || 'research';
-      document.body.setAttribute('data-palette', val);
-      localStorage.setItem(key, val);
-      if (window._recolorCharts) window._recolorCharts();
+    schemeSelect.addEventListener('change', () => {
+        const val = schemeSelect.value || 'clinic';
+        document.body.setAttribute('data-scheme', val);
+        localStorage.setItem('scheme', val);
+        recolorChartsNow();
     });
-  });
 })();
 </script>
 
@@ -1049,6 +1066,16 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         eyes: new Set(['OD','OS'])
     };
 
+    function cssVar(name){ return getComputedStyle(document.body).getPropertyValue(name).trim(); }
+    function palette(){
+        return {
+            brand: cssVar('--brand') || '#1a73e8',
+            brandLight: cssVar('--brand-2') || '#6ea8fe',
+            green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d',
+            teal:'#20c997', purple:'#6f42c1'
+        };
+    }
+
     function getFilterState(){
         const eyes = new Set();
         if (eyeOD.checked) eyes.add('OD');
@@ -1073,11 +1100,8 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
     Chart.register(ChartDataLabels);
     // Default: datalabels off; we enable per-chart where needed
     Chart.defaults.set('plugins.datalabels', { display: false });
-    const C = {
-        brand: '#1a73e8', brandLight:'#6ea8fe',
-        green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d',
-        teal:'#20c997', purple:'#6f42c1'
-    };
+
+    let C = palette();
     const shadowPlugin = {
         id: 'shadow',
         beforeDatasetsDraw(chart) {
@@ -1138,7 +1162,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         }
     });
 
-    // Pie
+    // Pie: show percents >= 6%
     const diagChart = new Chart(document.getElementById('diagnosisPie').getContext('2d'), {
         type:'doughnut',
         data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:[0,0,0,0], backgroundColor:[C.green,C.red,C.gray,C.amber], borderWidth:2, borderColor:'#fff'}] },
@@ -1193,6 +1217,35 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         }
     });
 
+    // Recolor charts when scheme/dark toggles
+    window._applySchemeToCharts = () => {
+        C = palette();
+        // Update dataset colors to new palette
+        if (testsChart?.data?.datasets?.[0]) {
+            testsChart.data.datasets[0].borderColor = C.brand;
+            testsChart.data.datasets[0].backgroundColor = (ctx)=>lineGradientFor(testsChart);
+        }
+        if (diagChart?.data?.datasets?.[0]) {
+            diagChart.data.datasets[0].backgroundColor = [C.green,C.red,C.gray,C.amber];
+        }
+        if (locationBar?.data?.datasets?.[0]) {
+            locationBar.data.datasets[0].backgroundColor = C.teal;
+            locationBar.data.datasets[0].borderColor = C.teal;
+        }
+        if (avgScoresEye?.data?.datasets?.[0]) {
+            avgScoresEye.data.datasets[0].backgroundColor = C.purple;
+            avgScoresEye.data.datasets[0].borderColor = C.purple;
+        }
+        if (avgScoresEye?.data?.datasets?.[1]) {
+            avgScoresEye.data.datasets[1].backgroundColor = C.brand;
+            avgScoresEye.data.datasets[1].borderColor = C.brand;
+        }
+        testsChart.update('none');
+        diagChart.update('none');
+        locationBar.update('none');
+        avgScoresEye.update('none');
+    };
+
     window._recolorCharts = () => {
         [testsChart, diagChart, locationBar, avgScoresEye].forEach(ch => {
             if (!ch) return;
@@ -1205,14 +1258,14 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         });
     };
 
-    // ---- FILTERING ----
+    // ===== EXACT MATCH change for Patient/Subject ID =====
     function rowMatchesData(r, f){
-        // EXACT match on patient/subject ID (case-insensitive)
         if (f.patientId) {
             const needle = f.patientId;
-            const pid = (r.patient_id || '').toLowerCase();
-            const sid = (r.subject_id || '').toLowerCase();
-            if (!(pid === needle || sid === needle)) return false;
+            const pid = (r.patient_id ?? '').toString().toLowerCase();
+            const sid = (r.subject_id ?? '').toLowerCase();
+            // exact match only (no substring)
+            if (!((pid === needle) || (sid === needle))) return false;
         }
 
         if (f.testId    && !(r.test_id||'').toLowerCase().includes(f.testId)) return false;
@@ -1268,7 +1321,7 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         rows.forEach(r=>{
             if (!eyeStats[r.eye]) return;
             if (r.oct_score !== null && r.oct_score !== '') eyeStats[r.eye].oct.push(Number(r.oct_score));
-            if (r.vf_score  !== null && r.vf_score !== '') eyeStats[r.eye].vf.push(Number(r.vf_score));
+            if (r.vf_score  !== null && r.vf_score !== '')  eyeStats[r.eye].vf.push(Number(r.vf_score));
         });
         const avg = a => a.length ? a.reduce((x,y)=>x+y,0)/a.length : null;
         const avgOCT = ['OD','OS'].map(eye => avg(eyeStats[eye].oct));
@@ -1440,10 +1493,10 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
                 }
             });
 
-            // EXACT match on the patient/subject ID at the card level
             let patientIdPass = true;
             if (hasPatientIdFilter) {
                 const needle = f.patientId;
+                // EXACT MATCH (no substring)
                 patientIdPass = (patientId === needle) || (patientSubject === needle);
             }
 
@@ -1577,12 +1630,8 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
     // Debounced text inputs
     let t1, t2;
-    patientIdInput.addEventListener('input', ()=>{
-        clearTimeout(t1); t1=setTimeout(()=>applyFilters(true), 150);
-    });
-    testIdInput.addEventListener('input',    ()=>{
-        clearTimeout(t2); t2=setTimeout(()=>applyFilters(true), 150);
-    });
+    patientIdInput.addEventListener('input', ()=>{ clearTimeout(t1); t1=setTimeout(()=>applyFilters(true), 150); });
+    testIdInput.addEventListener('input',    ()=>{ clearTimeout(t2); t2=setTimeout(()=>applyFilters(true), 150); });
 
     // Wire rest
     [locSelect, diagSelect, eyeOD, eyeOS, dateStartInput, dateEndInput, merciMinInput, merciMaxInput, ageMinInput, ageMaxInput]
@@ -1659,11 +1708,11 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
 
         destroyPmCharts();
 
-        const Cc = { brand: '#1a73e8', brandLight:'#6ea8fe', green:'#198754', red:'#dc3545', amber:'#ffc107', gray:'#6c757d', teal:'#20c997', purple:'#6f42c1' };
+        let CC = palette();
 
         pmCharts.tests = new Chart(document.getElementById('pmTests').getContext('2d'), {
             type:'line',
-            data:{ labels: agg.labels, datasets:[{ label:'Tests', data: agg.values, borderColor: Cc.brand,
+            data:{ labels: agg.labels, datasets:[{ label:'Tests', data: agg.values, borderColor: CC.brand,
                 backgroundColor:(ctx)=>{ const ch=ctx.chart; const g=ch.ctx.createLinearGradient(0,ch.chartArea.top,0,ch.chartArea.bottom); g.addColorStop(0,'rgba(26,115,232,0.35)'); g.addColorStop(1,'rgba(26,115,232,0.05)'); return g; },
                 tension:.35, fill:true, borderWidth:3, pointRadius:3 }]},
             options:{ responsive:true, maintainAspectRatio:false,
@@ -1684,15 +1733,15 @@ const DATA_MAX = <?= $maxDate ? '"'.htmlspecialchars($maxDate).'"' : 'null' ?>;
         const diagVals = ['normal','abnormal','exclude','no input'].map(k=>agg.diagCounts[k]||0);
         pmCharts.diag = new Chart(document.getElementById('pmDiag').getContext('2d'),{
             type:'doughnut',
-            data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:diagVals, backgroundColor:[Cc.green,Cc.red,Cc.gray,Cc.amber], borderWidth:2, borderColor:'#fff' }]},
+            data:{ labels:['Normal','Abnormal','Exclude','No Input'], datasets:[{ data:diagVals, backgroundColor:[CC.green,CC.red,CC.gray,CC.amber], borderWidth:2, borderColor:'#fff' }]},
             options:{ responsive:true, maintainAspectRatio:false, cutout:'62%', plugins:{ legend:{position:'bottom'}, datalabels:{ color:'#111', formatter:(v,ctx)=>{ const t=ctx.dataset.data.reduce((a,b)=>a+b,0); const p=t?(v/t*100):0; return p>=6?`${p.toFixed(0)}%`:''; } } } }
         });
 
         pmCharts.avg = new Chart(document.getElementById('pmAvg').getContext('2d'),{
             type:'bar',
             data:{ labels:['OD','OS'], datasets:[
-                { label:'Avg OCT', data:[agg.avgOD.oct, agg.avgOS.oct], backgroundColor:Cc.purple, borderColor:Cc.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
-                { label:'Avg VF',  data:[agg.avgOD.vf,  agg.avgOS.vf],  backgroundColor:Cc.brand,  borderColor:Cc.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
+                { label:'Avg OCT', data:[agg.avgOD.oct, agg.avgOS.oct], backgroundColor:CC.purple, borderColor:CC.purple, borderWidth:1, borderRadius:8, maxBarThickness:36 },
+                { label:'Avg VF',  data:[agg.avgOD.vf,  agg.avgOS.vf],  backgroundColor:CC.brand,  borderColor:CC.brand,  borderWidth:1, borderRadius:8, maxBarThickness:36 }
             ]},
             options:{ responsive:true, maintainAspectRatio:false, scales:{ x:{ grid:{display:false}}, y:{ beginAtZero:true, grid:{color:getComputedStyle(document.body).getPropertyValue('--grid')}} }, plugins:{ datalabels:{ anchor:'end', align:'end', offset:6, color:()=>labelFg(), backgroundColor:()=>labelBg(), borderRadius:6, padding:{top:2,right:4,bottom:2,left:4}, formatter:v=>(v===null||isNaN(v))?'':(typeof v==='number'?v.toFixed(2):v) } } }
         });
